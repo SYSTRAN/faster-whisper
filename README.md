@@ -55,7 +55,7 @@ for segment in segments:
 
 If you are comparing the performance against [openai/whisper](https://github.com/openai/whisper), you should make sure to use the same settings in both frameworks. In particular:
 
-* In openai/whisper, `model.transcribe` uses a beam size of 1 by default. A different beam size will have an important impact on performance so make to use the same.
+* In openai/whisper, `model.transcribe` uses a beam size of 1 by default. A different beam size will have an important impact on performance so make sure to use the same.
 * When running on CPU, make sure to set the same number of threads. Both frameworks will read the environment variable `OMP_NUM_THREADS`, which can be set when running your script:
 
 ```bash
