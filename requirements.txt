@@ -1,0 +1,3 @@
+av==10.*
+ctranslate2>=3.5,<4
+tokenizers==0.13.*
