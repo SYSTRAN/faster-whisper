@@ -54,7 +54,7 @@ class WhisperModel:
           compute_type: Type to use for computation.
             See https://opennmt.net/CTranslate2/quantization.html.
           cpu_threads: Number of threads to use when running on CPU (4 by default).
-            On non zero value overrides the OMP_NUM_THREADS environment variable.
+            A non zero value overrides the OMP_NUM_THREADS environment variable.
         """
         self.model = ctranslate2.models.Whisper(
             model_path,
