@@ -1,5 +1,4 @@
 import collections
-import os
 import zlib
 
 import ctranslate2
