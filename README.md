@@ -20,7 +20,7 @@ pip install -e .
 
 GPU execution requires the NVIDIA libraries cuBLAS 11.x and cuDNN 8.x to be installed on the system. Please refer to the [CTranslate2 documentation](https://opennmt.net/CTranslate2/installation.html).
 
-**Note for Windows users:** the published Windows wheels are currently not built with cuDNN, which is required to run the Whisper model. Consequently GPU execution is currently not possible on Windows out of the box. If you feel adventurous, a possible workaround is to [compile from sources](https://opennmt.net/CTranslate2/installation.html#install-from-sources).
+**Note for Windows users:** the published Windows wheels are currently not built with cuDNN, which is required to run the Whisper model on GPU. Consequently GPU execution is currently not possible on Windows out of the box. If you feel adventurous, a possible workaround is to [compile from sources](https://opennmt.net/CTranslate2/installation.html#install-from-sources).
 
 ## Usage
 
