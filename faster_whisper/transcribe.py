@@ -109,6 +109,7 @@ class WhisperModel:
             as a prompt for the next window; disabling may make the text inconsistent across
             windows, but the model becomes less prone to getting stuck in a failure loop,
             such as repetition looping or timestamps going out of sync.
+          initial_prompt: Optional text to provide as a prompt for the first window.
 
         Returns:
           A tuple with:
