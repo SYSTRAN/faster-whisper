@@ -1,4 +1,5 @@
 import collections
+import os
 import zlib
 
 import ctranslate2
@@ -65,6 +66,19 @@ class WhisperModel:
             compute_type=compute_type,
             intra_threads=cpu_threads,
         )
+
+        with open(os.path.join(model_path, "vocabulary.txt")) as vocab_file:
+            vocab_size = sum(1 for _ in vocab_file)
+
+        is_multilingual = vocab_size == 51865
+        if not is_multilingual:
+            raise NotImplementedError(
+                "English-only models are currently not supported. "
+                "The underlying CTranslate2 implementation makes some assumptions about "
+                "the prompt format that are not compatible with English-only models. "
+                "This will be improved in a future version. "
+                "Please use a multilingual model for now."
+            )
 
         self.feature_extractor = FeatureExtractor()
         self.tokenizer = tokenizers.Tokenizer.from_pretrained("openai/whisper-tiny")
