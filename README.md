@@ -6,7 +6,11 @@ This implementation is up to 4 times faster than [openai/whisper](https://github
 
 ## Benchmark
 
-For reference, here's the time and memory usage that are required to transcribe **13 minutes** of audio.
+For reference, here's the time and memory usage that are required to transcribe **13 minutes** of audio using different implementations:
+
+* [openai/whisper](https://github.com/openai/whisper)@[7858aa9](https://github.com/openai/whisper/commit/7858aa9c08d98f75575035ecd6481f462d66ca27)
+* [whisper.cpp](https://github.com/ggerganov/whisper.cpp)@[3b010f9](https://github.com/ggerganov/whisper.cpp/commit/3b010f9bed9a6068609e9faf52383aea792b0362)
+* faster-whisper@[cbbe633](https://github.com/guillaumekln/faster-whisper/commit/cbbe633082fb8159749bfa5fa8289bc65f1dfb67)
 
 ### Medium model on GPU
 
@@ -22,6 +26,8 @@ For reference, here's the time and memory usage that are required to transcribe 
 | Implementation | Precision | Beam size | Time | Max. memory |
 | --- | --- | --- | --- | --- |
 | openai/whisper | fp32 | 5 | 10m39s | 2850MB |
+| whisper.cpp | fp32 | 5 | 17m42s | 1581MB |
+| whisper.cpp | fp16 | 5 | 12m39s | 873MB |
 | faster-whisper | fp32 | 5 | 3m24s | 2182MB |
 | faster-whisper | int8 | 5 | 2m37s | 1466MB |
 
