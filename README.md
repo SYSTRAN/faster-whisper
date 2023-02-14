@@ -57,6 +57,8 @@ for segment in segments:
     print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
 ```
 
+See more model and transcription options in the [`WhisperModel`](https://github.com/guillaumekln/faster-whisper/blob/master/faster_whisper/transcribe.py) class implementation.
+
 ## Comparing performance against other implementations
 
 If you are comparing the performance against other Whisper implementations, you should make sure to run the comparison with similar settings. In particular:
