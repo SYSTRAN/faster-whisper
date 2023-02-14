@@ -2,7 +2,30 @@
 
 This repository demonstrates how to implement the Whisper transcription using [CTranslate2](https://github.com/OpenNMT/CTranslate2/), which is a fast inference engine for Transformer models.
 
-This implementation is about 4 times faster than [openai/whisper](https://github.com/openai/whisper) for the same accuracy while using less memory. The efficiency can be further improved with 8-bit quantization on both CPU and GPU.
+This implementation is up to 4 times faster than [openai/whisper](https://github.com/openai/whisper) for the same accuracy while using less memory. The efficiency can be further improved with 8-bit quantization on both CPU and GPU.
+
+## Benchmark
+
+For reference, here's the time and memory usage that are required to transcribe **13 minutes** of audio.
+
+### Medium model on GPU
+
+| Implementation | Precision | Beam size | Time | Max. GPU memory | Max. CPU memory |
+| --- | --- | --- | --- | --- | --- |
+| openai/whisper | fp16 | 5 | 2m56s | 6285MB | 5598MB |
+| faster-whisper | fp16 | 5 | 0m39s | 3347MB | 1721MB |
+
+*Executed with CUDA 11.7.1 on a NVIDIA Tesla V100S.*
+
+### Small model on CPU
+
+| Implementation | Precision | Beam size | Time | Max. memory |
+| --- | --- | --- | --- | --- |
+| openai/whisper | fp32 | 5 | 10m39s | 2850MB |
+| faster-whisper | fp32 | 5 | 3m24s | 2182MB |
+| faster-whisper | int8 | 5 | 2m37s | 1466MB |
+
+*Executed with 8 threads on a Intel(R) Xeon(R) Gold 6226R.*
 
 ## Installation
 
