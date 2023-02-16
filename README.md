@@ -10,14 +10,14 @@ For reference, here's the time and memory usage that are required to transcribe 
 
 * [openai/whisper](https://github.com/openai/whisper)@[7858aa9](https://github.com/openai/whisper/commit/7858aa9c08d98f75575035ecd6481f462d66ca27)
 * [whisper.cpp](https://github.com/ggerganov/whisper.cpp)@[3b010f9](https://github.com/ggerganov/whisper.cpp/commit/3b010f9bed9a6068609e9faf52383aea792b0362)
-* faster-whisper@[cbbe633](https://github.com/guillaumekln/faster-whisper/commit/cbbe633082fb8159749bfa5fa8289bc65f1dfb67)
+* [faster-whisper](https://github.com/guillaumekln/faster-whisper)@[cda834c](https://github.com/guillaumekln/faster-whisper/commit/cda834c8ea76c2cab9da19031815c1e937a88c7f)
 
 ### Medium model on GPU
 
 | Implementation | Precision | Beam size | Time | Max. GPU memory | Max. CPU memory |
 | --- | --- | --- | --- | --- | --- |
 | openai/whisper | fp16 | 5 | 2m56s | 6285MB | 5598MB |
-| faster-whisper | fp16 | 5 | 0m39s | 3347MB | 1721MB |
+| faster-whisper | fp16 | 5 | 0m36s | 2803MB | 1722MB |
 
 *Executed with CUDA 11.7.1 on a NVIDIA Tesla V100S.*
 
@@ -28,8 +28,8 @@ For reference, here's the time and memory usage that are required to transcribe 
 | openai/whisper | fp32 | 5 | 10m39s | 2850MB |
 | whisper.cpp | fp32 | 5 | 17m42s | 1581MB |
 | whisper.cpp | fp16 | 5 | 12m39s | 873MB |
-| faster-whisper | fp32 | 5 | 3m24s | 2182MB |
-| faster-whisper | int8 | 5 | 2m37s | 1466MB |
+| faster-whisper | fp32 | 5 | 2m53s | 1482MB |
+| faster-whisper | int8 | 5 | 2m01s | 1008MB |
 
 *Executed with 8 threads on a Intel(R) Xeon(R) Gold 6226R.*
 
