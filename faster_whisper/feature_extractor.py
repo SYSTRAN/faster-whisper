@@ -142,6 +142,23 @@ class FeatureExtractor:
             data[f] = np.fft.fft(fft_signal, axis=0)[:num_fft_bins]
         return data.T
 
+    def pad_or_trim(self, array, length: int = None, *, axis: int = -1):
+        """
+        Pad or trim the audio array to N_SAMPLES, as expected by the encoder.
+        """
+        if length is None:
+            length = self.nb_max_frames
+
+        if array.shape[axis] > length:
+            array = array.take(indices=range(length), axis=axis)
+
+        if array.shape[axis] < length:
+            pad_widths = [(0, 0)] * array.ndim
+            pad_widths[axis] = (0, length - array.shape[axis])
+            array = np.pad(array, pad_widths)
+
+        return array
+
     def __call__(self, waveform):
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results
