@@ -17,7 +17,8 @@ For reference, here's the time and memory usage that are required to transcribe 
 | Implementation | Precision | Beam size | Time | Max. GPU memory | Max. CPU memory |
 | --- | --- | --- | --- | --- | --- |
 | openai/whisper | fp16 | 5 | 2m56s | 6285MB | 5598MB |
-| faster-whisper | fp16 | 5 | 0m36s | 2803MB | 1722MB |
+| faster-whisper | fp16 | 5 | 0m42s | 3283MB | 1722MB |
+| faster-whisper | int8 | 5 | 0m41s | 1939MB | 2159MB |
 
 *Executed with CUDA 11.7.1 on a NVIDIA Tesla V100S.*
 
