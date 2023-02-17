@@ -295,6 +295,7 @@ class WhisperModel:
         features = self.get_input(segment)
         result = None
         final_temperature = None
+        max_length = min(self.max_length, 2 * (self.max_length - len(prompt)))
 
         for temperature in options.temperatures:
             if temperature > 0:
@@ -314,7 +315,7 @@ class WhisperModel:
             result = self.model.generate(
                 features,
                 [prompt],
-                max_length=self.max_length,
+                max_length=max_length,
                 return_scores=True,
                 return_no_speech_prob=True,
                 **kwargs,
