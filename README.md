@@ -12,13 +12,12 @@ For reference, here's the time and memory usage that are required to transcribe 
 * [whisper.cpp](https://github.com/ggerganov/whisper.cpp)@[3b010f9](https://github.com/ggerganov/whisper.cpp/commit/3b010f9bed9a6068609e9faf52383aea792b0362)
 * [faster-whisper](https://github.com/guillaumekln/faster-whisper)@[cda834c](https://github.com/guillaumekln/faster-whisper/commit/cda834c8ea76c2cab9da19031815c1e937a88c7f)
 
-### Medium model on GPU
+### Large model on GPU
 
 | Implementation | Precision | Beam size | Time | Max. GPU memory | Max. CPU memory |
 | --- | --- | --- | --- | --- | --- |
-| openai/whisper | fp16 | 5 | 2m56s | 6285MB | 5598MB |
-| faster-whisper | fp16 | 5 | 0m42s | 3283MB | 1722MB |
-| faster-whisper | int8 | 5 | 0m41s | 1939MB | 2159MB |
+| openai/whisper | fp16 | 5 | 4m30s | 11413MB | 9553MB |
+| faster-whisper | fp16 | 5 | 1m02s | 4659MB | 3244MB |
 
 *Executed with CUDA 11.7.1 on a NVIDIA Tesla V100S.*
 
