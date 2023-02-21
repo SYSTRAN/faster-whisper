@@ -107,8 +107,9 @@ class WhisperModel:
 
         Arguments:
           input_file: Path to the input file or a file-like object.
-          language: The language spoken in the audio. If not set, the language will be
-            detected in the first 30 seconds of audio.
+          language: The language spoken in the audio. It should be a language code such
+            as "en" or "fr". If not set, the language will be detected in the first 30 seconds
+            of audio.
           task: Task to execute (transcribe or translate).
           beam_size: Beam size to use for decoding.
           best_of: Number of candidates when sampling with non-zero temperature.
@@ -152,6 +153,8 @@ class WhisperModel:
                 language_token, language_probability = results[0][0]
                 language = language_token[2:-2]
         else:
+            if self.tokenizer.token_to_id("<|%s|>" % language) is None:
+                raise ValueError("%s is not a valid language code" % language)
             language_probability = 1
 
         options = TranscriptionOptions(
