@@ -53,10 +53,12 @@ GPU execution requires the NVIDIA libraries cuBLAS 11.x and cuDNN 8.x to be inst
 
 ### Model conversion
 
-A Whisper model should be first converted into the CTranslate2 format. For example the command below converts the "medium" Whisper model and saves the weights in FP16:
+A Whisper model should be first converted into the CTranslate2 format. We provide a script to download and convert models from the [Hugging Face model repository](https://huggingface.co/models?sort=downloads&search=whisper).
+
+For example the command below converts the "large-v2" Whisper model and saves the weights in FP16:
 
 ```bash
-ct2-transformers-converter --model openai/whisper-medium --output_dir whisper-medium-ct2 --quantization float16
+ct2-transformers-converter --model openai/whisper-large-v2 --output_dir whisper-large-v2-ct2 --quantization float16
 ```
 
 If needed, models can also be converted from the code. See the [conversion API](https://opennmt.net/CTranslate2/python/ctranslate2.converters.TransformersConverter.html).
