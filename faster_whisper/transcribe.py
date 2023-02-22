@@ -338,7 +338,7 @@ class WhisperModel:
             avg_log_prob = cum_log_prob / (seq_len + 1)
 
             tokens = result.sequences_ids[0]
-            text = self.decode_text_tokens(tokens)
+            text = self.decode_text_tokens(tokens).strip()
             compression_ratio = get_compression_ratio(text)
 
             if (
