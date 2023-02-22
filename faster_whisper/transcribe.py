@@ -332,12 +332,13 @@ class WhisperModel:
                 **kwargs,
             )[0]
 
+            tokens = result.sequences_ids[0]
+
             # Recover the average log prob from the returned score.
-            seq_len = len(result.sequences_ids[0])
+            seq_len = len(tokens)
             cum_log_prob = result.scores[0] * (seq_len**options.length_penalty)
             avg_log_prob = cum_log_prob / (seq_len + 1)
 
-            tokens = result.sequences_ids[0]
             text = self.decode_text_tokens(tokens).strip()
             compression_ratio = get_compression_ratio(text)
 
