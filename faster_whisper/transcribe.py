@@ -1,4 +1,5 @@
 import collections
+import os
 import string
 import zlib
 
@@ -15,9 +16,18 @@ from scipy.ndimage import \
 from faster_whisper.audio import decode_audio
 from faster_whisper.feature_extractor import FeatureExtractor
 
-class Segment(collections.namedtuple("Segment", ("start", "end", "text", "tokens", "attention_weights", "token_scores"))):
-    pass
+def dim(a):
+    if not type(a) == list:
+        if type(a) is not np.ndarray or (type(a) == np.ndarray and a.shape == np.empty(1)[0].shape):
+            return []
 
+    if len(a) == 0:
+        return []
+
+    return [len(a)] + dim(a[0])
+
+class Segment(collections.namedtuple("Segment", ("offset", "start", "end", "text", "tokens", "attention_weights", "token_scores"))):
+    pass
 
 class AudioInfo(
     collections.namedtuple("AudioInfo", ("language", "language_probability"))
@@ -60,6 +70,7 @@ class WordTimestampOptions(
             "refine_whisper_precision_nframes",
             "word_alignement_most_top_layers",
             "min_word_duration",
+            "alignment_heads",
             "transcription_options"
         ),
     )
@@ -105,8 +116,10 @@ class WhisperModel:
         )
 
         self.feature_extractor = FeatureExtractor()
-        self.tokenizer = tokenizers.Tokenizer.from_pretrained("openai/whisper-tiny")
+        tokenizer_filepath = os.path.join(os.path.dirname(__file__), 'tokenizer.json')
+        self.tokenizer = tokenizers.Tokenizer.from_file(tokenizer_filepath)
 
+        self.sot_id = self.tokenizer.token_to_id("<|startoftranscript|>")
         self.eot_id = self.tokenizer.token_to_id("<|endoftext|>")
         self.timestamp_begin_id = self.tokenizer.token_to_id("<|notimestamps|>") + 1
         self.input_stride = 2
@@ -116,7 +129,6 @@ class WhisperModel:
         self.audio_samples_per_token = self.feature_extractor.hop_length * 2  # 320
         self.audio_time_per_token = self.audio_samples_per_token / self.feature_extractor.sampling_rate  # 0.02
         self._punctuation = "".join(c for c in string.punctuation if c not in ["-", "'"]) + "。，！？：”、…"
-
     def transcribe(
         self,
         input_file,
@@ -142,7 +154,7 @@ class WhisperModel:
         include_punctuation_in_confidence=False,
         refine_whisper_precision=0.5,
         min_word_duration=0.04,
-        word_alignement_most_top_layers=None,
+        word_alignement_most_top_layers=6,
     ):
         """Transcribes an input file.
 
@@ -265,6 +277,7 @@ class WhisperModel:
             refine_whisper_precision_nframes=refine_whisper_precision_nframes,
             word_alignement_most_top_layers=word_alignement_most_top_layers,
             min_word_duration=min_word_duration,
+            alignment_heads=None,
             transcription_options=transcription_options,
         )
 
@@ -277,12 +290,13 @@ class WhisperModel:
             features, language, options
         )
 
-        for start, end, tokens, token_scores, attention  in tokenized_segments:
+        for offset, start, end, tokens, token_scores, attention in tokenized_segments:
             text = self.decode_text_tokens(tokens)
             if not text.strip():
                 continue
 
             yield Segment(
+                offset=offset,
                 start=start,
                 end=end,
                 text=text,
@@ -342,7 +356,7 @@ class WhisperModel:
 
             tokens = result.sequences_ids[0]
             token_scores = result.token_scores
-            attention = result.attention
+            attention = np.transpose(result.full_attention[-1], (2, 1, 0, 3))
 
             consecutive_timestamps = [
                 i
@@ -357,7 +371,7 @@ class WhisperModel:
                 for i, current_slice in enumerate(consecutive_timestamps):
                     sliced_tokens = tokens[last_slice:current_slice]
                     sliced_token_scores = token_scores[last_slice:current_slice]
-                    sliced_attention = [attention[0][last_slice:current_slice]]
+                    sliced_attention = attention[:, :, last_slice:current_slice, :]
                     start_timestamp_position = (
                         sliced_tokens[0] - self.timestamp_begin_id
                     )
@@ -375,9 +389,9 @@ class WhisperModel:
                     if last_in_window:
                         sliced_tokens.append(tokens[current_slice])
                         sliced_token_scores.append(token_scores[current_slice])
-                        sliced_attention[0].append(attention[0][current_slice])
+                        sliced_attention = np.concatenate((sliced_attention, attention[:, :, current_slice:current_slice+1, :]), axis=2)
 
-                    yield start_time, end_time, sliced_tokens, sliced_token_scores, sliced_attention
+                    yield offset, start_time, end_time, sliced_tokens, sliced_token_scores, sliced_attention
                     last_slice = current_slice
 
                 last_timestamp_position = (
@@ -395,7 +409,7 @@ class WhisperModel:
                     last_timestamp_position = timestamps[-1] - self.timestamp_begin_id
                     duration = last_timestamp_position * self.time_precision
 
-                yield time_offset, time_offset + duration, tokens, token_scores, attention
+                yield offset, time_offset, time_offset + duration, tokens, token_scores, attention
 
                 offset += segment.shape[-1]
                 all_tokens.extend(tokens)
@@ -427,6 +441,7 @@ class WhisperModel:
         features = self.get_input(segment)
         result = None
         final_temperature = None
+        max_length = min(self.max_length, 2 * (self.max_length - len(prompt)))
 
         for temperature in options.temperatures:
             if temperature > 0:
@@ -446,7 +461,7 @@ class WhisperModel:
             result = self.model.generate(
                 features,
                 [prompt],
-                max_length=self.max_length,
+                max_length=max_length,
                 return_scores=True,
                 return_attention=True,
                 return_no_speech_prob=True,
@@ -517,22 +532,11 @@ class WhisperModel:
         refine_whisper_precision_sec = options.refine_whisper_precision_nframes * self.audio_time_per_token
         words = []
         previous_end = 0
-        audio_duration = options.audio.shape[-1]
+        audio_duration = options.audio.shape[-1] / self.feature_extractor.sampling_rate
         use_space = self.should_use_space(options.language)
 
         word_alignement_most_top_layers = float(
             "inf") if options.word_alignement_most_top_layers is None else options.word_alignement_most_top_layers
-
-        # create the sot sequence for the tokenizer
-        sot = self.tokenizer.token_to_id("<|startoftranscript|>")
-        sot_sequence = [sot]
-        if options.language is not None:
-            sot_sequence.append(self.tokenizer.token_to_id("<|%s|>" % options.language))
-        if options.transcription_options.task is not None:
-            sot_sequence.append(
-                self.tokenizer.token_to_id("<|transcribe|>") if options.transcription_options.task == "transcribe" else
-                self.tokenizer.token_to_id("<|translate|>"))
-        sot_sequence = tuple(sot_sequence)
 
         transcription = {
             "text": "",
@@ -544,6 +548,7 @@ class WhisperModel:
             # create dictionary of relevant segment features for the output
             new_segment = {
                 "id": i_segment,
+                "offset": segment.offset,
                 "start": segment.start,
                 "end": segment.end,
                 "text": segment.text,
@@ -590,33 +595,19 @@ class WhisperModel:
             sub_audio = self.audio_minimum_padding(options.audio[start_sample:end_sample])
 
             mfcc = self.feature_extractor(sub_audio)
+            # mfcc = self.feature_extractor.pad_or_trim(mfcc, self.feature_extractor.nb_max_frames)
             mfcc = np.expand_dims(mfcc, axis=0)
 
             tokens = segment.tokens
-            assert len(tokens), "Got empty transcription!"
-            if tokens[0] >= self.timestamp_begin_id:
-                tokens = tokens[1:]
-            while tokens[-1] >= self.timestamp_begin_id:
-                tokens = tokens[:-1]
-                assert len(tokens), "Got transcription with only timestamps!"
-
-            tokens = [
-                         *sot_sequence,
-                         self.timestamp_begin_id,
-                     ] + tokens
-
-            i_start = len(sot_sequence)
 
             # get the log prob for each token
             logprobs = np.array(segment.token_scores)
 
-            tokens = tokens[i_start:] + [
-                self.timestamp_begin_id + round((end_sample - start_sample) // self.audio_samples_per_token)]
-            attention_weights = np.array(segment.attention_weights)
+            # get the attention weights
+            attention_weights = segment.attention_weights
 
-            if attention_weights.shape[-2] > len(tokens):
-                difference = len(tokens) - attention_weights.shape[-2]
-                attention_weights = attention_weights[:, :difference, :]
+            if options.word_alignement_most_top_layers:
+                attention_weights = attention_weights[-options.word_alignement_most_top_layers:, :, :, :]
 
             ws = self.perform_word_alignment(
                 tokens,
@@ -628,14 +619,13 @@ class WhisperModel:
             )
 
             segment_logprobs = []
+            i_start = 1
             for w in ws:
-
-                w["start"] = round(w["start"] + start, 2)
-                w["end"] = round(w["end"] + start, 2)
-
+                offset = segment.offset * self.feature_extractor.time_per_frame
+                w["start"] += offset
+                w["end"] += offset
                 w.update({"idx_segment": i_segment})
-
-                if options.compute_word_confidence and len(logprobs) == len(tokens):
+                if options.compute_word_confidence:
                     tokens = w["tokens"]
                     tokens_indices = w["tokens_indices"]
                     i_end = i_start + len(tokens)
@@ -653,6 +643,7 @@ class WhisperModel:
                 words.append(w)
 
             if len(segment_logprobs):
+                segment_logprobs = np.concatenate(segment_logprobs)
                 new_segment.update({"confidence": round_confidence((np.exp(np.mean(segment_logprobs))))})
 
             if len(ws):
@@ -694,7 +685,7 @@ class WhisperModel:
             candidate_index = mfcc.shape[-1] - 2
             while candidate_index > 0:
                 candidate = mfcc[0, :, candidate_index]
-                if not np.equal(candidate, last_mfcc):
+                if not np.array_equal(candidate, last_mfcc):
                     return candidate_index + 1
                 candidate_index -= 1
             return 0  # WTF!?
@@ -738,6 +729,8 @@ class WhisperModel:
         start_token = tokens[0] - self.timestamp_begin_id
         end_token = tokens[-1] - self.timestamp_begin_id
 
+        print("tokens", tokens, "timestamp_begin", self.timestamp_begin_id)
+
         # Check start / end tokens
         if start_token < 0:
             raise RuntimeError(f"Missing start token in: {self.self.decode_text_tokens_with_timestamps(tokens)}")
@@ -757,6 +750,9 @@ class WhisperModel:
 
         start_time = start_token * self.audio_time_per_token
         end_time = end_token * self.audio_time_per_token
+
+        print("self.audio_time_per_token", self.audio_time_per_token, "start_token", start_token, "end_token", end_token)
+        print("start_time", start_time, "end_time", end_time)
 
         split_tokens = self.split_tokens_on_spaces if use_space else self.split_tokens_on_unicode
         words, word_tokens, word_tokens_indices = split_tokens(tokens,
@@ -782,8 +778,7 @@ class WhisperModel:
         if num_tokens > num_frames:
             return self.perform_word_alignment(
                 tokens[:num_frames - 1] + [tokens[-1]],
-                [np.concatenate([w[:, :num_frames - 1, :], w[:, -1:, :]], dim=-2)
-                 for w in attention_weights],
+                np.concatenate((weights[:, :, :num_frames - 1, :], weights[:, :, -1:, :]), dim=-2),
                 use_space=use_space,
                 refine_whisper_precision_nframes=refine_whisper_precision_nframes,
                 medfilt_width=medfilt_width,
@@ -797,11 +792,19 @@ class WhisperModel:
         assert end_token <= weights.shape[-1]
         assert len(tokens) == num_tokens
 
-        weights = weights[:, :, start_token: end_token]
+        weights = weights[:, :, :, start_token: end_token]
+
+        if alignment_heads is None:
+            weights = weights.reshape(-1, *weights.shape[-2:])
+        else:
+            weights = np.stack([weights[l][h] for l, h in alignment_heads.indices().T])
 
         weights = median_filter(weights, (1, 1, medfilt_width))
         weights = softmax(np.array(weights * qk_scale), -1)
-        weights = weights.mean(axis=(0))  # average over layers and heads
+        # std = np.std(weights, axis=-2, keepdims=True, ddof=0)
+        # mean = np.mean(weights, axis=-2, keepdims=True)
+        # weights = (weights - mean)/std
+        weights = weights.mean(axis=0)  # average over layers and heads
         weights = weights / np.linalg.norm(weights, axis=-2, keepdims=True)
         weights = -weights.astype(np.float64)
         worse_weight = 0
@@ -832,6 +835,71 @@ class WhisperModel:
             2, 0, 0, 1,
         ))
         alignment = dtw.dtw(weights, step_pattern=step_pattern)
+
+        plot = False
+        if plot:
+            import matplotlib as mpl
+            import matplotlib.pyplot as plt
+            import matplotlib.ticker as ticker
+
+            mpl.use('TkAgg')  # !IMPORTANT
+
+            if mfcc is None:
+                plt.figure(figsize=(16, 9), frameon=False)
+            else:
+                plt.subplots(2, 1, figsize=(16, 9), gridspec_kw={'height_ratios': [3, 1]})
+                plt.subplot(2, 1, 1, frameon=False)
+
+            plt.imshow(-weights, aspect="auto")
+            plt.plot(alignment.index2s, alignment.index1s, color="red")
+
+            xticks = np.arange(0, weights.shape[1], 1 / self.audio_time_per_token)
+            xticklabels = [round_timestamp(x) for x in xticks * self.audio_time_per_token + start_time]
+
+            ylims = plt.gca().get_ylim()
+
+            ax = plt.gca()
+            ax.tick_params('both', length=0, width=0, which='minor', pad=6)
+
+            ax.yaxis.set_ticks_position("left")
+            ax.yaxis.set_label_position("left")
+            ax.invert_yaxis()
+            ax.set_ylim(ylims)
+
+            major_ticks = [-0.5]
+            minor_ticks = []
+            current_y = 0
+
+            for word, word_token in zip(words, word_tokens):
+                minor_ticks.append(current_y + len(word_token) / 2 - 0.5)
+                current_y += len(word_token)
+                major_ticks.append(current_y - 0.5)
+
+            words_with_subwords = ["|".join(s).strip() for (w, s) in zip(words, word_tokens)]
+
+            ax.yaxis.set_minor_locator(ticker.FixedLocator(minor_ticks))
+            ax.yaxis.set_minor_formatter(
+                ticker.FixedFormatter(words_with_subwords))
+            ax.set_yticks(major_ticks)
+            ax.yaxis.set_major_formatter(ticker.NullFormatter())
+            for y in major_ticks:
+                plt.axhline(y, color="black", linestyle="dashed")
+
+            plt.ylabel("Words")
+
+            if mfcc is not None:
+                plt.xticks(xticks)
+                plt.setp(plt.gca().get_xticklabels(), visible=False)
+
+                xticks *= 2
+
+                plt.subplot(2, 1, 2, frameon=False)
+                plt.imshow(mfcc[0, :, start_token * 2: end_token * 2], aspect="auto")
+                plt.yticks([])
+                plt.ylabel("MFCC")
+
+            plt.xticks(xticks, xticklabels)
+            plt.xlabel("Time (s)")
 
         jumps = np.diff(alignment.index1s)
         jumps = np.pad(jumps, (1, 0), constant_values=1)
@@ -864,6 +932,30 @@ class WhisperModel:
             word_tokens_indices = word_tokens_indices[1:-1]
             begin_times = begin_times[1:-1]
             end_times = end_times[1:-1]
+
+        if plot:
+            ymin = 1
+
+            if mfcc is not None:
+                for i, (begin, end) in enumerate(zip(begin_times, end_times)):
+                    for x in [begin, end, ]:
+                        plt.axvline(x * 2 / self.audio_time_per_token,
+                                    color="red", linestyle="dotted")
+
+                plt.subplot(2, 1, 1)
+
+            for i, (w, ws, begin, end) in enumerate(zip(words, word_tokens, begin_times, end_times)):
+                ymax = ymin + len(ws)
+                plt.text(begin / self.audio_time_per_token, num_tokens,
+                         w, ha="left", va="top", color="red")
+                for x in [begin, end, ]:
+                    plt.axvline(x / self.audio_time_per_token, color="red", linestyle="dotted",
+                                ymin=1 - ymin / num_tokens,
+                                ymax=0,  # 1-ymax/num_tokens,
+                                )
+                ymin = ymax
+
+            plt.show()
 
         return [
             dict(
