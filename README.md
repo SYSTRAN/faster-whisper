@@ -68,7 +68,7 @@ If needed, models can also be converted from the code. See the [conversion API](
 ```python
 from faster_whisper import WhisperModel
 
-model_path = "whisper-medium-ct2/"
+model_path = "whisper-large-v2-ct2/"
 
 # Run on GPU with FP16
 model = WhisperModel(model_path, device="cuda", compute_type="float16")
