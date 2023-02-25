@@ -12,12 +12,12 @@ For reference, here's the time and memory usage that are required to transcribe 
 * [whisper.cpp](https://github.com/ggerganov/whisper.cpp)@[3b010f9](https://github.com/ggerganov/whisper.cpp/commit/3b010f9bed9a6068609e9faf52383aea792b0362)
 * [faster-whisper](https://github.com/guillaumekln/faster-whisper)@[cda834c](https://github.com/guillaumekln/faster-whisper/commit/cda834c8ea76c2cab9da19031815c1e937a88c7f)
 
-### Medium model on GPU
+### Large model on GPU
 
 | Implementation | Precision | Beam size | Time | Max. GPU memory | Max. CPU memory |
 | --- | --- | --- | --- | --- | --- |
-| openai/whisper | fp16 | 5 | 2m56s | 6285MB | 5598MB |
-| faster-whisper | fp16 | 5 | 0m36s | 2803MB | 1722MB |
+| openai/whisper | fp16 | 5 | 4m30s | 11413MB | 9553MB |
+| faster-whisper | fp16 | 5 | 1m02s | 4659MB | 3244MB |
 
 *Executed with CUDA 11.7.1 on a NVIDIA Tesla V100S.*
 
@@ -53,10 +53,12 @@ GPU execution requires the NVIDIA libraries cuBLAS 11.x and cuDNN 8.x to be inst
 
 ### Model conversion
 
-A Whisper model should be first converted into the CTranslate2 format. For example the command below converts the "medium" Whisper model and saves the weights in FP16:
+A Whisper model should be first converted into the CTranslate2 format. We provide a script to download and convert models from the [Hugging Face model repository](https://huggingface.co/models?sort=downloads&search=whisper).
+
+For example the command below converts the "large-v2" Whisper model and saves the weights in FP16:
 
 ```bash
-ct2-transformers-converter --model openai/whisper-medium --output_dir whisper-medium-ct2 --quantization float16
+ct2-transformers-converter --model openai/whisper-large-v2 --output_dir whisper-large-v2-ct2 --quantization float16
 ```
 
 If needed, models can also be converted from the code. See the [conversion API](https://opennmt.net/CTranslate2/python/ctranslate2.converters.TransformersConverter.html).
@@ -66,7 +68,7 @@ If needed, models can also be converted from the code. See the [conversion API](
 ```python
 from faster_whisper import WhisperModel
 
-model_path = "whisper-medium-ct2/"
+model_path = "whisper-large-v2-ct2/"
 
 # Run on GPU with FP16
 model = WhisperModel(model_path, device="cuda", compute_type="float16")

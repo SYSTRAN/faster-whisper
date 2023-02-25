@@ -43,6 +43,7 @@ class TranscriptionOptions(
             "beam_size",
             "best_of",
             "patience",
+            "length_penalty",
             "log_prob_threshold",
             "no_speech_threshold",
             "compression_ratio_threshold",
@@ -137,6 +138,7 @@ class WhisperModel:
         beam_size=5,
         best_of=5,
         patience=1,
+        length_penalty=1,
         temperature=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
         compression_ratio_threshold=2.4,
         log_prob_threshold=-1.0,
@@ -160,12 +162,14 @@ class WhisperModel:
 
         Arguments:
           input_file: Path to the input file or a file-like object.
-          language: The language spoken in the audio. If not set, the language will be
-            detected in the first 30 seconds of audio.
+          language: The language spoken in the audio. It should be a language code such
+            as "en" or "fr". If not set, the language will be detected in the first 30 seconds
+            of audio.
           task: Task to execute (transcribe or translate).
           beam_size: Beam size to use for decoding.
           best_of: Number of candidates when sampling with non-zero temperature.
           patience: Beam search patience factor.
+          length_penalty: Exponential length penalty constant.
           temperature: Temperature for sampling. It can be a tuple of temperatures,
             which will be successively used upon failures according to either
             `compression_ratio_threshold` or `logprob_threshold`.
@@ -238,6 +242,8 @@ class WhisperModel:
                 # languages for all segments is used to determine the language.
                 language = max(set(languages), key=languages.count)
         else:
+            if self.tokenizer.token_to_id("<|%s|>" % language) is None:
+                raise ValueError("%s is not a valid language code" % language)
             language_probability = 1
 
         transcription_options = TranscriptionOptions(
@@ -245,6 +251,7 @@ class WhisperModel:
             beam_size=beam_size,
             best_of=best_of,
             patience=patience,
+            length_penalty=length_penalty,
             log_prob_threshold=log_prob_threshold,
             no_speech_threshold=no_speech_threshold,
             compression_ratio_threshold=compression_ratio_threshold,
@@ -345,11 +352,11 @@ class WhisperModel:
                     previous_tokens = all_tokens[prompt_reset_since:]
                     prompt = self.get_prompt(language, previous_tokens, task=options.task, without_timestamps=options.without_timestamps)
 
-            result, temperature = self.generate_with_fallback(segment, prompt, options)
+            result, avg_log_prob, temperature = self.generate_with_fallback(segment, prompt, options)
 
             if (
                 result.no_speech_prob > options.no_speech_threshold
-                and result.scores[0] < options.log_prob_threshold
+                and avg_log_prob < options.log_prob_threshold
             ):
                 offset += segment.shape[-1]
                 continue
@@ -440,6 +447,7 @@ class WhisperModel:
     def generate_with_fallback(self, segment, prompt, options):
         features = self.get_input(segment)
         result = None
+        avg_log_prob = None
         final_temperature = None
         max_length = min(self.max_length, 2 * (self.max_length - len(prompt)))
 
@@ -461,7 +469,8 @@ class WhisperModel:
             result = self.model.generate(
                 features,
                 [prompt],
-                max_length=max_length,
+                length_penalty=options.length_penalty,
+                max_length=self.max_length,
                 return_scores=True,
                 return_attention=True,
                 return_no_speech_prob=True,
@@ -469,16 +478,22 @@ class WhisperModel:
             )[0]
 
             tokens = result.sequences_ids[0]
-            text = self.decode_text_tokens(tokens)
+
+            # Recover the average log prob from the returned score.
+            seq_len = len(tokens)
+            cum_log_prob = result.scores[0] * (seq_len**options.length_penalty)
+            avg_log_prob = cum_log_prob / (seq_len + 1)
+
+            text = self.decode_text_tokens(tokens).strip()
             compression_ratio = get_compression_ratio(text)
 
             if (
                 compression_ratio <= options.compression_ratio_threshold
-                and result.scores[0] >= options.log_prob_threshold
+                and avg_log_prob >= options.log_prob_threshold
             ):
                 break
 
-        return result, final_temperature
+        return result, avg_log_prob, final_temperature
 
     def get_prompt(
         self,
