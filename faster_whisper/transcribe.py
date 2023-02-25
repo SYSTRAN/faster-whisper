@@ -356,7 +356,7 @@ class WhisperModel:
 
             tokens = result.sequences_ids[0]
             token_scores = result.token_scores
-            attention = np.transpose(result.full_attention[-1], (2, 1, 0, 3))
+            attention = np.transpose(result.full_attention[0], (2, 1, 0, 3))
 
             consecutive_timestamps = [
                 i
@@ -729,8 +729,6 @@ class WhisperModel:
         start_token = tokens[0] - self.timestamp_begin_id
         end_token = tokens[-1] - self.timestamp_begin_id
 
-        print("tokens", tokens, "timestamp_begin", self.timestamp_begin_id)
-
         # Check start / end tokens
         if start_token < 0:
             raise RuntimeError(f"Missing start token in: {self.self.decode_text_tokens_with_timestamps(tokens)}")
@@ -750,9 +748,6 @@ class WhisperModel:
 
         start_time = start_token * self.audio_time_per_token
         end_time = end_token * self.audio_time_per_token
-
-        print("self.audio_time_per_token", self.audio_time_per_token, "start_token", start_token, "end_token", end_token)
-        print("start_time", start_time, "end_time", end_time)
 
         split_tokens = self.split_tokens_on_spaces if use_space else self.split_tokens_on_unicode
         words, word_tokens, word_tokens_indices = split_tokens(tokens,
