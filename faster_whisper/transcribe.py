@@ -369,6 +369,13 @@ class WhisperModel:
             ]
 
             if len(consecutive_timestamps) > 0:
+                no_speech_after_last_timestamp = (
+                        tokens[-1] >= self.timestamp_begin_id.timestamp_begin and consecutive_timestamps[-1] != len(tokens) - 1
+                )
+                if no_speech_after_last_timestamp:
+                    # append a dummy index to process the last segment
+                    consecutive = np.concatenate((consecutive_timestamps, np.array([len(tokens)])), dim=0)
+
                 last_slice = 0
                 for i, current_slice in enumerate(consecutive_timestamps):
                     sliced_tokens = tokens[last_slice:current_slice]
@@ -396,11 +403,15 @@ class WhisperModel:
                     yield offset, start_time, end_time, sliced_tokens, sliced_token_scores, sliced_attention
                     last_slice = current_slice
 
-                last_timestamp_position = (
-                    tokens[last_slice - 1] - self.timestamp_begin_id
-                )
-                offset += last_timestamp_position * self.input_stride
-                all_tokens.extend(tokens[: last_slice + 1])
+                if no_speech_after_last_timestamp:
+                    offset += segment.shape[-1]
+                    all_tokens.extend(tokens)
+                else:
+                    last_timestamp_position = (
+                            tokens[last_slice - 1] - self.timestamp_begin_id
+                    )
+                    offset += last_timestamp_position * self.input_stride
+                    all_tokens.extend(tokens[: last_slice + 1])
 
             else:
                 duration = segment_duration
