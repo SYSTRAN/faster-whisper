@@ -331,26 +331,21 @@ class WhisperModel:
             segment = self.get_segment(features, offset)
             segment_duration = segment.shape[-1] * self.feature_extractor.time_per_frame
 
-            previous_tokens = all_tokens[prompt_reset_since:]
-            prompt = self.get_prompt(
-                language,
-                previous_tokens,
-                task=options.task,
-                without_timestamps=options.without_timestamps,
-            )
-
             # Lucid Whisper
             if ((offset + self.feature_extractor.nb_max_frames) / num_frames < 1.0) or (
                     offset == 0):  # first chunk, ergo no context or next chunk will be fully within num_frames ergo should be fine
                 previous_tokens = all_tokens[prompt_reset_since:]
-                prompt = self.get_prompt(language, previous_tokens, task=options.task, without_timestamps=options.without_timestamps)
+                prompt = self.get_prompt(language, previous_tokens, task=options.task,
+                                         without_timestamps=options.without_timestamps)
             else:  # next chunk will not be fully within num_frames i.e. last chunk, calculate lucid_score
                 lucid_score = (num_frames - offset) / self.feature_extractor.nb_max_frames
                 if lucid_score < options.lucid_threshold and prompt is not None:  # Lucid Score below threshold, erasing context!
-                    prompt = self.get_prompt(language, [], task=options.task, without_timestamps=options.without_timestamps)
+                    prompt = self.get_prompt(language, [], task=options.task,
+                                             without_timestamps=options.without_timestamps)
                 else:  # Lucid Score above threshold, keeping context!
                     previous_tokens = all_tokens[prompt_reset_since:]
-                    prompt = self.get_prompt(language, previous_tokens, task=options.task, without_timestamps=options.without_timestamps)
+                    prompt = self.get_prompt(language, previous_tokens, task=options.task,
+                                             without_timestamps=options.without_timestamps)
 
             result, avg_log_prob, temperature = self.generate_with_fallback(segment, prompt, options)
 
