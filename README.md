@@ -45,6 +45,16 @@ The model conversion requires the modules `transformers` and `torch` which are i
 pip install -e .
 ```
 
+It is also possible to install the module without cloning the Git repository:
+
+```bash
+# Install the master branch:
+pip install "faster-whisper @ https://github.com/guillaumekln/faster-whisper/archive/refs/heads/master.tar.gz"
+
+# Install a specific commit:
+pip install "faster-whisper @ https://github.com/guillaumekln/faster-whisper/archive/a4f1cc8f11433e454c3934442b5e1a4ed5e865c3.tar.gz"
+```
+
 ### GPU support
 
 GPU execution requires the NVIDIA libraries cuBLAS 11.x and cuDNN 8.x to be installed on the system. Please refer to the [CTranslate2 documentation](https://opennmt.net/CTranslate2/installation.html).
