@@ -3,6 +3,8 @@ import os
 import string
 import zlib
 
+from typing import BinaryIO, List, Optional, Tuple, Union
+
 import ctranslate2
 import dtw
 import numpy as np
@@ -50,6 +52,7 @@ class TranscriptionOptions(
             "condition_on_previous_text",
             "temperatures",
             "initial_prompt",
+            "prefix",
             "without_timestamps",
             "lucid_threshold",
         ),
@@ -83,12 +86,12 @@ class WordTimestampOptions(
 class WhisperModel:
     def __init__(
         self,
-        model_path,
-        device="auto",
-        device_index=0,
-        compute_type="default",
-        cpu_threads=0,
-        num_workers=1,
+        model_path: str,
+        device: str = "auto",
+        device_index: int = 0,
+        compute_type: str = "default",
+        cpu_threads: int = 0,
+        num_workers: int = 1,
     ):
         """Initializes the Whisper model.
 
@@ -117,6 +120,14 @@ class WhisperModel:
             inter_threads=num_workers,
         )
 
+        tokenizer_file = os.path.join(model_path, "tokenizer.json")
+        if os.path.isfile(tokenizer_file):
+            self.tokenizer = tokenizers.Tokenizer.from_file(tokenizer_file)
+        else:
+            self.tokenizer = tokenizers.Tokenizer.from_pretrained(
+                "openai/whisper-tiny" + ("" if self.model.is_multilingual else ".en")
+            )
+
         self.feature_extractor = FeatureExtractor()
         tokenizer_filepath = os.path.join(os.path.dirname(__file__), 'tokenizer.json')
         self.tokenizer = tokenizers.Tokenizer.from_file(tokenizer_filepath)
@@ -134,20 +145,21 @@ class WhisperModel:
         self._punctuation = "".join(c for c in string.punctuation if c not in ["-", "'"]) + "。，！？：”、…"
     def transcribe(
         self,
-        input_file,
-        language=None,
+        audio: Union[str, BinaryIO, np.ndarray],
+        language: Optional[str] = None,
         task="transcribe",
         beam_size=5,
         best_of=5,
         patience=1,
         length_penalty=1,
         temperature=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-        compression_ratio_threshold=2.4,
-        log_prob_threshold=-1.0,
-        no_speech_threshold=0.6,
-        condition_on_previous_text=True,
-        initial_prompt=None,
-        without_timestamps=False,
+        compression_ratio_threshold: Optional[float] = 2.4,
+        log_prob_threshold: Optional[float] = -1.0,
+        no_speech_threshold: Optional[float] = 0.6,
+        condition_on_previous_text: bool = True,
+        initial_prompt: Optional[str] = None,
+        prefix: Optional[str] = None,
+        without_timestamps: bool = False,
         language_threshold: float = 0.6,
         language_detection_segments: int = 1,
         lucid_threshold=0.3,
@@ -159,12 +171,12 @@ class WhisperModel:
         refine_whisper_precision=0.5,
         min_word_duration=0.04,
         word_alignement_most_top_layers=6,
-        trust_whisper_timestamps=True,
+        trust_whisper_timestamps=True,    
     ):
         """Transcribes an input file.
 
         Arguments:
-          input_file: Path to the input file or a file-like object.
+          audio: Path to the input file (or a file-like object), or the audio waveform.
           language: The language spoken in the audio. It should be a language code such
             as "en" or "fr". If not set, the language will be detected in the first 30 seconds
             of audio.
@@ -188,6 +200,7 @@ class WhisperModel:
             windows, but the model becomes less prone to getting stuck in a failure loop,
             such as repetition looping or timestamps going out of sync.
           initial_prompt: Optional text to provide as a prompt for the first window.
+          prefix: Optional text to provide as a prefix for the first window.
           without_timestamps: Only sample text tokens.
 
           remove_punctuation_from_words: bool
@@ -218,9 +231,10 @@ class WhisperModel:
         assert min_word_duration >= 0, f"min_word_duration must be a positive number"
         assert word_alignement_most_top_layers is None or word_alignement_most_top_layers > 0, f"word_alignement_most_top_layers must be a strictly positive number"
 
-        audio = decode_audio(
-            input_file, sampling_rate=self.feature_extractor.sampling_rate
-        )
+        if not isinstance(audio, np.ndarray):
+            audio = decode_audio(
+                audio, sampling_rate=self.feature_extractor.sampling_rate
+            )
         features = self.feature_extractor(audio)
 
         import time
@@ -266,6 +280,7 @@ class WhisperModel:
                 temperature if isinstance(temperature, (list, tuple)) else [temperature]
             ),
             initial_prompt=initial_prompt,
+            prefix=prefix,
             without_timestamps=without_timestamps,
             lucid_threshold=lucid_threshold,
         )
@@ -333,10 +348,8 @@ class WhisperModel:
 
         if options.initial_prompt is not None:
             initial_prompt = " " + options.initial_prompt.strip()
-            initial_prompt_tokens = self.tokenizer.encode(
-                initial_prompt, add_special_tokens=False
-            )
-            all_tokens.extend(initial_prompt_tokens.ids)
+            initial_prompt_tokens = self.encode_text(initial_prompt)
+            all_tokens.extend(initial_prompt_tokens)
 
         while offset < num_frames:
             time_offset = offset * self.feature_extractor.time_per_frame
@@ -348,16 +361,16 @@ class WhisperModel:
                     offset == 0):  # first chunk, ergo no context or next chunk will be fully within num_frames ergo should be fine
                 previous_tokens = all_tokens[prompt_reset_since:]
                 prompt = self.get_prompt(language, previous_tokens, task=options.task,
-                                         without_timestamps=options.without_timestamps)
+                                         without_timestamps=options.without_timestamps,prefix=options.prefix,)
             else:  # next chunk will not be fully within num_frames i.e. last chunk, calculate lucid_score
                 lucid_score = (num_frames - offset) / self.feature_extractor.nb_max_frames
                 if lucid_score < options.lucid_threshold and prompt is not None:  # Lucid Score below threshold, erasing context!
                     prompt = self.get_prompt(language, [], task=options.task,
-                                             without_timestamps=options.without_timestamps)
+                                             without_timestamps=options.without_timestamps,prefix=options.prefix,)
                 else:  # Lucid Score above threshold, keeping context!
                     previous_tokens = all_tokens[prompt_reset_since:]
                     prompt = self.get_prompt(language, previous_tokens, task=options.task,
-                                             without_timestamps=options.without_timestamps)
+                                             without_timestamps=options.without_timestamps, prefix=options.prefix,)
 
             import time
             stt = time.time()
@@ -450,6 +463,9 @@ class WhisperModel:
             if not options.condition_on_previous_text or temperature > 0.5:
                 prompt_reset_since = len(all_tokens)
 
+    def encode_text(self, text):
+        return self.tokenizer.encode(text, add_special_tokens=False).ids
+
     def decode_text_tokens(self, tokens):
         text_tokens = [token for token in tokens if token < self.eot_id]
         return self.tokenizer.decode(text_tokens)
@@ -513,10 +529,21 @@ class WhisperModel:
             text = self.decode_text_tokens(tokens).strip()
             compression_ratio = get_compression_ratio(text)
 
+            needs_fallback = False
+
             if (
-                compression_ratio <= options.compression_ratio_threshold
-                and avg_log_prob >= options.log_prob_threshold
+                options.compression_ratio_threshold is not None
+                and compression_ratio > options.compression_ratio_threshold
             ):
+                needs_fallback = True  # too repetitive
+
+            if (
+                options.log_prob_threshold is not None
+                and avg_log_prob < options.log_prob_threshold
+            ):
+                needs_fallback = True  # average log probability is too low
+
+            if not needs_fallback:
                 break
 
         return result, avg_log_prob, final_temperature
@@ -527,6 +554,7 @@ class WhisperModel:
         previous_tokens,
         task="transcribe",
         without_timestamps=False,
+        prefix=None,
     ):
         prompt = []
 
@@ -545,6 +573,12 @@ class WhisperModel:
 
         if without_timestamps:
             prompt.append(self.tokenizer.token_to_id("<|notimestamps|>"))
+
+        if prefix:
+            prefix_tokens = self.encode_text(" " + prefix.strip())
+            if len(prefix_tokens) >= self.max_length // 2:
+                prefix_tokens = prefix_tokens[: self.max_length // 2 - 1]
+            prompt.extend(prefix_tokens)
 
         return prompt
 
