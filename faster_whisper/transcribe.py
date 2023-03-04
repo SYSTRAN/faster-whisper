@@ -70,6 +70,7 @@ class WordTimestampOptions(
             "refine_whisper_precision",
             "refine_whisper_precision_nframes",
             "word_alignement_most_top_layers",
+            "trust_whisper_timestamps",
             "min_word_duration",
             "alignment_heads",
             "transcription_options"
@@ -129,6 +130,7 @@ class WhisperModel:
 
         self.audio_samples_per_token = self.feature_extractor.hop_length * 2  # 320
         self.audio_time_per_token = self.audio_samples_per_token / self.feature_extractor.sampling_rate  # 0.02
+        self.segment_duration = self.feature_extractor.nb_max_frames * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate  # 30.0 (sec)
         self._punctuation = "".join(c for c in string.punctuation if c not in ["-", "'"]) + "。，！？：”、…"
     def transcribe(
         self,
@@ -157,6 +159,7 @@ class WhisperModel:
         refine_whisper_precision=0.5,
         min_word_duration=0.04,
         word_alignement_most_top_layers=6,
+        trust_whisper_timestamps=True,
     ):
         """Transcribes an input file.
 
@@ -220,6 +223,9 @@ class WhisperModel:
         )
         features = self.feature_extractor(audio)
 
+        import time
+        stt = time.time()
+
         if language is None:
             num_frames = features.shape[-1]
             if language_detection_segments is None or language_detection_segments < 1:
@@ -272,6 +278,8 @@ class WhisperModel:
             language_probability=language_probability,
         )
 
+        # return segments, audio_info
+
         # get the timestamps for each word
         wordtimestamp_options = WordTimestampOptions(
             audio=audio,
@@ -283,12 +291,16 @@ class WhisperModel:
             refine_whisper_precision=refine_whisper_precision,
             refine_whisper_precision_nframes=refine_whisper_precision_nframes,
             word_alignement_most_top_layers=word_alignement_most_top_layers,
+            trust_whisper_timestamps=trust_whisper_timestamps,
             min_word_duration=min_word_duration,
             alignment_heads=None,
             transcription_options=transcription_options,
         )
 
+        import time
+        stt = time.time()
         transcription = self.get_attention_timestamps(wordtimestamp_options)
+        print("attention_timestamps", time.time() - stt)
 
         return transcription, audio_info
 
@@ -347,8 +359,10 @@ class WhisperModel:
                     prompt = self.get_prompt(language, previous_tokens, task=options.task,
                                              without_timestamps=options.without_timestamps)
 
+            import time
+            stt = time.time()
             result, avg_log_prob, temperature = self.generate_with_fallback(segment, prompt, options)
-
+            print("generate_time", time.time() - stt)
             if (
                 result.no_speech_prob > options.no_speech_threshold
                 and avg_log_prob < options.log_prob_threshold
@@ -358,7 +372,9 @@ class WhisperModel:
 
             tokens = result.sequences_ids[0]
             token_scores = result.token_scores
-            attention = np.transpose(result.full_attention[0], (2, 1, 0, 3))
+
+            attention = result.full_attention.transpose(1, 3, 0, 2)
+            # attention = np.ones((1, 1, len(tokens), 1500))
 
             consecutive_timestamps = [
                 i
@@ -369,12 +385,12 @@ class WhisperModel:
             ]
 
             if len(consecutive_timestamps) > 0:
-                no_speech_after_last_timestamp = (
-                        tokens[-1] >= self.timestamp_begin_id.timestamp_begin and consecutive_timestamps[-1] != len(tokens) - 1
-                )
-                if no_speech_after_last_timestamp:
-                    # append a dummy index to process the last segment
-                    consecutive = np.concatenate((consecutive_timestamps, np.array([len(tokens)])), dim=0)
+                # no_speech_after_last_timestamp = (
+                #         tokens[-1] >= self.timestamp_begin_id and consecutive_timestamps[-1] != len(tokens) - 1
+                # )
+                # if no_speech_after_last_timestamp:
+                #     # append a dummy index to process the last segment
+                #     consecutive_timestamps = np.concatenate((consecutive_timestamps, np.array([len(tokens)])), axis=0)
 
                 last_slice = 0
                 for i, current_slice in enumerate(consecutive_timestamps):
@@ -403,15 +419,20 @@ class WhisperModel:
                     yield offset, start_time, end_time, sliced_tokens, sliced_token_scores, sliced_attention
                     last_slice = current_slice
 
-                if no_speech_after_last_timestamp:
-                    offset += segment.shape[-1]
-                    all_tokens.extend(tokens)
-                else:
-                    last_timestamp_position = (
-                            tokens[last_slice - 1] - self.timestamp_begin_id
-                    )
-                    offset += last_timestamp_position * self.input_stride
-                    all_tokens.extend(tokens[: last_slice + 1])
+                # if no_speech_after_last_timestamp:
+                #     offset += segment.shape[-1]
+                #     all_tokens.extend(tokens)
+                # else:
+                #     last_timestamp_position = (
+                #             tokens[last_slice - 1] - self.timestamp_begin_id
+                #     )
+                #     offset += last_timestamp_position * self.input_stride
+                #     all_tokens.extend(tokens[: last_slice + 1])
+                last_timestamp_position = (
+                        tokens[last_slice - 1] - self.timestamp_begin_id
+                )
+                offset += last_timestamp_position * self.input_stride
+                all_tokens.extend(tokens[: last_slice + 1])
 
             else:
                 duration = segment_duration
@@ -421,7 +442,6 @@ class WhisperModel:
                 if len(timestamps) > 0 and timestamps[-1] != self.timestamp_begin_id:
                     last_timestamp_position = timestamps[-1] - self.timestamp_begin_id
                     duration = last_timestamp_position * self.time_precision
-
                 yield offset, time_offset, time_offset + duration, tokens, token_scores, attention
 
                 offset += segment.shape[-1]
@@ -551,6 +571,11 @@ class WhisperModel:
 
     def get_attention_timestamps(self, options):
         refine_whisper_precision_sec = options.refine_whisper_precision_nframes * self.audio_time_per_token
+
+        # When not relying on Whisper timestamps
+        current_tokens = []
+        token_to_idx_segment = []
+
         words = []
         previous_end = 0
         audio_duration = options.audio.shape[-1] / self.feature_extractor.sampling_rate
@@ -566,49 +591,81 @@ class WhisperModel:
 
         for i_segment, segment in enumerate(options.segments):
 
-            # create dictionary of relevant segment features for the output
-            new_segment = {
-                "id": i_segment,
-                "offset": segment.offset,
-                "start": segment.start,
-                "end": segment.end,
-                "text": segment.text,
-            }
+            start = end = tokens = None
+            if options.trust_whisper_timestamps:
 
-            start = segment.start
-            end = segment.end
-            if end < start:
-                # Whisper is wrong on the prediction of segment end
-                end = min(audio_duration, start + 30.0)
+                # create dictionary of relevant segment features for the output
+                new_segment = {
+                    "id": i_segment,
+                    "offset": segment.offset,
+                    "start": segment.start,
+                    "end": segment.end,
+                    "text": segment.text,
+                }
 
-            start_margin_min = start - refine_whisper_precision_sec
-            start_margin_max = start + refine_whisper_precision_sec
-            if start >= audio_duration - options.min_word_duration or (
-                    previous_end >= start_margin_min and previous_end <= start_margin_max):
-                # Make start as accurate as possible (as the decoding will start with timestamp <|0|>)
-                start = previous_end
-            else:
-                # Fallback
-                start = start_margin_min
+                start = segment.start
+                end = segment.end
+                if end < start:
+                    # Whisper is wrong on the prediction of segment end
+                    end = min(audio_duration, start + self.segment_duration)
 
-            if start > audio_duration - options.min_word_duration:
-                continue
+                start_margin_min = start - refine_whisper_precision_sec
+                start_margin_max = start + refine_whisper_precision_sec
+                if start >= audio_duration - options.min_word_duration or (
+                        previous_end >= start_margin_min and previous_end <= start_margin_max):
+                    # Make start as accurate as possible (as the decoding will start with timestamp <|0|>)
+                    start = previous_end
+                else:
+                    # Fallback
+                    start = start_margin_min
 
-            end_margin_min = end - refine_whisper_precision_sec
-            end_margin_max = end + refine_whisper_precision_sec
-            if i_segment < len(options.segments) - 1:
-                # Try to enforce:
-                #   end + min_word_duration <= next start + refine_whisper_precision_sec
-                end_margin_max2 = options.segments[
-                                      i_segment + 1].start + refine_whisper_precision_sec - options.min_word_duration
-                if end_margin_max2 >= end_margin_min:
-                    end_margin_max = min(end_margin_max2, end_margin_max)
-            end = min(audio_duration, end_margin_max)
-
-            if end < start + options.min_word_duration:
-                end = min(audio_duration, start + options.min_word_duration)
-                if end <= start:
+                if start > audio_duration - options.min_word_duration:
                     continue
+
+                end_margin_min = end - refine_whisper_precision_sec
+                end_margin_max = end + refine_whisper_precision_sec
+                if i_segment < len(options.segments) - 1:
+                    # Try to enforce:
+                    #   end + min_word_duration <= next start + refine_whisper_precision_sec
+                    end_margin_max2 = options.segments[
+                                          i_segment + 1].start + refine_whisper_precision_sec - options.min_word_duration
+                    if end_margin_max2 >= end_margin_min:
+                        end_margin_max = min(end_margin_max2, end_margin_max)
+                end = min(audio_duration, end_margin_max)
+
+                if end < start + options.min_word_duration:
+                    end = min(audio_duration, start + options.min_word_duration)
+                    if end <= start:
+                        continue
+
+                tokens = segment.tokens
+
+            else:
+                seek = segment.offset
+                new_tokens = segment.tokens
+                # Add timestamps that will be needed after
+                if new_tokens[0] < self.timestamp_begin_id:
+                    relative_start = segment.stat - (seek * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate)
+                    start_token = round(
+                        relative_start * self.feature_extractor.sampling_rate / self.audio_samples_per_token) + self.timestamp_begin_id
+                    new_tokens = [start_token] + new_tokens
+                if new_tokens[-1] < self.timestamp_begin_id:
+                    relative_end = segment.end - (seek * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate)
+                    end_token = round(relative_end * self.feature_extractor.sampling_rate / self.audio_samples_per_token) + self.timestamp_begin_id
+                    new_tokens = new_tokens + [end_token]
+
+                current_tokens.extend(new_tokens)
+                token_to_idx_segment.extend([i_segment] * len(new_tokens))
+
+                next_seek = options.segments[i_segment + 1]["seek"] if i_segment < len(options.segments) - 1 else None
+                if seek != next_seek:
+                    start = float(seek * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate)
+                    assert start < audio_duration, f"Got start {start} which is outside of audio duration {audio_duration}"
+                    end = min(start + self.segment_duration, audio_duration)
+                    tokens = current_tokens
+
+            if start is None:
+                continue
 
             start_sample = min(round(start * self.feature_extractor.sampling_rate), options.audio.shape[-1])
             end_sample = min(round(end * self.feature_extractor.sampling_rate), options.audio.shape[-1])
@@ -616,10 +673,8 @@ class WhisperModel:
             sub_audio = self.audio_minimum_padding(options.audio[start_sample:end_sample])
 
             mfcc = self.feature_extractor(sub_audio)
-            # mfcc = self.feature_extractor.pad_or_trim(mfcc, self.feature_extractor.nb_max_frames)
+            mfcc = self.feature_extractor.pad_or_trim(mfcc, self.feature_extractor.nb_max_frames)
             mfcc = np.expand_dims(mfcc, axis=0)
-
-            tokens = segment.tokens
 
             # get the log prob for each token
             logprobs = np.array(segment.token_scores)
@@ -640,28 +695,37 @@ class WhisperModel:
             )
 
             segment_logprobs = []
-            i_start = 1
-            for w in ws:
+            i_token = 1
+            for word in ws:
                 offset = segment.offset * self.feature_extractor.time_per_frame
-                w["start"] += offset
-                w["end"] += offset
-                w.update({"idx_segment": i_segment})
+                word["start"] += offset
+                word["end"] += offset
+                word.update({"idx_segment": i_segment})
+                if options.trust_whisper_timestamps:
+                    word.update({"idx_segment": i_segment})
+                else:
+                    assert i_token < len(tokens)
+                    assert word["tokens_indices"][0] == tokens[i_token]
+                    word.update({"idx_segment": token_to_idx_segment[i_token]})
+                    i_token += len(word["tokens"])
+                    while i_token < len(tokens) and tokens[i_token] >= self.timestamp_begin_id:
+                        i_token += 1
                 if options.compute_word_confidence:
-                    tokens = w["tokens"]
-                    tokens_indices = w["tokens_indices"]
-                    i_end = i_start + len(tokens)
+                    tok = word["tokens"]
+                    tok_indices = word["tokens_indices"]
+                    i_end = i_token + len(tok)
                     if options.include_punctuation_in_confidence:
-                        while len(tokens) > 1 and tokens[-1][
+                        while len(tok) > 1 and tok[-1][
                             -1] in self._punctuation:  # Note: look at the last character of token, to take into account "...", "!!", etc.
-                            tokens = tokens[:-1]
-                            tokens_indices = tokens_indices[:-1]
+                            tok = tok[:-1]
+                            tok_indices = tok_indices[:-1]
                     word_logprobs = [logprobs[step] for step in
-                                     range(i_start, i_start + len(tokens_indices))]
-                    i_start = i_end
-                    w.update({"confidence": round_confidence(np.exp(np.mean(word_logprobs)))})
+                                     range(i_token, i_token + len(tok_indices))]
+                    i_token = i_end
+                    word.update({"confidence": round_confidence(np.exp(np.mean(word_logprobs)))})
                     segment_logprobs.append(word_logprobs)
 
-                words.append(w)
+                words.append(word)
 
             if len(segment_logprobs):
                 segment_logprobs = np.concatenate(segment_logprobs)
@@ -670,12 +734,16 @@ class WhisperModel:
             if len(ws):
                 previous_end = ws[-1]["end"]
 
+            if not options.trust_whisper_timestamps:
+                current_tokens = []
+                token_to_idx_segment = []
+
             # add the new segment to the output of segments
             transcription["segments"].append(new_segment)
             transcription["text"] += segment.text
 
         # Refine word positions
-        self.ensure_increasing_positions(words, min_duration=options.min_word_duration)
+        self.ensure_increasing_positions(words, min_duration=options.min_word_duration if options.trust_whisper_timestamps else 0)
 
         word_segments = transcription["segments"]
         for word in words:
@@ -953,7 +1021,9 @@ class WhisperModel:
             ymin = 1
 
             if mfcc is not None:
-                for i, (begin, end) in enumerate(zip(begin_times, end_times)):
+                for i, (w, begin, end) in enumerate(zip(words, begin_times, end_times)):
+                    plt.text(begin * 2 / self.audio_time_per_token, mfcc.shape[-2] * 1.05, w, ha="left", va="bottom",
+                             color="red")
                     for x in [begin, end, ]:
                         plt.axvline(x * 2 / self.audio_time_per_token,
                                     color="red", linestyle="dotted")
@@ -962,8 +1032,8 @@ class WhisperModel:
 
             for i, (w, ws, begin, end) in enumerate(zip(words, word_tokens, begin_times, end_times)):
                 ymax = ymin + len(ws)
-                plt.text(begin / self.audio_time_per_token, num_tokens,
-                         w, ha="left", va="top", color="red")
+                if mfcc is None:
+                    plt.text(begin / self.audio_time_per_token, num_tokens - 0.5, w, ha="left", va="top", color="red")
                 for x in [begin, end, ]:
                     plt.axvline(x / self.audio_time_per_token, color="red", linestyle="dotted",
                                 ymin=1 - ymin / num_tokens,
@@ -997,6 +1067,7 @@ class WhisperModel:
             current_tokens.append(token)
             decoded = self.decode_text_tokens_with_timestamps(current_tokens)
             if "\ufffd" not in decoded:
+                empty_tokens = [""] * (len(current_tokens) - 1)
                 punctuation = not isolate_punctuations and (
                             decoded.strip() and decoded.strip() in self._punctuation)
                 previous_special = len(word_tokens_indices) > 0 and (word_tokens_indices[-1][-1] >= self.eot_id)
@@ -1006,11 +1077,11 @@ class WhisperModel:
                         word_tokens = [[]]
                     if not remove_punctuation_from_words:
                         words[-1] += decoded
-                    word_tokens[-1].append(decoded)
+                    word_tokens[-1].extend(empty_tokens + [decoded])
                     word_tokens_indices[-1].extend(current_tokens)
                 else:
                     words.append(decoded)
-                    word_tokens.append([decoded])
+                    word_tokens.append(empty_tokens + [decoded])
                     word_tokens_indices.append(current_tokens)
                 current_tokens = []
 
