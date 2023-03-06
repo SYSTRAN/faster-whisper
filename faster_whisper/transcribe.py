@@ -386,8 +386,7 @@ class WhisperModel:
             tokens = result.sequences_ids[0]
             token_scores = result.token_scores
 
-            attention = result.full_attention.transpose(1, 3, 0, 2)
-            # attention = np.ones((1, 1, len(tokens), 1500))
+            attention = np.expand_dims(np.expand_dims(result.full_attention, axis=0), axis=0)
 
             consecutive_timestamps = [
                 i
@@ -625,18 +624,17 @@ class WhisperModel:
 
         for i_segment, segment in enumerate(options.segments):
 
+            # create dictionary of relevant segment features for the output
+            new_segment = {
+                "id": i_segment,
+                "offset": segment.offset,
+                "start": segment.start,
+                "end": segment.end,
+                "text": segment.text,
+            }
+
             start = end = tokens = None
             if options.trust_whisper_timestamps:
-
-                # create dictionary of relevant segment features for the output
-                new_segment = {
-                    "id": i_segment,
-                    "offset": segment.offset,
-                    "start": segment.start,
-                    "end": segment.end,
-                    "text": segment.text,
-                }
-
                 start = segment.start
                 end = segment.end
                 if end < start:
@@ -691,7 +689,7 @@ class WhisperModel:
                 current_tokens.extend(new_tokens)
                 token_to_idx_segment.extend([i_segment] * len(new_tokens))
 
-                next_seek = options.segments[i_segment + 1]["seek"] if i_segment < len(options.segments) - 1 else None
+                next_seek = options.segments[i_segment + 1].offset if i_segment < len(options.segments) - 1 else None
                 if seek != next_seek:
                     start = float(seek * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate)
                     assert start < audio_duration, f"Got start {start} which is outside of audio duration {audio_duration}"
