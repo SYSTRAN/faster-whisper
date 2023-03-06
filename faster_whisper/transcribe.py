@@ -386,7 +386,7 @@ class WhisperModel:
             tokens = result.sequences_ids[0]
             token_scores = result.token_scores
 
-            attention = np.expand_dims(np.expand_dims(result.full_attention, axis=0), axis=0)
+            attention = np.expand_dims(np.expand_dims(result.attention, axis=0), axis=0)
 
             consecutive_timestamps = [
                 i
