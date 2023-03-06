@@ -26,6 +26,7 @@ class TranscriptionOptions(
     collections.namedtuple(
         "TranscriptionOptions",
         (
+            "language",
             "task",
             "beam_size",
             "best_of",
@@ -38,7 +39,10 @@ class TranscriptionOptions(
             "temperatures",
             "initial_prompt",
             "prefix",
+            "suppress_blank",
+            "suppress_tokens",
             "without_timestamps",
+            "max_initial_timestamp",
         ),
     )
 ):
@@ -120,7 +124,10 @@ class WhisperModel:
         condition_on_previous_text: bool = True,
         initial_prompt: Optional[str] = None,
         prefix: Optional[str] = None,
+        suppress_blank: bool = True,
+        suppress_tokens: Optional[List[int]] = [-1],
         without_timestamps: bool = False,
+        max_initial_timestamp: float = 1.0,
     ):
         """Transcribes an input file.
 
@@ -150,7 +157,11 @@ class WhisperModel:
             such as repetition looping or timestamps going out of sync.
           initial_prompt: Optional text to provide as a prompt for the first window.
           prefix: Optional text to provide as a prefix for the first window.
+          suppress_blank: Suppress blank outputs at the beginning of the sampling.
+          suppress_tokens: List of token IDs to suppress. -1 will suppress a default set
+            of symbols as defined in the model config.json file.
           without_timestamps: Only sample text tokens.
+          max_initial_timestamp: The initial timestamp cannot be later than this.
 
         Returns:
           A tuple with:
@@ -181,6 +192,7 @@ class WhisperModel:
             language_probability = 1
 
         options = TranscriptionOptions(
+            language=language,
             task=task,
             beam_size=beam_size,
             best_of=best_of,
@@ -195,10 +207,13 @@ class WhisperModel:
             ),
             initial_prompt=initial_prompt,
             prefix=prefix,
+            suppress_blank=suppress_blank,
+            suppress_tokens=suppress_tokens,
             without_timestamps=without_timestamps,
+            max_initial_timestamp=max_initial_timestamp,
         )
 
-        segments = self.generate_segments(features, language, options)
+        segments = self.generate_segments(features, options)
 
         audio_info = AudioInfo(
             language=language,
@@ -207,10 +222,8 @@ class WhisperModel:
 
         return segments, audio_info
 
-    def generate_segments(self, features, language, options):
-        tokenized_segments = self.generate_tokenized_segments(
-            features, language, options
-        )
+    def generate_segments(self, features, options):
+        tokenized_segments = self.generate_tokenized_segments(features, options)
 
         for start, end, tokens in tokenized_segments:
             text = self.decode_text_tokens(tokens)
@@ -223,7 +236,7 @@ class WhisperModel:
                 text=text,
             )
 
-    def generate_tokenized_segments(self, features, language, options):
+    def generate_tokenized_segments(self, features, options):
         num_frames = features.shape[-1]
         offset = 0
         all_tokens = []
@@ -241,7 +254,7 @@ class WhisperModel:
 
             previous_tokens = all_tokens[prompt_reset_since:]
             prompt = self.get_prompt(
-                language,
+                options.language,
                 previous_tokens,
                 task=options.task,
                 without_timestamps=options.without_timestamps,
@@ -338,6 +351,10 @@ class WhisperModel:
         avg_log_prob = None
         final_temperature = None
 
+        max_initial_timestamp_index = int(
+            round(options.max_initial_timestamp / self.time_precision)
+        )
+
         for temperature in options.temperatures:
             if temperature > 0:
                 kwargs = {
@@ -360,6 +377,9 @@ class WhisperModel:
                 max_length=self.max_length,
                 return_scores=True,
                 return_no_speech_prob=True,
+                suppress_blank=options.suppress_blank,
+                suppress_tokens=options.suppress_tokens,
+                max_initial_timestamp_index=max_initial_timestamp_index,
                 **kwargs,
             )[0]
 
