@@ -677,7 +677,7 @@ class WhisperModel:
                 new_tokens = segment.tokens
                 # Add timestamps that will be needed after
                 if new_tokens[0] < self.timestamp_begin_id:
-                    relative_start = segment.stat - (seek * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate)
+                    relative_start = segment.start - (seek * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate)
                     start_token = round(
                         relative_start * self.feature_extractor.sampling_rate / self.audio_samples_per_token) + self.timestamp_begin_id
                     new_tokens = [start_token] + new_tokens
