@@ -1,4 +1,14 @@
+"""We use the PyAV library to decode the audio: https://github.com/PyAV-Org/PyAV
+
+The advantage of PyAV is that it bundles the FFmpeg libraries so there is no additional
+system dependencies. FFmpeg does not need to be installed on the system.
+
+However, the API is quite low-level so we need to manipulate audio frames directly.
+"""
+
 import av
+import io
+import itertools
 import numpy as np
 
 
@@ -12,25 +22,46 @@ def decode_audio(input_file, sampling_rate=16000):
     Returns:
       A float32 Numpy array.
     """
-    fifo = av.audio.fifo.AudioFifo()
     resampler = av.audio.resampler.AudioResampler(
         format="s16",
         layout="mono",
         rate=sampling_rate,
     )
 
+    raw_buffer = io.BytesIO()
+    dtype = None
+
     with av.open(input_file) as container:
-        # Decode and resample each audio frame.
-        for frame in container.decode(audio=0):
-            frame.pts = None
-            for new_frame in resampler.resample(frame):
-                fifo.write(new_frame)
+        frames = container.decode(audio=0)
+        frames = _group_frames(frames, 500000)
+        frames = _resample_frames(frames, resampler)
 
-        # Flush the resampler.
-        for new_frame in resampler.resample(None):
-            fifo.write(new_frame)
+        for frame in frames:
+            array = frame.to_ndarray()
+            dtype = array.dtype
+            raw_buffer.write(array)
 
-    frame = fifo.read()
+    audio = np.frombuffer(raw_buffer.getbuffer(), dtype=dtype)
 
     # Convert s16 back to f32.
-    return frame.to_ndarray().flatten().astype(np.float32) / 32768.0
+    return audio.astype(np.float32) / 32768.0
+
+
+def _group_frames(frames, num_samples=None):
+    fifo = av.audio.fifo.AudioFifo()
+
+    for frame in frames:
+        frame.pts = None  # Ignore timestamp check.
+        fifo.write(frame)
+
+        if num_samples is not None and fifo.samples >= num_samples:
+            yield fifo.read()
+
+    if fifo.samples > 0:
+        yield fifo.read()
+
+
+def _resample_frames(frames, resampler):
+    # Add None to flush the resampler.
+    for frame in itertools.chain(frames, [None]):
+        yield from resampler.resample(frame)
