@@ -68,10 +68,13 @@ A Whisper model should be first converted into the CTranslate2 format. We provid
 For example the command below converts the "large-v2" Whisper model and saves the weights in FP16:
 
 ```bash
-ct2-transformers-converter --model openai/whisper-large-v2 --output_dir whisper-large-v2-ct2 --quantization float16
+ct2-transformers-converter --model openai/whisper-large-v2 --output_dir whisper-large-v2-ct2 \
+    --copy_files tokenizer.json --quantization float16
 ```
 
-If needed, models can also be converted from the code. See the [conversion API](https://opennmt.net/CTranslate2/python/ctranslate2.converters.TransformersConverter.html).
+If the option `--copy_files tokenizer.json` is not used, the tokenizer configuration is automatically downloaded when the model is loaded later.
+
+Models can also be converted from the code. See the [conversion API](https://opennmt.net/CTranslate2/python/ctranslate2.converters.TransformersConverter.html).
 
 ### Transcription
 

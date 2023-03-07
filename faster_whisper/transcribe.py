@@ -41,6 +41,7 @@ class TranscriptionOptions(
     collections.namedtuple(
         "TranscriptionOptions",
         (
+            "language",
             "task",
             "beam_size",
             "best_of",
@@ -53,7 +54,10 @@ class TranscriptionOptions(
             "temperatures",
             "initial_prompt",
             "prefix",
+            "suppress_blank",
+            "suppress_tokens",
             "without_timestamps",
+            "max_initial_timestamp",
             "lucid_threshold",
         ),
     )
@@ -159,7 +163,10 @@ class WhisperModel:
         condition_on_previous_text: bool = True,
         initial_prompt: Optional[str] = None,
         prefix: Optional[str] = None,
+        suppress_blank: bool = True,
+        suppress_tokens: Optional[List[int]] = [-1],
         without_timestamps: bool = False,
+        max_initial_timestamp: float = 1.0,
         language_threshold: float = 0.6,
         language_detection_segments: int = 1,
         lucid_threshold=0.3,
@@ -201,7 +208,11 @@ class WhisperModel:
             such as repetition looping or timestamps going out of sync.
           initial_prompt: Optional text to provide as a prompt for the first window.
           prefix: Optional text to provide as a prefix for the first window.
+          suppress_blank: Suppress blank outputs at the beginning of the sampling.
+          suppress_tokens: List of token IDs to suppress. -1 will suppress a default set
+            of symbols as defined in the model config.json file.
           without_timestamps: Only sample text tokens.
+          max_initial_timestamp: The initial timestamp cannot be later than this.
 
           remove_punctuation_from_words: bool
             If False, words will be glued with the next punctuation mark (if any).
@@ -281,7 +292,10 @@ class WhisperModel:
             ),
             initial_prompt=initial_prompt,
             prefix=prefix,
+            suppress_blank=suppress_blank,
+            suppress_tokens=suppress_tokens,
             without_timestamps=without_timestamps,
+            max_initial_timestamp=max_initial_timestamp,
             lucid_threshold=lucid_threshold,
         )
 
@@ -319,10 +333,8 @@ class WhisperModel:
 
         return transcription, audio_info
 
-    def generate_segments(self, features, language, options):
-        tokenized_segments = self.generate_tokenized_segments(
-            features, language, options
-        )
+    def generate_segments(self, features, options):
+        tokenized_segments = self.generate_tokenized_segments(features, options)
 
         for offset, start, end, tokens, token_scores, attention in tokenized_segments:
             text = self.decode_text_tokens(tokens)
@@ -339,7 +351,7 @@ class WhisperModel:
                 token_scores=token_scores,
             )
 
-    def generate_tokenized_segments(self, features, language, options):
+    def generate_tokenized_segments(self, features, options):
         num_frames = features.shape[-1]
         offset = 0
         all_tokens = []
@@ -397,12 +409,14 @@ class WhisperModel:
             ]
 
             if len(consecutive_timestamps) > 0:
-                # no_speech_after_last_timestamp = (
-                #         tokens[-1] >= self.timestamp_begin_id and consecutive_timestamps[-1] != len(tokens) - 1
-                # )
-                # if no_speech_after_last_timestamp:
-                #     # append a dummy index to process the last segment
-                #     consecutive_timestamps = np.concatenate((consecutive_timestamps, np.array([len(tokens)])), axis=0)
+                ended_with_single_timestamp = (
+                    len(tokens) >= 2
+                    and tokens[-2] < self.timestamp_begin_id
+                    and tokens[-1] >= self.timestamp_begin_id
+                )
+
+                if ended_with_single_timestamp:
+                    consecutive_timestamps.append(len(tokens))
 
                 last_slice = 0
                 for i, current_slice in enumerate(consecutive_timestamps):
@@ -420,30 +434,18 @@ class WhisperModel:
                         time_offset + end_timestamp_position * self.time_precision
                     )
 
-                    last_in_window = i + 1 == len(consecutive_timestamps)
-
-                    # Include the last timestamp so that all tokens are included in a segment.
-                    if last_in_window:
-                        sliced_tokens.append(tokens[current_slice])
-                        sliced_token_scores.append(token_scores[current_slice])
-                        sliced_attention = np.concatenate((sliced_attention, attention[:, :, current_slice:current_slice+1, :]), axis=2)
-
                     yield offset, start_time, end_time, sliced_tokens, sliced_token_scores, sliced_attention
                     last_slice = current_slice
 
-                # if no_speech_after_last_timestamp:
-                #     offset += segment.shape[-1]
-                #     all_tokens.extend(tokens)
-                # else:
-                #     last_timestamp_position = (
-                #             tokens[last_slice - 1] - self.timestamp_begin_id
-                #     )
-                #     offset += last_timestamp_position * self.input_stride
-                #     all_tokens.extend(tokens[: last_slice + 1])
-                last_timestamp_position = (
+                if ended_with_single_timestamp:
+                    # single timestamp at the end means no speech after the last timestamp.
+                    offset += segment.shape[-1]
+                else:
+                    # otherwise, ignore the unfinished segment and seek to the last timestamp
+                    last_timestamp_position = (
                         tokens[last_slice - 1] - self.timestamp_begin_id
-                )
-                offset += last_timestamp_position * self.input_stride
+                    )
+                    offset += last_timestamp_position * self.input_stride
                 all_tokens.extend(tokens[: last_slice + 1])
 
             else:
@@ -492,6 +494,10 @@ class WhisperModel:
         final_temperature = None
         max_length = min(self.max_length, 2 * (self.max_length - len(prompt)))
 
+        max_initial_timestamp_index = int(
+            round(options.max_initial_timestamp / self.time_precision)
+        )
+
         for temperature in options.temperatures:
             if temperature > 0:
                 kwargs = {
@@ -515,6 +521,9 @@ class WhisperModel:
                 return_scores=True,
                 return_attention=True,
                 return_no_speech_prob=True,
+                suppress_blank=options.suppress_blank,
+                suppress_tokens=options.suppress_tokens,
+                max_initial_timestamp_index=max_initial_timestamp_index,
                 **kwargs,
             )[0]
 
