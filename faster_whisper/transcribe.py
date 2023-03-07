@@ -132,8 +132,6 @@ class WhisperModel:
         tokenizer_filepath = os.path.join(os.path.dirname(__file__), 'tokenizer.json')
         self.tokenizer = tokenizers.Tokenizer.from_file(tokenizer_filepath)
 
-        self.transcribe_id = self.tokenizer.token_to_id("<|transcribe|>")
-        self.translate_id = self.tokenizer.token_to_id("<|translate|>")
         self.sot_id = self.tokenizer.token_to_id("<|startoftranscript|>")
         self.eot_id = self.tokenizer.token_to_id("<|endoftext|>")
         self.timestamp_begin_id = self.tokenizer.token_to_id("<|notimestamps|>") + 1
@@ -399,19 +397,28 @@ class WhisperModel:
             ]
 
             if len(consecutive_timestamps) > 0:
-                if ended_with_single_timestamp := tokens[-2:].tolist() == [False, True]:
-                    consecutive = consecutive.tolist() + [len(tokens)]
+                # no_speech_after_last_timestamp = (
+                #         tokens[-1] >= self.timestamp_begin_id and consecutive_timestamps[-1] != len(tokens) - 1
+                # )
+                # if no_speech_after_last_timestamp:
+                #     # append a dummy index to process the last segment
+                #     consecutive_timestamps = np.concatenate((consecutive_timestamps, np.array([len(tokens)])), axis=0)
+
                 last_slice = 0
                 for i, current_slice in enumerate(consecutive_timestamps):
                     sliced_tokens = tokens[last_slice:current_slice]
                     sliced_token_scores = token_scores[last_slice:current_slice]
                     sliced_attention = attention[:, :, last_slice:current_slice, :]
-
-                    start_timestamp_pos = sliced_tokens[0] - self.timestamp_begin_id
-                    end_timestamp_pos= sliced_tokens[-1] - self.timestamp_begin_id
-
-                    start_time = time_offset + start_timestamp_pos * self.time_precision
-                    end_time = time_offset + end_timestamp_pos * self.time_precision
+                    start_timestamp_position = (
+                        sliced_tokens[0] - self.timestamp_begin_id
+                    )
+                    end_timestamp_position = sliced_tokens[-1] - self.timestamp_begin_id
+                    start_time = (
+                        time_offset + start_timestamp_position * self.time_precision
+                    )
+                    end_time = (
+                        time_offset + end_timestamp_position * self.time_precision
+                    )
 
                     last_in_window = i + 1 == len(consecutive_timestamps)
 
@@ -424,18 +431,19 @@ class WhisperModel:
                     yield offset, start_time, end_time, sliced_tokens, sliced_token_scores, sliced_attention
                     last_slice = current_slice
 
-                # last_timestamp_position = (
-                #         tokens[last_slice - 1] - self.timestamp_begin_id
-                # )
-                # offset += last_timestamp_position * self.input_stride
-
-                if ended_with_single_timestamp:
-                    # single timestamp at the end means no speech after the last timestamp.
-                    offset += segment.shape[-1]
-                else:
-                    # otherwise, ignore the unfinished segment and seek to the last timestamp
-                    last_timestamp_pos = tokens[last_slice - 1] - self.timestamp_begin_id
-                    offset += last_timestamp_pos * self.input_stride
+                # if no_speech_after_last_timestamp:
+                #     offset += segment.shape[-1]
+                #     all_tokens.extend(tokens)
+                # else:
+                #     last_timestamp_position = (
+                #             tokens[last_slice - 1] - self.timestamp_begin_id
+                #     )
+                #     offset += last_timestamp_position * self.input_stride
+                #     all_tokens.extend(tokens[: last_slice + 1])
+                last_timestamp_position = (
+                        tokens[last_slice - 1] - self.timestamp_begin_id
+                )
+                offset += last_timestamp_position * self.input_stride
                 all_tokens.extend(tokens[: last_slice + 1])
 
             else:
@@ -444,8 +452,8 @@ class WhisperModel:
                     token for token in tokens if token >= self.timestamp_begin_id
                 ]
                 if len(timestamps) > 0 and timestamps[-1] != self.timestamp_begin_id:
-                    last_timestamp_pos = timestamps[-1] - self.timestamp_begin_id
-                    duration = last_timestamp_pos * self.time_precision
+                    last_timestamp_position = timestamps[-1] - self.timestamp_begin_id
+                    duration = last_timestamp_position * self.time_precision
                 yield offset, time_offset, time_offset + duration, tokens, token_scores, attention
 
                 offset += segment.shape[-1]
