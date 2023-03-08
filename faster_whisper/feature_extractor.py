@@ -142,11 +142,14 @@ class FeatureExtractor:
             data[f] = np.fft.fft(fft_signal, axis=0)[:num_fft_bins]
         return data.T
 
-    def __call__(self, waveform):
+    def __call__(self, waveform, padding=True):
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results
         whisper's original torch implementation with 1e-5 tolerance.
         """
+        if padding:
+            waveform = np.pad(waveform, [(0, self.n_samples)])
+
         window = np.hanning(self.n_fft + 1)[:-1]
 
         frames = self.fram_wave(waveform)
