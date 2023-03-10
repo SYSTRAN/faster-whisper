@@ -19,7 +19,7 @@ setup(
     version="0.1.0",
     description="Faster Whisper transcription with CTranslate2",
     author="Guillaume Klein",
-    python_requires=">=3.7",
+    python_requires=">=3.8",
     install_requires=install_requires,
     extras_require={
         "conversion": conversion_requires,
