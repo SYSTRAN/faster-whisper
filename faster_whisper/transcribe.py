@@ -1,4 +1,5 @@
 import collections
+import itertools
 import os
 import zlib
 
@@ -527,7 +528,12 @@ class WhisperModel:
         if len(segments) == 0:
             return
 
-        text_tokens = [t for s in segments for t in s["tokens"] if t < tokenizer.eot]
+        text_tokens_per_segment = [
+            [token for token in segment["tokens"] if token < tokenizer.eot]
+            for segment in segments
+        ]
+
+        text_tokens = list(itertools.chain.from_iterable(text_tokens_per_segment))
         alignment = self.find_alignment(tokenizer, text_tokens, mel, num_frames)
         merge_punctuations(alignment, prepend_punctuations, append_punctuations)
 
@@ -536,35 +542,35 @@ class WhisperModel:
             * self.feature_extractor.hop_length
             / self.feature_extractor.sampling_rate
         )
-        segment_lengths = [len(s["tokens"]) for s in segments]
-        token_sources = np.repeat(np.arange(len(segments)), segment_lengths)
 
-        for segment in segments:
-            segment["words"] = []
+        word_index = 0
 
-        word_boundaries = np.pad(
-            np.cumsum([len(w["tokens"]) for w in alignment]), (1, 0)
-        )
-        for i, timing in enumerate(alignment):
-            if timing["word"]:
-                segment = segments[token_sources[word_boundaries[i]]]
-                start = round(time_offset + timing["start"], 2)
-                end = round(time_offset + timing["end"], 2)
-                segment["words"].append(
-                    dict(
-                        word=timing["word"],
-                        start=start,
-                        end=end,
-                        probability=timing["probability"],
+        for segment, text_tokens in zip(segments, text_tokens_per_segment):
+            saved_tokens = 0
+            words = []
+
+            while word_index < len(alignment) and saved_tokens < len(text_tokens):
+                timing = alignment[word_index]
+
+                if timing["word"]:
+                    words.append(
+                        dict(
+                            word=timing["word"],
+                            start=round(time_offset + timing["start"], 2),
+                            end=round(time_offset + timing["end"], 2),
+                            probability=timing["probability"],
+                        )
                     )
-                )
 
-        for segment in segments:
-            words = segment["words"]
+                saved_tokens += len(timing["tokens"])
+                word_index += 1
+
             if len(words) > 0:
                 # adjust the segment-level timestamps based on the word-level timestamps
                 segment["start"] = words[0]["start"]
                 segment["end"] = words[-1]["end"]
+
+            segment["words"] = words
 
     def find_alignment(
         self,
