@@ -406,9 +406,7 @@ class WhisperModel:
                 text = tokenizer.decode(tokens)
 
                 if segment["start"] == segment["end"] or not text.strip():
-                    text = ""
-                    tokens = []
-                    segment["words"] = []
+                    continue
 
                 all_tokens.extend(tokens)
 
