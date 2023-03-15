@@ -25,7 +25,7 @@ class Segment(NamedTuple):
     start: float
     end: float
     text: str
-    words: List[Word]
+    words: Optional[List[Word]]
 
 
 class AudioInfo(NamedTuple):
