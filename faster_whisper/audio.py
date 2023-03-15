@@ -6,13 +6,16 @@ system dependencies. FFmpeg does not need to be installed on the system.
 However, the API is quite low-level so we need to manipulate audio frames directly.
 """
 
-import av
 import io
 import itertools
+
+from typing import BinaryIO, Union
+
+import av
 import numpy as np
 
 
-def decode_audio(input_file, sampling_rate=16000):
+def decode_audio(input_file: Union[str, BinaryIO], sampling_rate: int = 16000):
     """Decodes the audio.
 
     Args:
