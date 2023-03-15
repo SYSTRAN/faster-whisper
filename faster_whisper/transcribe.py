@@ -31,6 +31,7 @@ class Segment(NamedTuple):
 class AudioInfo(NamedTuple):
     language: str
     language_probability: float
+    duration: float
 
 
 class TranscriptionOptions(NamedTuple):
@@ -193,6 +194,7 @@ class WhisperModel:
                 audio, sampling_rate=self.feature_extractor.sampling_rate
             )
 
+        duration = audio.shape[0] / self.feature_extractor.sampling_rate
         features = self.feature_extractor(audio)
 
         if language is None:
@@ -243,6 +245,7 @@ class WhisperModel:
         audio_info = AudioInfo(
             language=language,
             language_probability=language_probability,
+            duration=duration,
         )
 
         return segments, audio_info
