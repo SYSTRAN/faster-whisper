@@ -580,6 +580,9 @@ class WhisperModel:
         num_frames,
         median_filter_width=7,
     ):
+        if len(text_tokens) == 0:
+            return []
+
         result = self.model.align(
             get_input(mel),
             tokenizer.sot_sequence,
