@@ -99,6 +99,16 @@ for segment in segments:
     print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
 ```
 
+#### Word-level timestamps
+
+```python
+segments, _ = model.transcribe("audio.mp3", word_timestamps=True)
+
+for segment in segments:
+    for word in segment.words:
+        print("[%.2fs -> %.2fs] %s" % (word.start, word.end, word.word))
+```
+
 See more model and transcription options in the [`WhisperModel`](https://github.com/guillaumekln/faster-whisper/blob/master/faster_whisper/transcribe.py) class implementation.
 
 ## Comparing performance against other implementations
