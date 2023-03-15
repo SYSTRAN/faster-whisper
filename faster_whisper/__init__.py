@@ -1,1 +1,2 @@
 from faster_whisper.transcribe import WhisperModel
+from faster_whisper.utils import format_timestamp
