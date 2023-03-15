@@ -516,12 +516,12 @@ class WhisperModel:
 
     def add_word_timestamps(
         self,
-        segments,
-        tokenizer,
-        mel,
-        num_frames,
-        prepend_punctuations,
-        append_punctuations,
+        segments: List[dict],
+        tokenizer: Tokenizer,
+        mel: np.ndarray,
+        num_frames: int,
+        prepend_punctuations: str,
+        append_punctuations: str,
     ):
         if len(segments) == 0:
             return
@@ -572,12 +572,12 @@ class WhisperModel:
 
     def find_alignment(
         self,
-        tokenizer,
-        text_tokens,
-        mel,
-        num_frames,
-        median_filter_width=7,
-    ):
+        tokenizer: Tokenizer,
+        text_tokens: List[int],
+        mel: np.ndarray,
+        num_frames: int,
+        median_filter_width: int = 7,
+    ) -> List[dict]:
         if len(text_tokens) == 0:
             return []
 

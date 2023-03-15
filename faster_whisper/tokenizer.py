@@ -1,7 +1,7 @@
 import string
 
 from functools import cached_property
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import tokenizers
 
@@ -86,7 +86,9 @@ class Tokenizer:
             [s if isinstance(s, str) else self.tokenizer.decode(s) for s in outputs]
         )
 
-    def split_to_word_tokens(self, tokens: List[int]):
+    def split_to_word_tokens(
+        self, tokens: List[int]
+    ) -> Tuple[List[str], List[List[int]]]:
         if self.language_code in {"zh", "ja", "th", "lo", "my"}:
             # These languages don't typically use spaces, so it is difficult to split words
             # without morpheme analysis. Here, we instead split words at any
@@ -95,7 +97,9 @@ class Tokenizer:
 
         return self.split_tokens_on_spaces(tokens)
 
-    def split_tokens_on_unicode(self, tokens: List[int]):
+    def split_tokens_on_unicode(
+        self, tokens: List[int]
+    ) -> Tuple[List[str], List[List[int]]]:
         decoded_full = self.decode_with_timestamps(tokens)
         replacement_char = "\ufffd"
 
@@ -120,7 +124,9 @@ class Tokenizer:
 
         return words, word_tokens
 
-    def split_tokens_on_spaces(self, tokens: List[int]):
+    def split_tokens_on_spaces(
+        self, tokens: List[int]
+    ) -> Tuple[List[str], List[List[int]]]:
         subwords, subword_tokens_list = self.split_tokens_on_unicode(tokens)
         words = []
         word_tokens = []
