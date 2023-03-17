@@ -31,6 +31,7 @@ class Tokenizer:
         else:
             self.task = None
             self.language = None
+            self.language_code = "en"
 
     @cached_property
     def sot(self) -> int:
