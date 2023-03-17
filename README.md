@@ -8,16 +8,17 @@ This implementation is up to 4 times faster than [openai/whisper](https://github
 
 For reference, here's the time and memory usage that are required to transcribe **13 minutes** of audio using different implementations:
 
-* [openai/whisper](https://github.com/openai/whisper)@[7858aa9](https://github.com/openai/whisper/commit/7858aa9c08d98f75575035ecd6481f462d66ca27)
+* [openai/whisper](https://github.com/openai/whisper)@[6dea21fd](https://github.com/openai/whisper/commit/6dea21fd7f7253bfe450f1e2512a0fe47ee2d258)
 * [whisper.cpp](https://github.com/ggerganov/whisper.cpp)@[3b010f9](https://github.com/ggerganov/whisper.cpp/commit/3b010f9bed9a6068609e9faf52383aea792b0362)
-* [faster-whisper](https://github.com/guillaumekln/faster-whisper)@[cda834c](https://github.com/guillaumekln/faster-whisper/commit/cda834c8ea76c2cab9da19031815c1e937a88c7f)
+* [faster-whisper](https://github.com/guillaumekln/faster-whisper)@[cce6b53e](https://github.com/guillaumekln/faster-whisper/commit/cce6b53e4554f71172dad188c45f10fb100f6e3e)
 
-### Large model on GPU
+### Large-v2 model on GPU
 
 | Implementation | Precision | Beam size | Time | Max. GPU memory | Max. CPU memory |
 | --- | --- | --- | --- | --- | --- |
-| openai/whisper | fp16 | 5 | 4m30s | 11413MB | 9553MB |
-| faster-whisper | fp16 | 5 | 1m02s | 4659MB | 3244MB |
+| openai/whisper | fp16 | 5 | 4m30s | 11325MB | 9439MB |
+| faster-whisper | fp16 | 5 | 54s | 4755MB | 3244MB |
+| faster-whisper | int8 | 5 | 59s | 3091MB | 3117MB |
 
 *Executed with CUDA 11.7.1 on a NVIDIA Tesla V100S.*
 
@@ -25,11 +26,11 @@ For reference, here's the time and memory usage that are required to transcribe 
 
 | Implementation | Precision | Beam size | Time | Max. memory |
 | --- | --- | --- | --- | --- |
-| openai/whisper | fp32 | 5 | 10m39s | 2850MB |
+| openai/whisper | fp32 | 5 | 10m31s | 3101MB |
 | whisper.cpp | fp32 | 5 | 17m42s | 1581MB |
 | whisper.cpp | fp16 | 5 | 12m39s | 873MB |
-| faster-whisper | fp32 | 5 | 2m53s | 1482MB |
-| faster-whisper | int8 | 5 | 2m01s | 1008MB |
+| faster-whisper | fp32 | 5 | 2m44s | 1675MB |
+| faster-whisper | int8 | 5 | 2m04s | 995MB |
 
 *Executed with 8 threads on a Intel(R) Xeon(R) Gold 6226R.*
 
