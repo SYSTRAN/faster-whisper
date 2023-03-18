@@ -444,7 +444,6 @@ class WhisperModel:
 
         for temperature in options.temperatures:
             if temperature > 0:
-                print(temperature)
                 kwargs = {
                     "beam_size": 1,
                     "num_hypotheses": options.best_of,
@@ -472,7 +471,6 @@ class WhisperModel:
             )[0]
 
             tokens = result.sequences_ids[0]
-            print(tokens)
 
             # Recover the average log prob from the returned score.
             seq_len = len(tokens)
