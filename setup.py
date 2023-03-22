@@ -23,6 +23,13 @@ setup(
     install_requires=install_requires,
     extras_require={
         "conversion": conversion_requires,
+        "dev": conversion_requires
+        + [
+            "black==23.*",
+            "flake8==6.*",
+            "isort==5.*",
+            "pytest==7.*",
+        ],
     },
     packages=find_packages(),
 )
