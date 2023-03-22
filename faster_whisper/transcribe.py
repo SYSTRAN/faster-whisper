@@ -59,7 +59,7 @@ class WhisperModel:
         self,
         model_path: str,
         device: str = "auto",
-        device_index: int = 0,
+        device_index: Union[int, List[int]] = 0,
         compute_type: str = "default",
         cpu_threads: int = 0,
         num_workers: int = 1,
