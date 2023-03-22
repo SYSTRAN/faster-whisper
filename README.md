@@ -37,23 +37,27 @@ For reference, here's the time and memory usage that are required to transcribe 
 ## Installation
 
 ```bash
-pip install -e .[conversion]
+pip install faster-whisper
 ```
 
-The model conversion requires the modules `transformers` and `torch` which are installed by the `[conversion]` requirement. Once a model is converted, these modules are no longer needed and the installation could be simplified to:
+The model conversion script requires the modules `transformers` and `torch` which can be installed with the `[conversion]` extra requirement:
 
 ```bash
-pip install -e .
+pip install faster-whisper[conversion]
 ```
 
-It is also possible to install the module without cloning the Git repository:
+**Other installation methods:**
 
 ```bash
 # Install the master branch:
-pip install "faster-whisper @ https://github.com/guillaumekln/faster-whisper/archive/refs/heads/master.tar.gz"
+pip install --force-reinstall "faster-whisper @ https://github.com/guillaumekln/faster-whisper/archive/refs/heads/master.tar.gz"
 
 # Install a specific commit:
-pip install "faster-whisper @ https://github.com/guillaumekln/faster-whisper/archive/a4f1cc8f11433e454c3934442b5e1a4ed5e865c3.tar.gz"
+pip install --force-reinstall "faster-whisper @ https://github.com/guillaumekln/faster-whisper/archive/a4f1cc8f11433e454c3934442b5e1a4ed5e865c3.tar.gz"
+
+# Install for development:
+git clone https://github.com/guillaumekln/faster-whisper.git
+pip install -e faster-whisper/
 ```
 
 ### GPU support
