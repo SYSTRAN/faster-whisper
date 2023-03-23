@@ -4,7 +4,7 @@ import huggingface_hub
 
 
 def download_model(size: str, output_dir: Optional[str] = None):
-    """Downloads a converted model from the Hugging Face Hub.
+    """Downloads a CTranslate2 Whisper model from the Hugging Face Hub.
 
     The model is downloaded from https://huggingface.co/guillaumekln.
 
@@ -12,7 +12,7 @@ def download_model(size: str, output_dir: Optional[str] = None):
       size: Size of the model to download (tiny, tiny.en, base, base.en, small, small.en,
         medium, medium.en, or large-v2).
       output_dir: Directory where the model should be saved. If not set, the model is saved in
-        the standard cache directory for Hugging Face models
+        the standard Hugging Face cache directory.
 
     Returns:
       The path to the downloaded model.
@@ -24,7 +24,7 @@ def download_model(size: str, output_dir: Optional[str] = None):
         kwargs["local_dir"] = output_dir
         kwargs["local_dir_use_symlinks"] = False
 
-    return huggingface_hub.snapshot_download(repo_id=repo_id, **kwargs)
+    return huggingface_hub.snapshot_download(repo_id, **kwargs)
 
 
 def format_timestamp(
