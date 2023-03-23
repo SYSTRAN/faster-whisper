@@ -48,8 +48,7 @@ setup(
     install_requires=install_requires,
     extras_require={
         "conversion": conversion_requires,
-        "dev": conversion_requires
-        + [
+        "dev": [
             "black==23.*",
             "flake8==6.*",
             "isort==5.*",
