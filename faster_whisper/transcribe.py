@@ -11,6 +11,7 @@ import tokenizers
 from faster_whisper.audio import decode_audio
 from faster_whisper.feature_extractor import FeatureExtractor
 from faster_whisper.tokenizer import Tokenizer
+from faster_whisper.utils import download_model
 
 
 class Word(NamedTuple):
@@ -57,7 +58,7 @@ class TranscriptionOptions(NamedTuple):
 class WhisperModel:
     def __init__(
         self,
-        model_path: str,
+        model_size_or_path: str,
         device: str = "auto",
         device_index: Union[int, List[int]] = 0,
         compute_type: str = "default",
@@ -67,7 +68,9 @@ class WhisperModel:
         """Initializes the Whisper model.
 
         Args:
-          model_path: Path to the converted model.
+          model_size_or_path: Size of the model to use (e.g. "large-v2", "small", "tiny.en", etc.)
+            or a path to a converted model directory. When a size is configured, the converted
+            model is downloaded from the Hugging Face Hub.
           device: Device to use for computation ("cpu", "cuda", "auto").
           device_index: Device ID to use.
             The model can also be loaded on multiple GPUs by passing a list of IDs
@@ -82,6 +85,11 @@ class WhisperModel:
             (concurrent calls to self.model.generate() will run in parallel).
             This can improve the global throughput at the cost of increased memory usage.
         """
+        if os.path.isdir(model_size_or_path):
+            model_path = model_size_or_path
+        else:
+            model_path = download_model(model_size_or_path)
+
         self.model = ctranslate2.models.Whisper(
             model_path,
             device=device,

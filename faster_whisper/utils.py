@@ -1,3 +1,25 @@
+from typing import Optional
+
+import huggingface_hub
+
+
+def download_model(size: str):
+    """Downloads a converted model from the Hugging Face Hub.
+
+    The model is downloaded from https://huggingface.co/guillaumekln and is
+    saved in the standard cache directory for Hugging Face models.
+
+    Args:
+      size: Size of the model to download (tiny, tiny.en, base, base.en, small, small.en,
+        medium, medium.en, or large-v2).
+
+    Returns:
+      The path to the downloaded model.
+    """
+    repo_id = "guillaumekln/faster-whisper-%s" % size
+    return huggingface_hub.snapshot_download(repo_id=repo_id)
+
+
 def format_timestamp(
     seconds: float,
     always_include_hours: bool = False,
