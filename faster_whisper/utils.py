@@ -2,8 +2,14 @@ from typing import Optional
 
 import huggingface_hub
 
+from tqdm.auto import tqdm
 
-def download_model(size: str, output_dir: Optional[str] = None):
+
+def download_model(
+    size: str,
+    output_dir: Optional[str] = None,
+    show_progress_bars: bool = True,
+):
     """Downloads a CTranslate2 Whisper model from the Hugging Face Hub.
 
     The model is downloaded from https://huggingface.co/guillaumekln.
@@ -13,6 +19,7 @@ def download_model(size: str, output_dir: Optional[str] = None):
         medium, medium.en, or large-v2).
       output_dir: Directory where the model should be saved. If not set, the model is saved in
         the standard Hugging Face cache directory.
+      shwo_progress_bars: Show the tqdm progress bars during the download.
 
     Returns:
       The path to the downloaded model.
@@ -23,6 +30,9 @@ def download_model(size: str, output_dir: Optional[str] = None):
     if output_dir is not None:
         kwargs["local_dir"] = output_dir
         kwargs["local_dir_use_symlinks"] = False
+
+    if not show_progress_bars:
+        kwargs["tqdm_class"] = disabled_tqdm
 
     return huggingface_hub.snapshot_download(repo_id, **kwargs)
 
@@ -48,3 +58,9 @@ def format_timestamp(
     return (
         f"{hours_marker}{minutes:02d}:{seconds:02d}{decimal_marker}{milliseconds:03d}"
     )
+
+
+class disabled_tqdm(tqdm):
+    def __init__(self, *args, **kwargs):
+        kwargs["disable"] = True
+        super().__init__(*args, **kwargs)
