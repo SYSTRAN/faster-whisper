@@ -59,7 +59,7 @@ jobs:
 
       - name: Run pytest
         run: |
-          pytest -v tests/test.py
+          pytest -v tests/
 
 
   build-and-push-package:
