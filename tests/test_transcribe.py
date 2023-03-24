@@ -1,8 +1,8 @@
 from faster_whisper import WhisperModel
 
 
-def test_transcribe(tiny_model_dir, jfk_path):
-    model = WhisperModel(tiny_model_dir)
+def test_transcribe(jfk_path):
+    model = WhisperModel("tiny")
     segments, info = model.transcribe(jfk_path, word_timestamps=True)
 
     assert info.language == "en"

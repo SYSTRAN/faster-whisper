@@ -25,7 +25,7 @@ jobs:
       - name: Install module
         run: |
           pip install wheel
-          pip install .[dev] --extra-index-url https://download.pytorch.org/whl/cpu
+          pip install -e .[dev]
 
       - name: Check code format with Black
         run: |
@@ -55,11 +55,11 @@ jobs:
       - name: Install module
         run: |
           pip install wheel
-          pip install .[dev] --extra-index-url https://download.pytorch.org/whl/cpu
+          pip install -e .[dev]
 
       - name: Run pytest
         run: |
-          pytest -v tests/test.py
+          pytest -v tests/
 
 
   build-and-push-package:

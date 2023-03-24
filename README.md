@@ -44,12 +44,6 @@ The module can be installed from [PyPI](https://pypi.org/project/faster-whisper/
 pip install faster-whisper
 ```
 
-The model conversion script requires the modules `transformers` and `torch` which can be installed with the `[conversion]` extra requirement:
-
-```bash
-pip install faster-whisper[conversion]
-```
-
 **Other installation methods:**
 
 ```bash
@@ -70,35 +64,20 @@ GPU execution requires the NVIDIA libraries cuBLAS 11.x and cuDNN 8.x to be inst
 
 ## Usage
 
-### Model conversion
-
-A Whisper model should be first converted into the CTranslate2 format. We provide a script to download and convert models from the [Hugging Face model repository](https://huggingface.co/models?sort=downloads&search=whisper).
-
-For example the command below converts the "large-v2" Whisper model and saves the weights in FP16:
-
-```bash
-ct2-transformers-converter --model openai/whisper-large-v2 --output_dir whisper-large-v2-ct2 \
-    --copy_files tokenizer.json --quantization float16
-```
-
-If the option `--copy_files tokenizer.json` is not used, the tokenizer configuration is automatically downloaded when the model is loaded later.
-
-Models can also be converted from the code. See the [conversion API](https://opennmt.net/CTranslate2/python/ctranslate2.converters.TransformersConverter.html).
-
 ### Transcription
 
 ```python
 from faster_whisper import WhisperModel
 
-model_path = "whisper-large-v2-ct2/"
+model_size = "large-v2"
 
 # Run on GPU with FP16
-model = WhisperModel(model_path, device="cuda", compute_type="float16")
+model = WhisperModel(model_size, device="cuda", compute_type="float16")
 
 # or run on GPU with INT8
-# model = WhisperModel(model_path, device="cuda", compute_type="int8_float16")
+# model = WhisperModel(model_size, device="cuda", compute_type="int8_float16")
 # or run on CPU with INT8
-# model = WhisperModel(model_path, device="cpu", compute_type="int8")
+# model = WhisperModel(model_size, device="cpu", compute_type="int8")
 
 segments, info = model.transcribe("audio.mp3", beam_size=5)
 
@@ -119,6 +98,26 @@ for segment in segments:
 ```
 
 See more model and transcription options in the [`WhisperModel`](https://github.com/guillaumekln/faster-whisper/blob/master/faster_whisper/transcribe.py) class implementation.
+
+## Model conversion
+
+When loading a model from its size such as `WhisperModel("large-v2")`, the correspondig CTranslate2 model is automatically downloaded from the [Hugging Face Hub](https://huggingface.co/guillaumekln).
+
+We also provide a script to convert any Whisper models compatible with the Transformers library. They could be the original OpenAI models or user fine-tuned models.
+
+For example the command below converts the [original "large-v2" Whisper model](https://huggingface.co/openai/whisper-large-v2) and saves the weights in FP16:
+
+```bash
+pip install transformers[torch]>=4.23
+
+ct2-transformers-converter --model openai/whisper-large-v2 --output_dir whisper-large-v2-ct2 \
+    --copy_files tokenizer.json --quantization float16
+```
+
+* The option `--model` accepts a model name on the Hub or a path to a model directory.
+* If the option `--copy_files tokenizer.json` is not used, the tokenizer configuration is automatically downloaded when the model is loaded later.
+
+Models can also be converted from the code. See the [conversion API](https://opennmt.net/CTranslate2/python/ctranslate2.converters.TransformersConverter.html).
 
 ## Comparing performance against other implementations
 
