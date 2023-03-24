@@ -2,13 +2,13 @@
 
 # Faster Whisper transcription with CTranslate2
 
-This repository demonstrates how to implement the Whisper transcription using [CTranslate2](https://github.com/OpenNMT/CTranslate2/), which is a fast inference engine for Transformer models.
+**faster-whisper** is a reimplementation of OpenAI's Whisper model using [CTranslate2](https://github.com/OpenNMT/CTranslate2/), which is a fast inference engine for Transformer models.
 
 This implementation is up to 4 times faster than [openai/whisper](https://github.com/openai/whisper) for the same accuracy while using less memory. The efficiency can be further improved with 8-bit quantization on both CPU and GPU.
 
 ## Benchmark
 
-For reference, here's the time and memory usage that are required to transcribe **13 minutes** of audio using different implementations:
+For reference, here's the time and memory usage that are required to transcribe [**13 minutes**](https://www.youtube.com/watch?v=0u7tTptBo9I) of audio using different implementations:
 
 * [openai/whisper](https://github.com/openai/whisper)@[6dea21fd](https://github.com/openai/whisper/commit/6dea21fd7f7253bfe450f1e2512a0fe47ee2d258)
 * [whisper.cpp](https://github.com/ggerganov/whisper.cpp)@[3b010f9](https://github.com/ggerganov/whisper.cpp/commit/3b010f9bed9a6068609e9faf52383aea792b0362)
@@ -37,6 +37,8 @@ For reference, here's the time and memory usage that are required to transcribe 
 *Executed with 8 threads on a Intel(R) Xeon(R) Gold 6226R.*
 
 ## Installation
+
+The module can be installed from [PyPI](https://pypi.org/project/faster-whisper/):
 
 ```bash
 pip install faster-whisper
