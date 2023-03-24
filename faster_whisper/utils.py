@@ -19,7 +19,7 @@ def download_model(
         medium, medium.en, or large-v2).
       output_dir: Directory where the model should be saved. If not set, the model is saved in
         the standard Hugging Face cache directory.
-      shwo_progress_bars: Show the tqdm progress bars during the download.
+      show_progress_bars: Show the tqdm progress bars during the download.
 
     Returns:
       The path to the downloaded model.
