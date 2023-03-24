@@ -34,7 +34,18 @@ def download_model(
     if not show_progress_bars:
         kwargs["tqdm_class"] = disabled_tqdm
 
-    return huggingface_hub.snapshot_download(repo_id, **kwargs)
+    allow_patterns = [
+        "config.json",
+        "model.bin",
+        "tokenizer.json",
+        "vocabulary.txt",
+    ]
+
+    return huggingface_hub.snapshot_download(
+        repo_id,
+        allow_patterns=allow_patterns,
+        **kwargs,
+    )
 
 
 def format_timestamp(
