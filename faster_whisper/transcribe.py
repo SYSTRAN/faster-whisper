@@ -164,13 +164,13 @@ class WhisperModel:
           length_penalty: Exponential length penalty constant.
           temperature: Temperature for sampling. It can be a tuple of temperatures,
             which will be successively used upon failures according to either
-            `compression_ratio_threshold` or `logprob_threshold`.
+            `compression_ratio_threshold` or `log_prob_threshold`.
           compression_ratio_threshold: If the gzip compression ratio is above this value,
             treat as failed.
           log_prob_threshold: If the average log probability over sampled tokens is
             below this value, treat as failed.
           no_speech_threshold: If the no_speech probability is higher than this value AND
-            the average log probability over sampled tokens is below `logprob_threshold`,
+            the average log probability over sampled tokens is below `log_prob_threshold`,
             consider the segment as silent.
           condition_on_previous_text: If True, the previous output of the model is provided
             as a prompt for the next window; disabling may make the text inconsistent across
