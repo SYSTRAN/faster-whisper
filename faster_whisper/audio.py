@@ -36,6 +36,7 @@ def decode_audio(input_file: Union[str, BinaryIO], sampling_rate: int = 16000):
 
     with av.open(input_file, metadata_errors="ignore") as container:
         frames = container.decode(audio=0)
+        frames = _ignore_invalid_frames(frames)
         frames = _group_frames(frames, 500000)
         frames = _resample_frames(frames, resampler)
 
@@ -48,6 +49,18 @@ def decode_audio(input_file: Union[str, BinaryIO], sampling_rate: int = 16000):
 
     # Convert s16 back to f32.
     return audio.astype(np.float32) / 32768.0
+
+
+def _ignore_invalid_frames(frames):
+    iterator = iter(frames)
+
+    while True:
+        try:
+            yield next(iterator)
+        except StopIteration:
+            break
+        except av.error.InvalidDataError:
+            continue
 
 
 def _group_frames(frames, num_samples=None):
