@@ -4,6 +4,18 @@ import huggingface_hub
 
 from tqdm.auto import tqdm
 
+_MODELS = (
+    "tiny.en",
+    "tiny",
+    "base.en",
+    "base",
+    "small.en",
+    "small",
+    "medium.en",
+    "medium",
+    "large-v2",
+)
+
 
 def download_model(
     size: str,
@@ -23,7 +35,15 @@ def download_model(
 
     Returns:
       The path to the downloaded model.
+
+    Raises:
+      ValueError: if the model size is invalid.
     """
+    if size not in _MODELS:
+        raise ValueError(
+            "Invalid model size '%s', expected one of: %s" % (size, ", ".join(_MODELS))
+        )
+
     repo_id = "guillaumekln/faster-whisper-%s" % size
     kwargs = {}
 

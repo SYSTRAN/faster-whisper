@@ -68,9 +68,10 @@ class WhisperModel:
         """Initializes the Whisper model.
 
         Args:
-          model_size_or_path: Size of the model to use (e.g. "large-v2", "small", "tiny.en", etc.)
-            or a path to a converted model directory. When a size is configured, the converted
-            model is downloaded from the Hugging Face Hub.
+          model_size_or_path: Size of the model to use (tiny, tiny.en, base, base.en,
+            small, small.en, medium, medium.en, or large-v2) or a path to a converted
+            model directory. When a size is configured, the converted model is downloaded
+            from the Hugging Face Hub.
           device: Device to use for computation ("cpu", "cuda", "auto").
           device_index: Device ID to use.
             The model can also be loaded on multiple GPUs by passing a list of IDs
