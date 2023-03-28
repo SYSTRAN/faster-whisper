@@ -13,6 +13,7 @@ _MODELS = (
     "small",
     "medium.en",
     "medium",
+    "large-v1",
     "large-v2",
 )
 
@@ -28,7 +29,7 @@ def download_model(
 
     Args:
       size: Size of the model to download (tiny, tiny.en, base, base.en, small, small.en,
-        medium, medium.en, or large-v2).
+        medium, medium.en, large-v1, or large-v2).
       output_dir: Directory where the model should be saved. If not set, the model is saved in
         the standard Hugging Face cache directory.
       show_progress_bars: Show the tqdm progress bars during the download.
