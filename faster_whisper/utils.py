@@ -18,11 +18,7 @@ _MODELS = (
 )
 
 
-def download_model(
-    size: str,
-    output_dir: Optional[str] = None,
-    show_progress_bars: bool = True,
-):
+def download_model(size: str, output_dir: Optional[str] = None):
     """Downloads a CTranslate2 Whisper model from the Hugging Face Hub.
 
     The model is downloaded from https://huggingface.co/guillaumekln.
@@ -32,7 +28,6 @@ def download_model(
         medium, medium.en, large-v1, or large-v2).
       output_dir: Directory where the model should be saved. If not set, the model is saved in
         the standard Hugging Face cache directory.
-      show_progress_bars: Show the tqdm progress bars during the download.
 
     Returns:
       The path to the downloaded model.
@@ -52,9 +47,6 @@ def download_model(
         kwargs["local_dir"] = output_dir
         kwargs["local_dir_use_symlinks"] = False
 
-    if not show_progress_bars:
-        kwargs["tqdm_class"] = disabled_tqdm
-
     allow_patterns = [
         "config.json",
         "model.bin",
@@ -65,6 +57,7 @@ def download_model(
     return huggingface_hub.snapshot_download(
         repo_id,
         allow_patterns=allow_patterns,
+        tqdm_class=disabled_tqdm,
         **kwargs,
     )
 
