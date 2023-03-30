@@ -27,6 +27,13 @@ def test_transcribe(jfk_path):
     assert segment.end == segment.words[-1].end
 
 
+def test_vad(jfk_path):
+    model = WhisperModel("tiny")
+    segments, _ = model.transcribe(jfk_path, vad_filter=True)
+    segments = list(segments)
+    assert segments[0].start > 0
+
+
 def test_stereo_diarization(data_dir):
     model = WhisperModel("tiny")
 

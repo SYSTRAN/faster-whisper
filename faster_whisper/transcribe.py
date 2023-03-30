@@ -12,6 +12,7 @@ from faster_whisper.audio import decode_audio
 from faster_whisper.feature_extractor import FeatureExtractor
 from faster_whisper.tokenizer import Tokenizer
 from faster_whisper.utils import download_model
+from faster_whisper.vad import get_speech_timestamps
 
 
 class Word(NamedTuple):
@@ -29,8 +30,8 @@ class Segment(NamedTuple):
 
 
 class AudioInfo(NamedTuple):
-    language: str
-    language_probability: float
+    language: Optional[str]
+    language_probability: Optional[float]
     duration: float
 
 
@@ -150,6 +151,8 @@ class WhisperModel:
         word_timestamps: bool = False,
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
+        vad_filter: bool = False,
+        vad_min_silence_duration_ms: int = 2000,
     ) -> Tuple[Iterable[Segment], AudioInfo]:
         """Transcribes an input file.
 
@@ -190,6 +193,11 @@ class WhisperModel:
             with the next word
           append_punctuations: If word_timestamps is True, merge these punctuation symbols
             with the previous word
+          vad_filter: Enable the voice activity detection (VAD) to filter out parts of the audio
+            without speech. This step is using the Silero VAD model
+            https://github.com/snakers4/silero-vad.
+          vad_min_silence_duration_ms: When `vad_filter` is enabled, audio segments without
+            speech for at least this number of milliseconds will be ignored.
 
         Returns:
           A tuple with:
@@ -203,7 +211,25 @@ class WhisperModel:
             )
 
         duration = audio.shape[0] / self.feature_extractor.sampling_rate
-        features = self.feature_extractor(audio)
+
+        if vad_filter:
+            speech_chunks = get_speech_timestamps(
+                audio, min_silence_duration_ms=vad_min_silence_duration_ms
+            )
+
+            for chunk in speech_chunks:
+                chunk["audio"] = audio[chunk["start"] : chunk["end"]]
+                chunk["features"] = self.feature_extractor(chunk["audio"])
+
+        else:
+            speech_chunks = [
+                {
+                    "start": 0,
+                    "end": audio.shape[0],
+                    "audio": audio,
+                    "features": self.feature_extractor(audio),
+                }
+            ]
 
         encoder_output = None
 
@@ -211,12 +237,30 @@ class WhisperModel:
             if not self.model.is_multilingual:
                 language = "en"
                 language_probability = 1
+
+            elif not speech_chunks:
+                language_probability = None
+
             else:
+                if vad_filter:
+                    # Collect at least 30 seconds of speech audio.
+                    audio = collect_samples(
+                        speech_chunks, self.feature_extractor.n_samples
+                    )
+                    features = self.feature_extractor(audio)
+                else:
+                    features = speech_chunks[0]["features"]
+
                 segment = features[:, : self.feature_extractor.nb_max_frames]
                 encoder_output = self.encode(segment)
                 results = self.model.detect_language(encoder_output)
                 language_token, language_probability = results[0][0]
                 language = language_token[2:-2]
+
+                if vad_filter:
+                    # We can only reuse the encoder output when processing the full audio.
+                    encoder_output = None
+
         else:
             language_probability = 1
 
@@ -250,7 +294,9 @@ class WhisperModel:
             append_punctuations=append_punctuations,
         )
 
-        segments = self.generate_segments(features, tokenizer, options, encoder_output)
+        segments = self.transcribe_chunks(
+            speech_chunks, tokenizer, options, encoder_output
+        )
 
         audio_info = AudioInfo(
             language=language,
@@ -259,6 +305,46 @@ class WhisperModel:
         )
 
         return segments, audio_info
+
+    def transcribe_chunks(
+        self,
+        chunks: List[dict],
+        tokenizer: Tokenizer,
+        options: TranscriptionOptions,
+        encoder_output: Optional[ctranslate2.StorageView] = None,
+    ) -> Iterable[Segment]:
+        for chunk in chunks:
+            features = chunk["features"]
+
+            offset_in_seconds = round(
+                chunk["start"] / self.feature_extractor.sampling_rate, 2
+            )
+
+            segments = self.generate_segments(
+                features, tokenizer, options, encoder_output
+            )
+
+            encoder_output = None
+
+            for segment in segments:
+                if segment.words:
+                    words = [
+                        word._replace(
+                            start=word.start + offset_in_seconds,
+                            end=word.end + offset_in_seconds,
+                        )
+                        for word in segment.words
+                    ]
+                else:
+                    words = segment.words
+
+                segment = segment._replace(
+                    start=segment.start + offset_in_seconds,
+                    end=segment.end + offset_in_seconds,
+                    words=words,
+                )
+
+                yield segment
 
     def generate_segments(
         self,
@@ -672,6 +758,23 @@ class WhisperModel:
                 words, word_tokens, start_times, end_times, word_probabilities
             )
         ]
+
+
+def collect_samples(speech_chunks: List[dict], min_samples: int) -> np.ndarray:
+    audio_samples = []
+    start = None
+
+    for chunk in speech_chunks:
+        audio_samples.append(chunk["audio"])
+
+        end = chunk["end"]
+        if start is None:
+            start = chunk["start"]
+
+        if end - start >= min_samples:
+            break
+
+    return np.concatenate(audio_samples)
 
 
 def get_ctranslate2_storage(segment: np.ndarray) -> ctranslate2.StorageView:

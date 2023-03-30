@@ -1,3 +1,5 @@
+import os
+
 from typing import Optional
 
 import huggingface_hub
@@ -16,6 +18,11 @@ _MODELS = (
     "large-v1",
     "large-v2",
 )
+
+
+def get_assets_path():
+    """Returns the path to the assets directory."""
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 
 def download_model(size: str, output_dir: Optional[str] = None):
