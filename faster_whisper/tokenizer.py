@@ -34,8 +34,20 @@ class Tokenizer:
             self.language_code = "en"
 
     @cached_property
+    def transcribe(self) -> int:
+        return self.tokenizer.token_to_id("<|transcribe|>")
+
+    @cached_property
+    def translate(self) -> int:
+        return self.tokenizer.token_to_id("<|translate|>")
+
+    @cached_property
     def sot(self) -> int:
         return self.tokenizer.token_to_id("<|startoftranscript|>")
+
+    @cached_property
+    def sot_lm(self) -> int:
+        return self.tokenizer.token_to_id("<|startoflm|>")
 
     @cached_property
     def sot_prev(self) -> int:

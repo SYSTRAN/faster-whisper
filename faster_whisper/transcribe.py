@@ -242,7 +242,7 @@ class WhisperModel:
             initial_prompt=initial_prompt,
             prefix=prefix,
             suppress_blank=suppress_blank,
-            suppress_tokens=suppress_tokens,
+            suppress_tokens=get_suppressed_tokens(tokenizer, suppress_tokens),
             without_timestamps=without_timestamps,
             max_initial_timestamp=max_initial_timestamp,
             word_timestamps=word_timestamps,
@@ -701,6 +701,27 @@ def get_ctranslate2_storage(segment: np.ndarray) -> ctranslate2.StorageView:
 def get_compression_ratio(text: str) -> float:
     text_bytes = text.encode("utf-8")
     return len(text_bytes) / len(zlib.compress(text_bytes))
+
+
+def get_suppressed_tokens(tokenizer, suppress_tokens):
+    if not suppress_tokens or -1 in suppress_tokens:
+        return suppress_tokens
+
+    suppress_tokens = list(suppress_tokens)
+
+    # Ensure the following special tokens are suppressed when the user does
+    # not use the default set (-1).
+    suppress_tokens.extend(
+        [
+            tokenizer.transcribe,
+            tokenizer.translate,
+            tokenizer.sot,
+            tokenizer.sot_prev,
+            tokenizer.sot_lm,
+        ]
+    )
+
+    return sorted(set(suppress_tokens))
 
 
 def merge_punctuations(alignment: List[dict], prepended: str, appended: str):
