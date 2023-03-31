@@ -101,7 +101,7 @@ See more model and transcription options in the [`WhisperModel`](https://github.
 
 #### CLI usage
 
-You can also use [whisper-ctranslate2](https://github.com/jordimas/whisper-ctranslate2) to access `faster-whisper` through a CLI interface similar to what is offered by Whisper.
+You can also use [jordimas/whisper-ctranslate2](https://github.com/jordimas/whisper-ctranslate2) to access `faster-whisper` through a CLI interface similar to what is offered by Whisper.
 
 
 ## Model conversion
