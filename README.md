@@ -99,6 +99,11 @@ for segment in segments:
 
 See more model and transcription options in the [`WhisperModel`](https://github.com/guillaumekln/faster-whisper/blob/master/faster_whisper/transcribe.py) class implementation.
 
+#### CLI usage
+
+You can also use [jordimas/whisper-ctranslate2](https://github.com/jordimas/whisper-ctranslate2) to access `faster-whisper` through a CLI interface similar to what is offered by Whisper.
+
+
 ## Model conversion
 
 When loading a model from its size such as `WhisperModel("large-v2")`, the correspondig CTranslate2 model is automatically downloaded from the [Hugging Face Hub](https://huggingface.co/guillaumekln).
