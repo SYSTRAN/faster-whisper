@@ -64,7 +64,7 @@ GPU execution requires the NVIDIA libraries cuBLAS 11.x and cuDNN 8.x to be inst
 
 ## Usage
 
-### Transcription
+### Library
 
 ```python
 from faster_whisper import WhisperModel
@@ -99,10 +99,9 @@ for segment in segments:
 
 See more model and transcription options in the [`WhisperModel`](https://github.com/guillaumekln/faster-whisper/blob/master/faster_whisper/transcribe.py) class implementation.
 
-#### CLI usage
+### CLI
 
-You can also use [jordimas/whisper-ctranslate2](https://github.com/jordimas/whisper-ctranslate2) to access `faster-whisper` through a CLI interface similar to what is offered by Whisper.
-
+You can use [jordimas/whisper-ctranslate2](https://github.com/jordimas/whisper-ctranslate2) to access `faster-whisper` through a CLI interface similar to what is offered by Whisper.
 
 ## Model conversion
 
