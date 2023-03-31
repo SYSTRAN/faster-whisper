@@ -15,19 +15,27 @@ import av
 import numpy as np
 
 
-def decode_audio(input_file: Union[str, BinaryIO], sampling_rate: int = 16000):
+def decode_audio(
+    input_file: Union[str, BinaryIO],
+    sampling_rate: int = 16000,
+    split_stereo: bool = False,
+):
     """Decodes the audio.
 
     Args:
       input_file: Path to the input file or a file-like object.
       sampling_rate: Resample the audio to this sample rate.
+      split_stereo: Return separate left and right channels.
 
     Returns:
       A float32 Numpy array.
+
+      If `split_stereo` is enabled, the function returns a 2-tuple with the
+      separated left and right channels.
     """
     resampler = av.audio.resampler.AudioResampler(
         format="s16",
-        layout="mono",
+        layout="mono" if not split_stereo else "stereo",
         rate=sampling_rate,
     )
 
@@ -48,7 +56,14 @@ def decode_audio(input_file: Union[str, BinaryIO], sampling_rate: int = 16000):
     audio = np.frombuffer(raw_buffer.getbuffer(), dtype=dtype)
 
     # Convert s16 back to f32.
-    return audio.astype(np.float32) / 32768.0
+    audio = audio.astype(np.float32) / 32768.0
+
+    if split_stereo:
+        left_channel = audio[0::2]
+        right_channel = audio[1::2]
+        return left_channel, right_channel
+
+    return audio
 
 
 def _ignore_invalid_frames(frames):
