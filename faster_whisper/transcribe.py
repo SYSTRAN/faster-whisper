@@ -290,7 +290,7 @@ class WhisperModel:
                 tokenizer,
                 previous_tokens,
                 without_timestamps=options.without_timestamps,
-                prefix=options.prefix,
+                prefix=options.prefix if seek == 0 else None,
             )
 
             if encoder_output is None:
