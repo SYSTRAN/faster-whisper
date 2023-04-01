@@ -245,7 +245,8 @@ class WhisperModel:
                 if vad_filter:
                     # Collect at least 30 seconds of speech audio.
                     audio = collect_samples(
-                        speech_chunks, self.feature_extractor.n_samples
+                        (chunk["audio"] for chunk in speech_chunks),
+                        self.feature_extractor.n_samples,
                     )
                     features = self.feature_extractor(audio)
                 else:
@@ -760,18 +761,15 @@ class WhisperModel:
         ]
 
 
-def collect_samples(speech_chunks: List[dict], min_samples: int) -> np.ndarray:
+def collect_samples(audios: Iterable[np.ndarray], min_samples: int) -> np.ndarray:
     audio_samples = []
-    start = None
+    num_samples = 0
 
-    for chunk in speech_chunks:
-        audio_samples.append(chunk["audio"])
+    for audio in audios:
+        audio_samples.append(audio)
+        num_samples += audio.shape[0]
 
-        end = chunk["end"]
-        if start is None:
-            start = chunk["start"]
-
-        if end - start >= min_samples:
+        if num_samples >= min_samples:
             break
 
     return np.concatenate(audio_samples)
