@@ -313,12 +313,18 @@ class WhisperModel:
         options: TranscriptionOptions,
         encoder_output: Optional[ctranslate2.StorageView] = None,
     ) -> Iterable[Segment]:
+        prompt = options.initial_prompt
+        prefix = options.prefix
+
         for chunk in chunks:
+            options = options._replace(prefix=prefix, initial_prompt=prompt)
             segments = self.generate_segments(
                 chunk.features, tokenizer, options, encoder_output
             )
 
             encoder_output = None
+            prompt = None
+            prefix = None
 
             for segment in segments:
                 if segment.words:
