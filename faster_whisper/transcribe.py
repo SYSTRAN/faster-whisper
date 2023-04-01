@@ -26,6 +26,8 @@ class Segment(NamedTuple):
     end: float
     text: str
     words: Optional[List[Word]]
+    avg_log_prob:float
+    no_speech_prob:float
 
 
 class AudioInfo(NamedTuple):
@@ -295,7 +297,7 @@ class WhisperModel:
 
             encoder_output = whisper_encoder(seek, segment)
 
-            result, avg_log_prob, temperature = self.generate_with_fallback(
+            result, avg_log_prob, temperature,no_speech_prob = self.generate_with_fallback(
                 encoder_output, prompt, tokenizer, options
             )
 
@@ -438,6 +440,8 @@ class WhisperModel:
                         if options.word_timestamps
                         else None
                     ),
+                    avg_log_prob=avg_log_prob,
+                    no_speech_prob=nop_speech_prob
                 )
 
     def generate_with_fallback(
@@ -482,7 +486,7 @@ class WhisperModel:
                 max_initial_timestamp_index=max_initial_timestamp_index,
                 **kwargs,
             )[0]
-
+            no_speech_prob = result.no_speech_prob
             tokens = result.sequences_ids[0]
 
             # Recover the average log prob from the returned score.
@@ -510,7 +514,7 @@ class WhisperModel:
             if not needs_fallback:
                 break
 
-        return result, avg_log_prob, final_temperature
+        return result, avg_log_prob, final_temperature, no_speech_prob
 
     def get_prompt(
         self,
