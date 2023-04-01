@@ -2,6 +2,7 @@ import itertools
 import os
 import zlib
 
+from functools import cached_property
 from typing import BinaryIO, Iterable, List, NamedTuple, Optional, Tuple, Union
 
 import ctranslate2
@@ -217,19 +218,17 @@ class WhisperModel:
                 audio, min_silence_duration_ms=vad_min_silence_duration_ms
             )
 
-            for chunk in speech_chunks:
-                chunk["audio"] = audio[chunk["start"] : chunk["end"]]
-                chunk["features"] = self.feature_extractor(chunk["audio"])
+            speech_chunks = [
+                AudioSegment(
+                    audio[chunk["start"] : chunk["end"]],
+                    self.feature_extractor,
+                    offset=chunk["start"],
+                )
+                for chunk in speech_chunks
+            ]
 
         else:
-            speech_chunks = [
-                {
-                    "start": 0,
-                    "end": audio.shape[0],
-                    "audio": audio,
-                    "features": self.feature_extractor(audio),
-                }
-            ]
+            speech_chunks = [AudioSegment(audio, self.feature_extractor)]
 
         encoder_output = None
 
@@ -245,12 +244,12 @@ class WhisperModel:
                 if vad_filter:
                     # Collect at least 30 seconds of speech audio.
                     audio = collect_samples(
-                        (chunk["audio"] for chunk in speech_chunks),
+                        (chunk.audio for chunk in speech_chunks),
                         self.feature_extractor.n_samples,
                     )
                     features = self.feature_extractor(audio)
                 else:
-                    features = speech_chunks[0]["features"]
+                    features = speech_chunks[0].features
 
                 segment = features[:, : self.feature_extractor.nb_max_frames]
                 encoder_output = self.encode(segment)
@@ -309,20 +308,14 @@ class WhisperModel:
 
     def transcribe_chunks(
         self,
-        chunks: List[dict],
+        chunks: List["AudioSegment"],
         tokenizer: Tokenizer,
         options: TranscriptionOptions,
         encoder_output: Optional[ctranslate2.StorageView] = None,
     ) -> Iterable[Segment]:
         for chunk in chunks:
-            features = chunk["features"]
-
-            offset_in_seconds = round(
-                chunk["start"] / self.feature_extractor.sampling_rate, 2
-            )
-
             segments = self.generate_segments(
-                features, tokenizer, options, encoder_output
+                chunk.features, tokenizer, options, encoder_output
             )
 
             encoder_output = None
@@ -331,8 +324,8 @@ class WhisperModel:
                 if segment.words:
                     words = [
                         word._replace(
-                            start=word.start + offset_in_seconds,
-                            end=word.end + offset_in_seconds,
+                            start=word.start + chunk.start,
+                            end=word.end + chunk.start,
                         )
                         for word in segment.words
                     ]
@@ -340,8 +333,8 @@ class WhisperModel:
                     words = segment.words
 
                 segment = segment._replace(
-                    start=segment.start + offset_in_seconds,
-                    end=segment.end + offset_in_seconds,
+                    start=segment.start + chunk.start,
+                    end=segment.end + chunk.start,
                     words=words,
                 )
 
@@ -759,6 +752,28 @@ class WhisperModel:
                 words, word_tokens, start_times, end_times, word_probabilities
             )
         ]
+
+
+class AudioSegment:
+    def __init__(
+        self,
+        audio: np.ndarray,
+        feature_extractor: FeatureExtractor,
+        offset: int = 0,
+    ):
+        self.audio = audio
+        self.features = feature_extractor(audio)
+        self.start_sample = offset
+        self.end_sample = offset + audio.shape[0]
+        self.sampling_rate = feature_extractor.sampling_rate
+
+    @cached_property
+    def start(self) -> float:
+        return round(self.start_sample / self.sampling_rate, 2)
+
+    @cached_property
+    def end(self) -> float:
+        return round(self.start_sample / self.sampling_rate, 2)
 
 
 def collect_samples(audios: Iterable[np.ndarray], min_samples: int) -> np.ndarray:
