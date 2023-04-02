@@ -26,8 +26,8 @@ class Segment(NamedTuple):
     end: float
     text: str
     words: Optional[List[Word]]
-    avg_log_prob:float
-    no_speech_prob:float
+    avg_log_prob: float
+    no_speech_prob: float
 
 
 class AudioInfo(NamedTuple):
@@ -297,7 +297,7 @@ class WhisperModel:
 
             encoder_output = whisper_encoder(seek, segment)
 
-            result, avg_log_prob, temperature,no_speech_prob = self.generate_with_fallback(
+            result, avg_log_prob, temperature, no_speech_prob = self.generate_with_fallback(
                 encoder_output, prompt, tokenizer, options
             )
 
