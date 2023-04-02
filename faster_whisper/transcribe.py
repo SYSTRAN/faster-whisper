@@ -441,7 +441,7 @@ class WhisperModel:
                         else None
                     ),
                     avg_log_prob=avg_log_prob,
-                    no_speech_prob=nop_speech_prob
+                    no_speech_prob=no_speech_prob
                 )
 
     def generate_with_fallback(
