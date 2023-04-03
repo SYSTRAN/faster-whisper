@@ -293,7 +293,7 @@ class WhisperModel:
             append_punctuations=append_punctuations,
         )
 
-        segments = self.transcribe_chunks(
+        segments = self.generate_segments_from_chunks(
             speech_chunks, tokenizer, options, encoder_output
         )
 
@@ -305,7 +305,7 @@ class WhisperModel:
 
         return segments, audio_info
 
-    def transcribe_chunks(
+    def generate_segments_from_chunks(
         self,
         chunks: List["AudioSegment"],
         tokenizer: Tokenizer,
