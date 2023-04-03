@@ -2,7 +2,6 @@ import itertools
 import os
 import zlib
 
-from functools import cached_property
 from typing import BinaryIO, Iterable, List, NamedTuple, Optional, Tuple, Union
 
 import ctranslate2
@@ -13,7 +12,11 @@ from faster_whisper.audio import decode_audio
 from faster_whisper.feature_extractor import FeatureExtractor
 from faster_whisper.tokenizer import Tokenizer
 from faster_whisper.utils import download_model
-from faster_whisper.vad import get_speech_timestamps
+from faster_whisper.vad import (
+    SpeechTimestampsMap,
+    collect_chunks,
+    get_speech_timestamps,
+)
 
 
 class Word(NamedTuple):
@@ -215,19 +218,12 @@ class WhisperModel:
 
         if vad_filter:
             vad_parameters = {} if vad_parameters is None else vad_parameters
-
             speech_chunks = get_speech_timestamps(audio, **vad_parameters)
-            speech_chunks = [
-                AudioSegment(
-                    audio[chunk["start"] : chunk["end"]],
-                    self.feature_extractor,
-                    offset=chunk["start"],
-                )
-                for chunk in speech_chunks
-            ]
-
+            audio = collect_chunks(audio, speech_chunks)
         else:
-            speech_chunks = [AudioSegment(audio, self.feature_extractor)]
+            speech_chunks = None
+
+        features = self.feature_extractor(audio)
 
         encoder_output = None
 
@@ -235,31 +231,12 @@ class WhisperModel:
             if not self.model.is_multilingual:
                 language = "en"
                 language_probability = 1
-
-            elif not speech_chunks:
-                language_probability = None
-
             else:
-                if vad_filter:
-                    # Collect at least 30 seconds of speech audio.
-                    audio = collect_samples(
-                        (chunk.audio for chunk in speech_chunks),
-                        self.feature_extractor.n_samples,
-                    )
-                    features = self.feature_extractor(audio)
-                else:
-                    features = speech_chunks[0].features
-
                 segment = features[:, : self.feature_extractor.nb_max_frames]
                 encoder_output = self.encode(segment)
                 results = self.model.detect_language(encoder_output)
                 language_token, language_probability = results[0][0]
                 language = language_token[2:-2]
-
-                if vad_filter:
-                    # We can only reuse the encoder output when processing the full audio.
-                    encoder_output = None
-
         else:
             language_probability = 1
 
@@ -293,9 +270,12 @@ class WhisperModel:
             append_punctuations=append_punctuations,
         )
 
-        segments = self.generate_segments_from_chunks(
-            speech_chunks, tokenizer, options, encoder_output
-        )
+        segments = self.generate_segments(features, tokenizer, options, encoder_output)
+
+        if speech_chunks:
+            segments = restore_speech_timestamps(
+                segments, speech_chunks, self.feature_extractor.sampling_rate
+            )
 
         audio_info = AudioInfo(
             language=language,
@@ -304,50 +284,6 @@ class WhisperModel:
         )
 
         return segments, audio_info
-
-    def generate_segments_from_chunks(
-        self,
-        chunks: List["AudioSegment"],
-        tokenizer: Tokenizer,
-        options: TranscriptionOptions,
-        encoder_output: Optional[ctranslate2.StorageView] = None,
-    ) -> Iterable[Segment]:
-        prompt = options.initial_prompt
-        prefix = options.prefix
-
-        for chunk in chunks:
-            options = options._replace(prefix=prefix, initial_prompt=prompt)
-            segments = self.generate_segments(
-                chunk.features, tokenizer, options, encoder_output
-            )
-
-            encoder_output = None
-            prompt = None
-            prefix = None
-
-            if chunk.start == 0:
-                yield from segments
-                continue
-
-            for segment in segments:
-                if segment.words:
-                    words = [
-                        word._replace(
-                            start=word.start + chunk.start,
-                            end=word.end + chunk.start,
-                        )
-                        for word in segment.words
-                    ]
-                else:
-                    words = segment.words
-
-                segment = segment._replace(
-                    start=segment.start + chunk.start,
-                    end=segment.end + chunk.start,
-                    words=words,
-                )
-
-                yield segment
 
     def generate_segments(
         self,
@@ -763,40 +699,34 @@ class WhisperModel:
         ]
 
 
-class AudioSegment:
-    def __init__(
-        self,
-        audio: np.ndarray,
-        feature_extractor: FeatureExtractor,
-        offset: int = 0,
-    ):
-        self.audio = audio
-        self.features = feature_extractor(audio)
-        self.start_sample = offset
-        self.end_sample = offset + audio.shape[0]
-        self.sampling_rate = feature_extractor.sampling_rate
+def restore_speech_timestamps(
+    segments: Iterable[Segment],
+    speech_chunks: List[dict],
+    sampling_rate: int,
+) -> Iterable[Segment]:
+    ts_map = SpeechTimestampsMap(speech_chunks, sampling_rate)
 
-    @cached_property
-    def start(self) -> float:
-        return round(self.start_sample / self.sampling_rate, 2)
+    for segment in segments:
+        if segment.words:
+            words = []
+            for word in segment.words:
+                # Ensure the word start and end times are resolved to the same chunk.
+                chunk_index = ts_map.get_chunk_index(word.start)
+                word = word._replace(
+                    start=ts_map.get_original_time(word.start, chunk_index),
+                    end=ts_map.get_original_time(word.end, chunk_index),
+                )
+                words.append(word)
+        else:
+            words = segment.words
 
-    @cached_property
-    def end(self) -> float:
-        return round(self.end_sample / self.sampling_rate, 2)
+        segment = segment._replace(
+            start=ts_map.get_original_time(segment.start),
+            end=ts_map.get_original_time(segment.end),
+            words=words,
+        )
 
-
-def collect_samples(audios: Iterable[np.ndarray], min_samples: int) -> np.ndarray:
-    audio_samples = []
-    num_samples = 0
-
-    for audio in audios:
-        audio_samples.append(audio)
-        num_samples += audio.shape[0]
-
-        if num_samples >= min_samples:
-            break
-
-    return np.concatenate(audio_samples)
+        yield segment
 
 
 def get_ctranslate2_storage(segment: np.ndarray) -> ctranslate2.StorageView:

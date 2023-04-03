@@ -1,6 +1,9 @@
+import bisect
 import functools
 import os
 import warnings
+
+from typing import List, Optional
 
 import numpy as np
 
@@ -18,7 +21,7 @@ def get_speech_timestamps(
     min_silence_duration_ms: int = 2000,
     window_size_samples: int = 1024,
     speech_pad_ms: int = 30,
-):
+) -> List[dict]:
     """This method is used for splitting long audios into speech chunks using silero VAD.
 
     Args:
@@ -163,6 +166,49 @@ def get_speech_timestamps(
             )
 
     return speeches
+
+
+def collect_chunks(audio: np.ndarray, chunks: List[dict]) -> np.ndarray:
+    """Collects and concatenates audio chunks."""
+    if not chunks:
+        return np.array([], dtype=np.float32)
+
+    return np.concatenate([audio[chunk["start"] : chunk["end"]] for chunk in chunks])
+
+
+class SpeechTimestampsMap:
+    """Helper class to restore original speech timestamps."""
+
+    def __init__(self, chunks: List[dict], sampling_rate: int, time_precision: int = 2):
+        self.sampling_rate = sampling_rate
+        self.time_precision = time_precision
+        self.chunk_end_sample = []
+        self.total_silence_before = []
+
+        previous_end = 0
+        silent_samples = 0
+
+        for chunk in chunks:
+            silent_samples += chunk["start"] - previous_end
+            previous_end = chunk["end"]
+
+            self.chunk_end_sample.append(chunk["end"] - silent_samples)
+            self.total_silence_before.append(silent_samples / sampling_rate)
+
+    def get_original_time(
+        self,
+        time: float,
+        chunk_index: Optional[int] = None,
+    ) -> float:
+        if chunk_index is None:
+            chunk_index = self.get_chunk_index(time)
+
+        total_silence_before = self.total_silence_before[chunk_index]
+        return round(total_silence_before + time, self.time_precision)
+
+    def get_chunk_index(self, time: float) -> int:
+        sample = int(time * self.sampling_rate)
+        return bisect.bisect(self.chunk_end_sample, sample)
 
 
 @functools.lru_cache
