@@ -153,7 +153,7 @@ class WhisperModel:
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         vad_filter: bool = False,
-        vad_min_silence_duration_ms: int = 2000,
+        vad_parameters: Optional[dict] = None,
     ) -> Tuple[Iterable[Segment], AudioInfo]:
         """Transcribes an input file.
 
@@ -197,8 +197,8 @@ class WhisperModel:
           vad_filter: Enable the voice activity detection (VAD) to filter out parts of the audio
             without speech. This step is using the Silero VAD model
             https://github.com/snakers4/silero-vad.
-          vad_min_silence_duration_ms: When `vad_filter` is enabled, audio segments without
-            speech for at least this number of milliseconds will be ignored.
+          vad_parameters: Dictionary of Silero VAD parameters (see available parameters and
+            default values in the function `get_speech_timestamps`).
 
         Returns:
           A tuple with:
@@ -214,10 +214,9 @@ class WhisperModel:
         duration = audio.shape[0] / self.feature_extractor.sampling_rate
 
         if vad_filter:
-            speech_chunks = get_speech_timestamps(
-                audio, min_silence_duration_ms=vad_min_silence_duration_ms
-            )
+            vad_parameters = {} if vad_parameters is None else vad_parameters
 
+            speech_chunks = get_speech_timestamps(audio, **vad_parameters)
             speech_chunks = [
                 AudioSegment(
                     audio[chunk["start"] : chunk["end"]],

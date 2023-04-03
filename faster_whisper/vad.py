@@ -7,22 +7,16 @@ import numpy as np
 from faster_whisper.utils import get_assets_path
 
 
-@functools.lru_cache
-def get_vad_model():
-    """Returns the VAD model instance."""
-    path = os.path.join(get_assets_path(), "silero_vad.onnx")
-    return SileroVADModel(path)
-
-
 # The code below is adapted from https://github.com/snakers4/silero-vad.
 
 
 def get_speech_timestamps(
     audio: np.ndarray,
+    *,
     threshold: float = 0.5,
     min_speech_duration_ms: int = 250,
     max_speech_duration_s: float = float("inf"),
-    min_silence_duration_ms: int = 100,
+    min_silence_duration_ms: int = 2000,
     window_size_samples: int = 1024,
     speech_pad_ms: int = 30,
 ):
@@ -170,6 +164,13 @@ def get_speech_timestamps(
             )
 
     return speeches
+
+
+@functools.lru_cache
+def get_vad_model():
+    """Returns the VAD model instance."""
+    path = os.path.join(get_assets_path(), "silero_vad.onnx")
+    return SileroVADModel(path)
 
 
 class SileroVADModel:
