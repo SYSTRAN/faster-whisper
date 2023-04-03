@@ -27,6 +27,27 @@ def test_transcribe(jfk_path):
     assert segment.end == segment.words[-1].end
 
 
+def test_vad(jfk_path):
+    model = WhisperModel("tiny")
+    segments, _ = model.transcribe(
+        jfk_path,
+        vad_filter=True,
+        vad_parameters=dict(min_silence_duration_ms=500),
+    )
+    segments = list(segments)
+
+    assert len(segments) == 1
+    segment = segments[0]
+
+    assert segment.text == (
+        " And so my fellow Americans ask not what your country can do for you, "
+        "ask what you can do for your country."
+    )
+
+    assert 0 < segment.start < 1
+    assert 10 < segment.end < 11
+
+
 def test_stereo_diarization(data_dir):
     model = WhisperModel("tiny")
 
