@@ -99,7 +99,7 @@ for segment in segments:
 
 #### VAD filter
 
-The library integrates the [Silero VAD](https://github.com/snakers4/silero-vad) model to filter out parts of the audio without speech. By default, audio parts without speech for at least 2 seconds are removed.
+The library integrates the [Silero VAD](https://github.com/snakers4/silero-vad) model to filter out parts of the audio without speech. When enabled, audio parts without speech for at least 2 seconds are removed by default.
 
 ```python
 segments, _ = model.transcribe("audio.mp3", vad_filter=True)
