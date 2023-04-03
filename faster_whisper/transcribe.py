@@ -26,6 +26,8 @@ class Segment(NamedTuple):
     end: float
     text: str
     words: Optional[List[Word]]
+    avg_log_prob: float
+    no_speech_prob: float
 
 
 class AudioInfo(NamedTuple):
@@ -441,6 +443,8 @@ class WhisperModel:
                         if options.word_timestamps
                         else None
                     ),
+                    avg_log_prob=avg_log_prob,
+                    no_speech_prob=result.no_speech_prob,
                 )
 
     def encode(self, features: np.ndarray) -> ctranslate2.StorageView:
