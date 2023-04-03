@@ -1,4 +1,6 @@
-from faster_whisper import WhisperModel
+import os
+
+from faster_whisper import WhisperModel, decode_audio
 
 
 def test_transcribe(jfk_path):
@@ -23,3 +25,21 @@ def test_transcribe(jfk_path):
     assert segment.text == "".join(word.word for word in segment.words)
     assert segment.start == segment.words[0].start
     assert segment.end == segment.words[-1].end
+
+
+def test_stereo_diarization(data_dir):
+    model = WhisperModel("tiny")
+
+    audio_path = os.path.join(data_dir, "stereo_diarization.wav")
+    left, right = decode_audio(audio_path, split_stereo=True)
+
+    segments, _ = model.transcribe(left)
+    transcription = "".join(segment.text for segment in segments).strip()
+    assert transcription == (
+        "He began a confused complaint against the wizard, "
+        "who had vanished behind the curtain on the left."
+    )
+
+    segments, _ = model.transcribe(right)
+    transcription = "".join(segment.text for segment in segments).strip()
+    assert transcription == "The horizon seems extremely distant."
