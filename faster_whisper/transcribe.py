@@ -325,6 +325,10 @@ class WhisperModel:
             prompt = None
             prefix = None
 
+            if chunk.start == 0:
+                yield from segments
+                continue
+
             for segment in segments:
                 if segment.words:
                     words = [
