@@ -782,7 +782,7 @@ class AudioSegment:
 
     @cached_property
     def end(self) -> float:
-        return round(self.start_sample / self.sampling_rate, 2)
+        return round(self.end_sample / self.sampling_rate, 2)
 
 
 def collect_samples(audios: Iterable[np.ndarray], min_samples: int) -> np.ndarray:
