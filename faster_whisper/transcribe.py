@@ -34,8 +34,8 @@ class Segment(NamedTuple):
 
 
 class AudioInfo(NamedTuple):
-    language: Optional[str]
-    language_probability: Optional[float]
+    language: str
+    language_probability: float
     duration: float
 
 
