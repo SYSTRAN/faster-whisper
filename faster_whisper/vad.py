@@ -208,7 +208,10 @@ class SpeechTimestampsMap:
 
     def get_chunk_index(self, time: float) -> int:
         sample = int(time * self.sampling_rate)
-        return bisect.bisect(self.chunk_end_sample, sample)
+        return min(
+            bisect.bisect(self.chunk_end_sample, sample),
+            len(self.chunk_end_sample) - 1,
+        )
 
 
 @functools.lru_cache
