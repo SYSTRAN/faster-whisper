@@ -125,10 +125,15 @@ class Tokenizer:
             current_tokens.append(token)
             decoded = self.decode_with_timestamps(current_tokens)
 
-            if (
-                replacement_char not in decoded
-                or decoded_full[unicode_offset + decoded.index(replacement_char)]
-                == replacement_char
+            try:
+                replacement_char_index = decoded.index(replacement_char)
+                replacement_char_index += unicode_offset
+            except ValueError:
+                replacement_char_index = None
+
+            if replacement_char_index is None or (
+                replacement_char_index < len(decoded_full)
+                and decoded_full[replacement_char_index] == replacement_char
             ):
                 words.append(decoded)
                 word_tokens.append(current_tokens)
