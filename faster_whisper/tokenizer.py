@@ -135,9 +135,6 @@ class Tokenizer:
                 current_tokens = []
                 unicode_offset += len(decoded)
 
-                if unicode_offset >= len(decoded_full):
-                    break
-
         return words, word_tokens
 
     def split_tokens_on_spaces(
