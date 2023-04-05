@@ -1,3 +1,4 @@
+import logging
 import os
 
 from typing import Optional
@@ -23,6 +24,11 @@ _MODELS = (
 def get_assets_path():
     """Returns the path to the assets directory."""
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+
+
+def get_logger():
+    """Returns the module logger."""
+    return logging.getLogger("faster_whisper")
 
 
 def download_model(size: str, output_dir: Optional[str] = None):
