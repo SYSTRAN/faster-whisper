@@ -776,14 +776,18 @@ def restore_speech_timestamps(
                     end=ts_map.get_original_time(word.end, chunk_index),
                 )
                 words.append(word)
-        else:
-            words = segment.words
 
-        segment = segment._replace(
-            start=ts_map.get_original_time(segment.start),
-            end=ts_map.get_original_time(segment.end),
-            words=words,
-        )
+            segment = segment._replace(
+                start=words[0].start,
+                end=words[-1].end,
+                words=words,
+            )
+
+        else:
+            segment = segment._replace(
+                start=ts_map.get_original_time(segment.start),
+                end=ts_map.get_original_time(segment.end),
+            )
 
         yield segment
 
