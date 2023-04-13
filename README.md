@@ -87,6 +87,13 @@ for segment in segments:
     print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
 ```
 
+**Warning:** `segments` is a *generator* so the transcription only starts when you iterate over it. The transcription can be run to completion by gathering the segments in a list or a `for` loop:
+
+```python
+segments, _ = model.transcribe("audio.mp3")
+segments = list(segments)  # The transcription will actually run here.
+```
+
 #### Word-level timestamps
 
 ```python
