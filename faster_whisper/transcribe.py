@@ -330,6 +330,7 @@ class WhisperModel:
         content_frames = features.shape[-1] - self.feature_extractor.nb_max_frames
         seek = 0
         all_tokens = []
+        all_prompt_text = []
         prompt_reset_since = 0
 
         if options.initial_prompt is not None:
@@ -501,7 +502,10 @@ class WhisperModel:
                 if segment["start"] == segment["end"] or not text.strip():
                     continue
 
-                all_tokens.extend(tokens)
+                check_prompt_num = 1
+                if all([text.strip() != i.strip() for i in all_prompt_text[-check_prompt_num:]]):
+                    all_tokens.extend(tokens)
+                    all_prompt_text.append(text)
 
                 yield Segment(
                     start=segment["start"],
