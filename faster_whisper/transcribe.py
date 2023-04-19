@@ -503,7 +503,12 @@ class WhisperModel:
                     continue
 
                 check_prompt_num = 1
-                if all([text.strip() != i.strip() for i in all_prompt_text[-check_prompt_num:]]):
+                if all(
+                    [
+                        text.strip() != i.strip()
+                        for i in all_prompt_text[-check_prompt_num:]
+                    ]
+                ):
                     all_tokens.extend(tokens)
                     all_prompt_text.append(text)
 
