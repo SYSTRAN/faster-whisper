@@ -31,7 +31,11 @@ def get_logger():
     return logging.getLogger("faster_whisper")
 
 
-def download_model(size: str, output_dir: Optional[str] = None):
+def download_model(
+    size: str,
+    output_dir: Optional[str] = None,
+    local_files_only: Optional[bool] = False,
+):
     """Downloads a CTranslate2 Whisper model from the Hugging Face Hub.
 
     The model is downloaded from https://huggingface.co/guillaumekln.
@@ -41,6 +45,8 @@ def download_model(size: str, output_dir: Optional[str] = None):
         medium, medium.en, large-v1, or large-v2).
       output_dir: Directory where the model should be saved. If not set, the model is saved in
         the standard Hugging Face cache directory.
+      local_files_only:  If True, avoid downloading the file and return the path to the local
+        cached file if it exists.
 
     Returns:
       The path to the downloaded model.
@@ -55,7 +61,7 @@ def download_model(size: str, output_dir: Optional[str] = None):
 
     repo_id = "guillaumekln/faster-whisper-%s" % size
     kwargs = {}
-
+    kwargs["local_files_only"] = local_files_only
     if output_dir is not None:
         kwargs["local_dir"] = output_dir
         kwargs["local_dir_use_symlinks"] = False
