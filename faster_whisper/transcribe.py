@@ -34,14 +34,7 @@ class Segment(NamedTuple):
     words: Optional[List[Word]]
     avg_log_prob: float
     no_speech_prob: float
-
-
-class AudioInfo(NamedTuple):
-    language: str
-    language_probability: float
-    duration: float
-    transcription_options: TranscriptionOptions
-
+    
 
 class TranscriptionOptions(NamedTuple):
     beam_size: int
@@ -62,6 +55,13 @@ class TranscriptionOptions(NamedTuple):
     word_timestamps: bool
     prepend_punctuations: str
     append_punctuations: str
+
+
+class AudioInfo(NamedTuple):
+    language: str
+    language_probability: float
+    duration: float
+    transcription_options: TranscriptionOptions
 
 
 class WhisperModel:
