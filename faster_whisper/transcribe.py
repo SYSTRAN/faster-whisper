@@ -333,6 +333,7 @@ class WhisperModel:
         encoder_output: Optional[ctranslate2.StorageView] = None,
     ) -> Iterable[Segment]:
         content_frames = features.shape[-1] - self.feature_extractor.nb_max_frames
+        idx = 0
         seek = 0
         all_tokens = []
         prompt_reset_since = 0
@@ -502,7 +503,8 @@ class WhisperModel:
 
             encoder_output = None
 
-            for idx, segment in enumerate(current_segments):
+            for segment in current_segments:
+                idx += 1
                 tokens = segment["tokens"]
                 text = tokenizer.decode(tokens)
 
@@ -587,8 +589,8 @@ class WhisperModel:
 
             # Recover the average log prob from the returned score.
             seq_len = len(tokens)
-            cum_log_prob = result.scores[0] * (seq_len**options.length_penalty)
-            avg_logprob = cum_log_prob / (seq_len + 1)
+            cum_logprob = result.scores[0] * (seq_len**options.length_penalty)
+            avg_logprob = cum_logprob / (seq_len + 1)
 
             text = tokenizer.decode(tokens).strip()
             compression_ratio = get_compression_ratio(text)
