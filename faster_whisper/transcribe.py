@@ -34,7 +34,7 @@ class Segment(NamedTuple):
     words: Optional[List[Word]]
     avg_log_prob: float
     no_speech_prob: float
-    
+
 
 class TranscriptionOptions(NamedTuple):
     beam_size: int
