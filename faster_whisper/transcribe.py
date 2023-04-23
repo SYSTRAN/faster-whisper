@@ -40,6 +40,7 @@ class AudioInfo(NamedTuple):
     language: str
     language_probability: float
     duration: float
+    transcription_options: TranscriptionOptions
 
 
 class TranscriptionOptions(NamedTuple):
@@ -321,6 +322,7 @@ class WhisperModel:
             language=language,
             language_probability=language_probability,
             duration=duration,
+            transcription_options=options,
         )
 
         return segments, audio_info
