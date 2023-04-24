@@ -504,7 +504,6 @@ class WhisperModel:
             encoder_output = None
 
             for segment in current_segments:
-                idx += 1
                 tokens = segment["tokens"]
                 text = tokenizer.decode(tokens)
 
@@ -512,6 +511,7 @@ class WhisperModel:
                     continue
 
                 all_tokens.extend(tokens)
+                idx += 1
 
                 yield Segment(
                     id=idx,
