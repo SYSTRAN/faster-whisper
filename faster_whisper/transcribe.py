@@ -483,9 +483,6 @@ class WhisperModel:
 
                 seek += segment_size
 
-            if not options.condition_on_previous_text or temperature > 0.5:
-                prompt_reset_since = len(all_tokens)
-
             if options.word_timestamps:
                 self.add_word_timestamps(
                     current_segments,
@@ -537,6 +534,9 @@ class WhisperModel:
                         else None
                     ),
                 )
+
+            if not options.condition_on_previous_text or temperature > 0.5:
+                prompt_reset_since = len(all_tokens)
 
     def encode(self, features: np.ndarray) -> ctranslate2.StorageView:
         # When the model is running on multiple GPUs, the encoder output should be moved
