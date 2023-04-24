@@ -62,7 +62,7 @@ class TranscriptionOptions(NamedTuple):
     append_punctuations: str
 
 
-class AudioInfo(NamedTuple):
+class TranscriptionInfo(NamedTuple):
     language: str
     language_probability: float
     duration: float
@@ -176,7 +176,7 @@ class WhisperModel:
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         vad_filter: bool = False,
         vad_parameters: Optional[dict] = None,
-    ) -> Tuple[Iterable[Segment], AudioInfo]:
+    ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
         Arguments:
@@ -226,7 +226,7 @@ class WhisperModel:
           A tuple with:
 
             - a generator over transcribed segments
-            - an instance of AudioInfo
+            - an instance of TranscriptionInfo
         """
         sampling_rate = self.feature_extractor.sampling_rate
 
@@ -323,14 +323,14 @@ class WhisperModel:
         if speech_chunks:
             segments = restore_speech_timestamps(segments, speech_chunks, sampling_rate)
 
-        audio_info = AudioInfo(
+        info = TranscriptionInfo(
             language=language,
             language_probability=language_probability,
             duration=duration,
             transcription_options=options,
         )
 
-        return segments, audio_info
+        return segments, info
 
     def generate_segments(
         self,
