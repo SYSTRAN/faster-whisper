@@ -796,7 +796,8 @@ def restore_speech_timestamps(
             words = []
             for word in segment.words:
                 # Ensure the word start and end times are resolved to the same chunk.
-                chunk_index = ts_map.get_chunk_index(word.start)
+                middle = (word.start + word.end) / 2
+                chunk_index = ts_map.get_chunk_index(middle)
                 word = word._replace(
                     start=ts_map.get_original_time(word.start, chunk_index),
                     end=ts_map.get_original_time(word.end, chunk_index),
