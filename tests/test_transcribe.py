@@ -32,7 +32,7 @@ def test_vad(jfk_path):
     segments, _ = model.transcribe(
         jfk_path,
         vad_filter=True,
-        vad_parameters=dict(min_silence_duration_ms=500),
+        vad_parameters=dict(min_silence_duration_ms=500, speech_pad_ms=200),
     )
     segments = list(segments)
 

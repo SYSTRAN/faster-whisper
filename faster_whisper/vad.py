@@ -20,7 +20,7 @@ def get_speech_timestamps(
     max_speech_duration_s: float = float("inf"),
     min_silence_duration_ms: int = 2000,
     window_size_samples: int = 1024,
-    speech_pad_ms: int = 200,
+    speech_pad_ms: int = 400,
 ) -> List[dict]:
     """This method is used for splitting long audios into speech chunks using silero VAD.
 
