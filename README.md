@@ -64,8 +64,6 @@ GPU execution requires the NVIDIA libraries cuBLAS 11.x and cuDNN 8.x to be inst
 
 ## Usage
 
-### Library
-
 ```python
 from faster_whisper import WhisperModel
 
@@ -94,7 +92,7 @@ segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
 
-#### Word-level timestamps
+### Word-level timestamps
 
 ```python
 segments, _ = model.transcribe("audio.mp3", word_timestamps=True)
@@ -104,7 +102,7 @@ for segment in segments:
         print("[%.2fs -> %.2fs] %s" % (word.start, word.end, word.word))
 ```
 
-#### VAD filter
+### VAD filter
 
 The library integrates the [Silero VAD](https://github.com/snakers4/silero-vad) model to filter out parts of the audio without speech:
 
@@ -118,13 +116,26 @@ The default behavior is conservative and only removes silence longer than 2 seco
 segments, _ = model.transcribe("audio.mp3", vad_filter=True, vad_parameters=dict(min_silence_duration_ms=500))
 ```
 
-#### Going further
+### Logging
+
+The library logging level can be configured like this:
+
+```python
+import logging
+
+logging.basicConfig()
+logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
+```
+
+### Going further
 
 See more model and transcription options in the [`WhisperModel`](https://github.com/guillaumekln/faster-whisper/blob/master/faster_whisper/transcribe.py) class implementation.
 
-### CLI
+## Community integrations
 
-You can use [jordimas/whisper-ctranslate2](https://github.com/jordimas/whisper-ctranslate2) to access `faster-whisper` through a CLI interface similar to what is offered by Whisper.
+Here is a non exhaustive list of open-source projects using *faster-whisper*. Feel free to add your project to the list!
+
+* [whisper-ctranslate2](https://github.com/jordimas/whisper-ctranslate2) is a command line client based on `faster-whisper` and compatible with the original client from openai/whisper.
 
 ## Model conversion
 
