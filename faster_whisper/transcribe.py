@@ -112,7 +112,9 @@ class WhisperModel:
             model_path = model_size_or_path
         else:
             model_path = download_model(
-                model_size_or_path, download_root, local_files_only
+                model_size_or_path,
+                local_files_only=local_files_only,
+                cache_dir=download_root,
             )
 
         self.model = ctranslate2.models.Whisper(

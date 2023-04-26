@@ -35,6 +35,7 @@ def download_model(
     size: str,
     output_dir: Optional[str] = None,
     local_files_only: Optional[bool] = False,
+    cache_dir: Optional[str] = None,
 ):
     """Downloads a CTranslate2 Whisper model from the Hugging Face Hub.
 
@@ -47,6 +48,7 @@ def download_model(
         the standard Hugging Face cache directory.
       local_files_only:  If True, avoid downloading the file and return the path to the local
         cached file if it exists.
+      cache_dir: Path to the folder where cached files are stored.
 
     Returns:
       The path to the downloaded model.
@@ -65,6 +67,9 @@ def download_model(
     if output_dir is not None:
         kwargs["local_dir"] = output_dir
         kwargs["local_dir_use_symlinks"] = False
+
+    if cache_dir is not None:
+        kwargs["cache_dir"] = cache_dir
 
     allow_patterns = [
         "config.json",
