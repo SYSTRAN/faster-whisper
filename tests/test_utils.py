@@ -1,5 +1,4 @@
 import os
-import pytest
 
 from faster_whisper import download_model
 
@@ -17,7 +16,7 @@ def test_download_model(tmpdir):
         path = os.path.join(model_dir, filename)
         assert not os.path.islink(path)
 
-@pytest.mark.skip
+
 def test_download_model_in_cache(tmpdir):
     cache_dir = str(tmpdir.join("model"))
     download_model("tiny", cache_dir=cache_dir)
