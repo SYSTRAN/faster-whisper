@@ -21,4 +21,3 @@ def test_download_model_in_cache(tmpdir):
     cache_dir = str(tmpdir.join("model"))
     download_model("tiny", cache_dir=cache_dir)
     assert os.path.isdir(cache_dir)
-
