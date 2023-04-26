@@ -63,8 +63,7 @@ def download_model(
     kwargs = {}
     kwargs["local_files_only"] = local_files_only
     if output_dir is not None:
-        kwargs["local_dir"] = output_dir
-        kwargs["local_dir_use_symlinks"] = False
+        kwargs["cache_dir"] = output_dir
 
     allow_patterns = [
         "config.json",
