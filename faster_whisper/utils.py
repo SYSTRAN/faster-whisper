@@ -34,7 +34,7 @@ def get_logger():
 def download_model(
     size: str,
     output_dir: Optional[str] = None,
-    local_files_only: Optional[bool] = False,
+    local_files_only: bool = False,
     cache_dir: Optional[str] = None,
 ):
     """Downloads a CTranslate2 Whisper model from the Hugging Face Hub.

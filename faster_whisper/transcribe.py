@@ -79,7 +79,7 @@ class WhisperModel:
         cpu_threads: int = 0,
         num_workers: int = 1,
         download_root: Optional[str] = None,
-        local_files_only: Optional[bool] = False,
+        local_files_only: bool = False,
     ):
         """Initializes the Whisper model.
 
