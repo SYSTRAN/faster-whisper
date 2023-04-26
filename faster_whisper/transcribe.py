@@ -101,8 +101,8 @@ class WhisperModel:
             having multiple workers enables true parallelism when running the model
             (concurrent calls to self.model.generate() will run in parallel).
             This can improve the global throughput at the cost of increased memory usage.
-          download_root: Directory where the model should be saved. If not set, the model
-            is saved in the standard Hugging Face cache directory.
+          download_root: Directory where the models should be saved. If not set, the models
+            are saved in the standard Hugging Face cache directory.
           local_files_only:  If True, avoid downloading the file and return the path to the
             local cached file if it exists.
         """
