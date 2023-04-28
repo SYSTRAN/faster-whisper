@@ -137,6 +137,8 @@ Here is a non exhaustive list of open-source projects using *faster-whisper*. Fe
 
 * [whisper-ctranslate2](https://github.com/Softcatala/whisper-ctranslate2) is a command line client based on `faster-whisper` and compatible with the original client from openai/whisper.
 
+* [whisper-diarize](https://github.com/MahmoudAshraf97/whisper-diarization) is a speaker diarization tool that is based on `faster-whisper` and nvidia nemo.
+
 ## Model conversion
 
 When loading a model from its size such as `WhisperModel("large-v2")`, the correspondig CTranslate2 model is automatically downloaded from the [Hugging Face Hub](https://huggingface.co/guillaumekln).
