@@ -43,10 +43,7 @@ class VadOptions(NamedTuple):
     """
 
 
-def get_speech_timestamps(
-    audio: np.ndarray,
-    vad_options: VadOptions
-) -> List[dict]:
+def get_speech_timestamps(audio: np.ndarray, vad_options: VadOptions) -> List[dict]:
     """This method is used for splitting long audios into speech chunks using silero VAD.
 
     Args:
@@ -86,7 +83,7 @@ def get_speech_timestamps(
 
     speech_probs = []
     for current_start_sample in range(0, audio_length_samples, window_size_samples):
-        chunk = audio[current_start_sample: current_start_sample + window_size_samples]
+        chunk = audio[current_start_sample : current_start_sample + window_size_samples]
         if len(chunk) < window_size_samples:
             chunk = np.pad(chunk, (0, int(window_size_samples - len(chunk))))
         speech_prob, state = model(chunk, state, sampling_rate)
@@ -191,7 +188,7 @@ def collect_chunks(audio: np.ndarray, chunks: List[dict]) -> np.ndarray:
     if not chunks:
         return np.array([], dtype=np.float32)
 
-    return np.concatenate([audio[chunk["start"]: chunk["end"]] for chunk in chunks])
+    return np.concatenate([audio[chunk["start"] : chunk["end"]] for chunk in chunks])
 
 
 class SpeechTimestampsMap:

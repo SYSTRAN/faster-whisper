@@ -17,7 +17,7 @@ from faster_whisper.vad import (
     SpeechTimestampsMap,
     collect_chunks,
     get_speech_timestamps,
-    VadOptions
+    VadOptions,
 )
 
 
