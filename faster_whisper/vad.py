@@ -3,62 +3,85 @@ import functools
 import os
 import warnings
 
-from typing import List, Optional
+from typing import List, Optional, NamedTuple
 
 import numpy as np
 
 from faster_whisper.utils import get_assets_path
 
+
 # The code below is adapted from https://github.com/snakers4/silero-vad.
+class VadOptions(NamedTuple):
+    threshold: float = 0.5
+    """Speech threshold.
+    
+    Silero VAD outputs speech probabilities for each audio chunk, probabilities ABOVE this value are considered as 
+    SPEECH. It is better to tune this parameter for each dataset separately, but "lazy" 0.5 is pretty good for most 
+    datasets.
+    """
+    min_speech_duration_ms: int = 250
+    """Final speech chunks shorter min_speech_duration_ms are thrown out."""
+    max_speech_duration_s: float = float("inf"),
+    """Maximum duration of speech chunks in seconds.
+    
+    Chunks longer than max_speech_duration_s will be split at the timestamp of the last silence that lasts more than 
+    100s (if any), to prevent agressive cutting. Otherwise, they will be split aggressively just before 
+    max_speech_duration_s.
+    """
+    min_silence_duration_ms: int = 2000,
+    """In the end of each speech chunk wait for min_silence_duration_ms before separating it
+    """
+    window_size_samples: int = 1024,
+    """Audio chunks of window_size_samples size are fed to the silero VAD model.
+    
+    WARNING! Silero VAD models were trained using 512, 1024, 1536 samples for 16000 sample rate.
+    Values other than these may affect model performance!!
+    """
+    speech_pad_ms: int = 400
+    """Final speech chunks are padded by speech_pad_ms each side"""
+
+    @staticmethod
+    def from_dict(values: dict) -> 'VadOptions':
+        """Helper method to convert a dictionary of key-values into an VadOptions object
+        """
+        result = VadOptions()
+        result.threshold = values.get("threshold", result.threshold)
+        result.min_speech_duration_ms = values.get("min_speech_duration_ms", result.min_speech_duration_ms)
+        result.max_speech_duration_s = values.get("max_speech_duration_s", result.max_speech_duration_s)
+        result.min_silence_duration_ms = values.get("min_silence_duration_ms", result.min_silence_duration_ms)
+        result.window_size_samples = values.get("window_size_samples", result.window_size_samples)
+        result.speech_pad_ms = values.get("speech_pad_ms", result.speech_pad_ms)
+        return result
 
 
 def get_speech_timestamps(
-    audio: np.ndarray,
-    *,
-    threshold: float = 0.5,
-    min_speech_duration_ms: int = 250,
-    max_speech_duration_s: float = float("inf"),
-    min_silence_duration_ms: int = 2000,
-    window_size_samples: int = 1024,
-    speech_pad_ms: int = 400,
+        audio: np.ndarray,
+        vad_options: VadOptions = VadOptions()
 ) -> List[dict]:
     """This method is used for splitting long audios into speech chunks using silero VAD.
 
     Args:
       audio: One dimensional float array.
-      threshold: Speech threshold. Silero VAD outputs speech probabilities for each audio chunk,
-        probabilities ABOVE this value are considered as SPEECH. It is better to tune this
-        parameter for each dataset separately, but "lazy" 0.5 is pretty good for most datasets.
-      min_speech_duration_ms: Final speech chunks shorter min_speech_duration_ms are thrown out.
-      max_speech_duration_s: Maximum duration of speech chunks in seconds. Chunks longer
-        than max_speech_duration_s will be split at the timestamp of the last silence that
-        lasts more than 100s (if any), to prevent agressive cutting. Otherwise, they will be
-        split aggressively just before max_speech_duration_s.
-      min_silence_duration_ms: In the end of each speech chunk wait for min_silence_duration_ms
-        before separating it
-      window_size_samples: Audio chunks of window_size_samples size are fed to the silero VAD model.
-        WARNING! Silero VAD models were trained using 512, 1024, 1536 samples for 16000 sample rate.
-        Values other than these may affect model perfomance!!
-      speech_pad_ms: Final speech chunks are padded by speech_pad_ms each side
+      vad_options: Options for VAD processing.
 
     Returns:
       List of dicts containing begin and end samples of each speech chunk.
     """
-    if window_size_samples not in [512, 1024, 1536]:
+    if vad_options.window_size_samples not in [512, 1024, 1536]:
         warnings.warn(
             "Unusual window_size_samples! Supported window_size_samples:\n"
             " - [512, 1024, 1536] for 16000 sampling_rate"
         )
 
     sampling_rate = 16000
-    min_speech_samples = sampling_rate * min_speech_duration_ms / 1000
-    speech_pad_samples = sampling_rate * speech_pad_ms / 1000
+    min_speech_samples = sampling_rate * vad_options.min_speech_duration_ms / 1000
+    speech_pad_samples = sampling_rate * vad_options.speech_pad_ms / 1000
     max_speech_samples = (
-        sampling_rate * max_speech_duration_s
-        - window_size_samples
-        - 2 * speech_pad_samples
+            sampling_rate * vad_options.max_speech_duration_s
+            - vad_options.window_size_samples
+            - 2 * speech_pad_samples
     )
-    min_silence_samples = sampling_rate * min_silence_duration_ms / 1000
+    min_silence_samples = sampling_rate * vad_options.min_silence_duration_ms / 1000
     min_silence_samples_at_max_speech = sampling_rate * 98 / 1000
 
     audio_length_samples = len(audio)
@@ -67,17 +90,17 @@ def get_speech_timestamps(
     state = model.get_initial_state(batch_size=1)
 
     speech_probs = []
-    for current_start_sample in range(0, audio_length_samples, window_size_samples):
-        chunk = audio[current_start_sample : current_start_sample + window_size_samples]
-        if len(chunk) < window_size_samples:
-            chunk = np.pad(chunk, (0, int(window_size_samples - len(chunk))))
+    for current_start_sample in range(0, audio_length_samples, vad_options.window_size_samples):
+        chunk = audio[current_start_sample: current_start_sample + vad_options.window_size_samples]
+        if len(chunk) < vad_options.window_size_samples:
+            chunk = np.pad(chunk, (0, int(vad_options.window_size_samples - len(chunk))))
         speech_prob, state = model(chunk, state, sampling_rate)
         speech_probs.append(speech_prob)
 
     triggered = False
     speeches = []
     current_speech = {}
-    neg_threshold = threshold - 0.15
+    neg_threshold = vad_options.threshold - 0.15
 
     # to save potential segment end (and tolerate some silence)
     temp_end = 0
@@ -85,19 +108,19 @@ def get_speech_timestamps(
     prev_end = next_start = 0
 
     for i, speech_prob in enumerate(speech_probs):
-        if (speech_prob >= threshold) and temp_end:
+        if (speech_prob >= vad_options.threshold) and temp_end:
             temp_end = 0
             if next_start < prev_end:
-                next_start = window_size_samples * i
+                next_start = vad_options.window_size_samples * i
 
-        if (speech_prob >= threshold) and not triggered:
+        if (speech_prob >= vad_options.threshold) and not triggered:
             triggered = True
-            current_speech["start"] = window_size_samples * i
+            current_speech["start"] = vad_options.window_size_samples * i
             continue
 
         if (
-            triggered
-            and (window_size_samples * i) - current_speech["start"] > max_speech_samples
+                triggered
+                and (vad_options.window_size_samples * i) - current_speech["start"] > max_speech_samples
         ):
             if prev_end:
                 current_speech["end"] = prev_end
@@ -110,7 +133,7 @@ def get_speech_timestamps(
                     current_speech["start"] = next_start
                 prev_end = next_start = temp_end = 0
             else:
-                current_speech["end"] = window_size_samples * i
+                current_speech["end"] = vad_options.window_size_samples * i
                 speeches.append(current_speech)
                 current_speech = {}
                 prev_end = next_start = temp_end = 0
@@ -119,16 +142,16 @@ def get_speech_timestamps(
 
         if (speech_prob < neg_threshold) and triggered:
             if not temp_end:
-                temp_end = window_size_samples * i
+                temp_end = vad_options.window_size_samples * i
             # condition to avoid cutting in very short silence
-            if (window_size_samples * i) - temp_end > min_silence_samples_at_max_speech:
+            if (vad_options.window_size_samples * i) - temp_end > min_silence_samples_at_max_speech:
                 prev_end = temp_end
-            if (window_size_samples * i) - temp_end < min_silence_samples:
+            if (vad_options.window_size_samples * i) - temp_end < min_silence_samples:
                 continue
             else:
                 current_speech["end"] = temp_end
                 if (
-                    current_speech["end"] - current_speech["start"]
+                        current_speech["end"] - current_speech["start"]
                 ) > min_speech_samples:
                     speeches.append(current_speech)
                 current_speech = {}
@@ -137,8 +160,8 @@ def get_speech_timestamps(
                 continue
 
     if (
-        current_speech
-        and (audio_length_samples - current_speech["start"]) > min_speech_samples
+            current_speech
+            and (audio_length_samples - current_speech["start"]) > min_speech_samples
     ):
         current_speech["end"] = audio_length_samples
         speeches.append(current_speech)
@@ -173,7 +196,7 @@ def collect_chunks(audio: np.ndarray, chunks: List[dict]) -> np.ndarray:
     if not chunks:
         return np.array([], dtype=np.float32)
 
-    return np.concatenate([audio[chunk["start"] : chunk["end"]] for chunk in chunks])
+    return np.concatenate([audio[chunk["start"]: chunk["end"]] for chunk in chunks])
 
 
 class SpeechTimestampsMap:
@@ -196,9 +219,9 @@ class SpeechTimestampsMap:
             self.total_silence_before.append(silent_samples / sampling_rate)
 
     def get_original_time(
-        self,
-        time: float,
-        chunk_index: Optional[int] = None,
+            self,
+            time: float,
+            chunk_index: Optional[int] = None,
     ) -> float:
         if chunk_index is None:
             chunk_index = self.get_chunk_index(time)
