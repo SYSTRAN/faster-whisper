@@ -15,9 +15,9 @@ from faster_whisper.tokenizer import Tokenizer
 from faster_whisper.utils import download_model, format_timestamp, get_logger
 from faster_whisper.vad import (
     SpeechTimestampsMap,
+    VadOptions,
     collect_chunks,
     get_speech_timestamps,
-    VadOptions,
 )
 
 
