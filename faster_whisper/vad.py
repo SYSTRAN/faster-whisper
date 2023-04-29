@@ -14,43 +14,50 @@ from faster_whisper.utils import get_assets_path
 class VadOptions(NamedTuple):
     threshold: float = 0.5
     """Speech threshold.
-    
-    Silero VAD outputs speech probabilities for each audio chunk, probabilities ABOVE this value are considered as 
-    SPEECH. It is better to tune this parameter for each dataset separately, but "lazy" 0.5 is pretty good for most 
-    datasets.
+
+    Silero VAD outputs speech probabilities for each audio chunk, probabilities ABOVE this value
+    are considered as SPEECH. It is better to tune this parameter for each dataset separately,
+    but "lazy" 0.5 is pretty good for most datasets.
     """
     min_speech_duration_ms: int = 250
-    """Final speech chunks shorter min_speech_duration_ms are thrown out."""
+    """Final speech chunks shorter min_speech_duration_ms are thrown out.
+    """
     max_speech_duration_s: float = float("inf"),
     """Maximum duration of speech chunks in seconds.
-    
-    Chunks longer than max_speech_duration_s will be split at the timestamp of the last silence that lasts more than 
-    100s (if any), to prevent agressive cutting. Otherwise, they will be split aggressively just before 
-    max_speech_duration_s.
+
+    Chunks longer than max_speech_duration_s will be split at the timestamp of the last silence
+    that lasts more than 100s (if any), to prevent agressive cutting. Otherwise, they will be
+    split aggressively just before max_speech_duration_s.
     """
     min_silence_duration_ms: int = 2000,
-    """In the end of each speech chunk wait for min_silence_duration_ms before separating it
+    """In the end of each speech chunk wait for min_silence_duration_ms before separating it.
     """
     window_size_samples: int = 1024,
     """Audio chunks of window_size_samples size are fed to the silero VAD model.
-    
+
     WARNING! Silero VAD models were trained using 512, 1024, 1536 samples for 16000 sample rate.
     Values other than these may affect model performance!!
     """
     speech_pad_ms: int = 400
-    """Final speech chunks are padded by speech_pad_ms each side"""
+    """Final speech chunks are padded by speech_pad_ms each side.
+    """
 
     @staticmethod
     def from_dict(values: dict) -> 'VadOptions':
         """Helper method to convert a dictionary of key-values into an VadOptions object
         """
-        result = VadOptions()
-        result.threshold = values.get("threshold", result.threshold)
-        result.min_speech_duration_ms = values.get("min_speech_duration_ms", result.min_speech_duration_ms)
-        result.max_speech_duration_s = values.get("max_speech_duration_s", result.max_speech_duration_s)
-        result.min_silence_duration_ms = values.get("min_silence_duration_ms", result.min_silence_duration_ms)
-        result.window_size_samples = values.get("window_size_samples", result.window_size_samples)
-        result.speech_pad_ms = values.get("speech_pad_ms", result.speech_pad_ms)
+        result = VadOptions(
+            threshold=values.get("threshold", VadOptions().threshold),
+            min_speech_duration_ms=values.get("min_speech_duration_ms",
+                                              VadOptions().min_speech_duration_ms),
+            max_speech_duration_s=values.get("max_speech_duration_s",
+                                             VadOptions().max_speech_duration_s),
+            min_silence_duration_ms=values.get("min_silence_duration_ms",
+                                               VadOptions().min_silence_duration_ms),
+            window_size_samples=values.get("window_size_samples",
+                                           VadOptions().window_size_samples),
+            speech_pad_ms=values.get("speech_pad_ms", VadOptions().speech_pad_ms),
+        )
         return result
 
 
