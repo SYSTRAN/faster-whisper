@@ -179,7 +179,7 @@ class WhisperModel:
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         vad_filter: bool = False,
-        vad_parameters: Optional[dict | VadOptions] = VadOptions(),
+        vad_parameters: Optional[Union[dict, VadOptions]] = VadOptions(),
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
