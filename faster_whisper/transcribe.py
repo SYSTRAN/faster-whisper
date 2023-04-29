@@ -223,8 +223,8 @@ class WhisperModel:
           vad_filter: Enable the voice activity detection (VAD) to filter out parts of the audio
             without speech. This step is using the Silero VAD model
             https://github.com/snakers4/silero-vad.
-          vad_parameters: Dictionary of Silero VAD parameters or VadOptions class (see available parameters and
-            default values in the class `VadOptions`).
+          vad_parameters: Dictionary of Silero VAD parameters or VadOptions class (see available
+            parameters and default values in the class `VadOptions`).
 
         Returns:
           A tuple with:
