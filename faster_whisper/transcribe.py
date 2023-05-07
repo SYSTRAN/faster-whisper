@@ -179,7 +179,7 @@ class WhisperModel:
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         vad_filter: bool = False,
-        vad_parameters: Optional[Union[dict, VadOptions]] = VadOptions(),
+        vad_parameters: Optional[Union[dict, VadOptions]] = None,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
@@ -244,7 +244,9 @@ class WhisperModel:
         )
 
         if vad_filter:
-            if isinstance(vad_parameters, dict):
+            if vad_parameters is None:
+                vad_parameters = VadOptions()
+            elif isinstance(vad_parameters, dict):
                 vad_parameters = VadOptions(**vad_parameters)
             speech_chunks = get_speech_timestamps(audio, vad_parameters)
             audio = collect_chunks(audio, speech_chunks)
