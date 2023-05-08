@@ -67,6 +67,7 @@ class TranscriptionInfo(NamedTuple):
     language: str
     language_probability: float
     duration: float
+    all_language_probs: Optional[List[Tuple[str, float]]]
     transcription_options: TranscriptionOptions
     vad_options: VadOptions
 
@@ -152,6 +153,7 @@ class WhisperModel:
         self,
         audio: Union[str, BinaryIO, np.ndarray],
         language: Optional[str] = None,
+        return_all_language_probs: bool = False,
         task: str = "transcribe",
         beam_size: int = 5,
         best_of: int = 5,
@@ -188,6 +190,8 @@ class WhisperModel:
           language: The language spoken in the audio. It should be a language code such
             as "en" or "fr". If not set, the language will be detected in the first 30 seconds
             of audio.
+          return_all_language_probs: If `True`, `TranscriptInfo` will return all language
+            probabilities in addition to the top one.
           task: Task to execute (transcribe or translate).
           beam_size: Beam size to use for decoding.
           best_of: Number of candidates when sampling with non-zero temperature.
@@ -275,6 +279,7 @@ class WhisperModel:
         features = self.feature_extractor(audio)
 
         encoder_output = None
+        all_language_probs = None
 
         if language is None:
             if not self.model.is_multilingual:
@@ -283,9 +288,13 @@ class WhisperModel:
             else:
                 segment = features[:, : self.feature_extractor.nb_max_frames]
                 encoder_output = self.encode(segment)
-                results = self.model.detect_language(encoder_output)
-                language_token, language_probability = results[0][0]
-                language = language_token[2:-2]
+                # results is a list of tuple[str, float] with language names and
+                # probabilities.
+                results = self.model.detect_language(encoder_output)[0]
+                # Parse language names to strip out markers
+                all_language_probs = [(token[2:-2], prob) for (token, prob) in results]
+                # Get top language token and probability
+                language, language_probability = all_language_probs[0]
 
                 self.logger.info(
                     "Detected language '%s' with probability %.2f",
@@ -336,6 +345,9 @@ class WhisperModel:
             duration=duration,
             transcription_options=options,
             vad_options=vad_parameters,
+            all_language_probs=all_language_probs
+            if return_all_language_probs
+            else None,
         )
 
         return segments, info
