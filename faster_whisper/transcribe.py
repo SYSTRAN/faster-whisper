@@ -190,7 +190,7 @@ class WhisperModel:
           language: The language spoken in the audio. It should be a language code such
             as "en" or "fr". If not set, the language will be detected in the first 30 seconds
             of audio.
-          return_all_language_probs: If `True`, `TranscriptInfo` will return all language
+          return_all_language_probs: If `True`, `TranscriptionInfo` will return all language
             probabilities in addition to the top one.
           task: Task to execute (transcribe or translate).
           beam_size: Beam size to use for decoding.
