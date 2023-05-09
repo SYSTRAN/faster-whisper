@@ -139,6 +139,8 @@ Here is a non exhaustive list of open-source projects using *faster-whisper*. Fe
 
 * [whisper-diarize](https://github.com/MahmoudAshraf97/whisper-diarization) is a speaker diarization tool that is based on `faster-whisper` and nvidia nemo.
 
+* [whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win) contains the portable ready to run binaries of `faster-whisper` for Windows.
+
 ## Model conversion
 
 When loading a model from its size such as `WhisperModel("large-v2")`, the correspondig CTranslate2 model is automatically downloaded from the [Hugging Face Hub](https://huggingface.co/guillaumekln).
