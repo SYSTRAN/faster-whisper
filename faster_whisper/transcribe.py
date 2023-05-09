@@ -15,6 +15,7 @@ from faster_whisper.tokenizer import Tokenizer
 from faster_whisper.utils import download_model, format_timestamp, get_logger
 from faster_whisper.vad import (
     SpeechTimestampsMap,
+    VadOptions,
     collect_chunks,
     get_speech_timestamps,
 )
@@ -67,6 +68,7 @@ class TranscriptionInfo(NamedTuple):
     language_probability: float
     duration: float
     transcription_options: TranscriptionOptions
+    vad_options: VadOptions
 
 
 class WhisperModel:
@@ -177,7 +179,7 @@ class WhisperModel:
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         vad_filter: bool = False,
-        vad_parameters: Optional[dict] = None,
+        vad_parameters: Optional[Union[dict, VadOptions]] = None,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
@@ -221,8 +223,8 @@ class WhisperModel:
           vad_filter: Enable the voice activity detection (VAD) to filter out parts of the audio
             without speech. This step is using the Silero VAD model
             https://github.com/snakers4/silero-vad.
-          vad_parameters: Dictionary of Silero VAD parameters (see available parameters and
-            default values in the function `get_speech_timestamps`).
+          vad_parameters: Dictionary of Silero VAD parameters or VadOptions class (see available
+            parameters and default values in the class `VadOptions`).
 
         Returns:
           A tuple with:
@@ -242,8 +244,11 @@ class WhisperModel:
         )
 
         if vad_filter:
-            vad_parameters = {} if vad_parameters is None else vad_parameters
-            speech_chunks = get_speech_timestamps(audio, **vad_parameters)
+            if vad_parameters is None:
+                vad_parameters = VadOptions()
+            elif isinstance(vad_parameters, dict):
+                vad_parameters = VadOptions(**vad_parameters)
+            speech_chunks = get_speech_timestamps(audio, vad_parameters)
             audio = collect_chunks(audio, speech_chunks)
 
             self.logger.info(
@@ -330,6 +335,7 @@ class WhisperModel:
             language_probability=language_probability,
             duration=duration,
             transcription_options=options,
+            vad_options=vad_parameters,
         )
 
         return segments, info

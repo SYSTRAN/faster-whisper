@@ -29,7 +29,7 @@ def test_transcribe(jfk_path):
 
 def test_vad(jfk_path):
     model = WhisperModel("tiny")
-    segments, _ = model.transcribe(
+    segments, info = model.transcribe(
         jfk_path,
         vad_filter=True,
         vad_parameters=dict(min_silence_duration_ms=500, speech_pad_ms=200),
@@ -46,6 +46,9 @@ def test_vad(jfk_path):
 
     assert 0 < segment.start < 1
     assert 10 < segment.end < 11
+
+    assert info.vad_options.min_silence_duration_ms == 500
+    assert info.vad_options.speech_pad_ms == 200
 
 
 def test_stereo_diarization(data_dir):

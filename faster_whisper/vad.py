@@ -3,47 +3,64 @@ import functools
 import os
 import warnings
 
-from typing import List, Optional
+from typing import List, NamedTuple, Optional
 
 import numpy as np
 
 from faster_whisper.utils import get_assets_path
 
+
 # The code below is adapted from https://github.com/snakers4/silero-vad.
+class VadOptions(NamedTuple):
+    """VAD options.
 
-
-def get_speech_timestamps(
-    audio: np.ndarray,
-    *,
-    threshold: float = 0.5,
-    min_speech_duration_ms: int = 250,
-    max_speech_duration_s: float = float("inf"),
-    min_silence_duration_ms: int = 2000,
-    window_size_samples: int = 1024,
-    speech_pad_ms: int = 400,
-) -> List[dict]:
-    """This method is used for splitting long audios into speech chunks using silero VAD.
-
-    Args:
-      audio: One dimensional float array.
+    Attributes:
       threshold: Speech threshold. Silero VAD outputs speech probabilities for each audio chunk,
         probabilities ABOVE this value are considered as SPEECH. It is better to tune this
         parameter for each dataset separately, but "lazy" 0.5 is pretty good for most datasets.
       min_speech_duration_ms: Final speech chunks shorter min_speech_duration_ms are thrown out.
       max_speech_duration_s: Maximum duration of speech chunks in seconds. Chunks longer
         than max_speech_duration_s will be split at the timestamp of the last silence that
-        lasts more than 100s (if any), to prevent agressive cutting. Otherwise, they will be
+        lasts more than 100s (if any), to prevent aggressive cutting. Otherwise, they will be
         split aggressively just before max_speech_duration_s.
       min_silence_duration_ms: In the end of each speech chunk wait for min_silence_duration_ms
         before separating it
       window_size_samples: Audio chunks of window_size_samples size are fed to the silero VAD model.
         WARNING! Silero VAD models were trained using 512, 1024, 1536 samples for 16000 sample rate.
-        Values other than these may affect model perfomance!!
+        Values other than these may affect model performance!!
       speech_pad_ms: Final speech chunks are padded by speech_pad_ms each side
+    """
+
+    threshold: float = 0.5
+    min_speech_duration_ms: int = 250
+    max_speech_duration_s: float = float("inf")
+    min_silence_duration_ms: int = 2000
+    window_size_samples: int = 1024
+    speech_pad_ms: int = 400
+
+
+def get_speech_timestamps(
+    audio: np.ndarray, vad_options: Optional[VadOptions] = None
+) -> List[dict]:
+    """This method is used for splitting long audios into speech chunks using silero VAD.
+
+    Args:
+      audio: One dimensional float array.
+      vad_options: Options for VAD processing.
 
     Returns:
       List of dicts containing begin and end samples of each speech chunk.
     """
+    if vad_options is None:
+        vad_options = VadOptions()
+
+    threshold = vad_options.threshold
+    min_speech_duration_ms = vad_options.min_speech_duration_ms
+    max_speech_duration_s = vad_options.max_speech_duration_s
+    min_silence_duration_ms = vad_options.min_silence_duration_ms
+    window_size_samples = vad_options.window_size_samples
+    speech_pad_ms = vad_options.speech_pad_ms
+
     if window_size_samples not in [512, 1024, 1536]:
         warnings.warn(
             "Unusual window_size_samples! Supported window_size_samples:\n"
