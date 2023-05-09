@@ -153,7 +153,6 @@ class WhisperModel:
         self,
         audio: Union[str, BinaryIO, np.ndarray],
         language: Optional[str] = None,
-        return_all_language_probs: bool = False,
         task: str = "transcribe",
         beam_size: int = 5,
         best_of: int = 5,
@@ -190,8 +189,6 @@ class WhisperModel:
           language: The language spoken in the audio. It should be a language code such
             as "en" or "fr". If not set, the language will be detected in the first 30 seconds
             of audio.
-          return_all_language_probs: If `True`, `TranscriptionInfo` will return all language
-            probabilities in addition to the top one.
           task: Task to execute (transcribe or translate).
           beam_size: Beam size to use for decoding.
           best_of: Number of candidates when sampling with non-zero temperature.
@@ -345,9 +342,7 @@ class WhisperModel:
             duration=duration,
             transcription_options=options,
             vad_options=vad_parameters,
-            all_language_probs=all_language_probs
-            if return_all_language_probs
-            else None,
+            all_language_probs=all_language_probs,
         )
 
         return segments, info
