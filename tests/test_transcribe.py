@@ -6,10 +6,17 @@ from faster_whisper import WhisperModel, decode_audio
 def test_transcribe(jfk_path):
     model = WhisperModel("tiny")
     segments, info = model.transcribe(jfk_path, word_timestamps=True)
+    assert info.all_language_probs is not None
 
     assert info.language == "en"
     assert info.language_probability > 0.9
     assert info.duration == 11
+
+    # Get top language info from all results, which should match the
+    # already existing metadata
+    top_lang, top_lang_score = info.all_language_probs[0]
+    assert info.language == top_lang
+    assert abs(info.language_probability - top_lang_score) < 1e-16
 
     segments = list(segments)
 

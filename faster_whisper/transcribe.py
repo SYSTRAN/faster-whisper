@@ -67,6 +67,7 @@ class TranscriptionInfo(NamedTuple):
     language: str
     language_probability: float
     duration: float
+    all_language_probs: Optional[List[Tuple[str, float]]]
     transcription_options: TranscriptionOptions
     vad_options: VadOptions
 
@@ -275,6 +276,7 @@ class WhisperModel:
         features = self.feature_extractor(audio)
 
         encoder_output = None
+        all_language_probs = None
 
         if language is None:
             if not self.model.is_multilingual:
@@ -283,9 +285,13 @@ class WhisperModel:
             else:
                 segment = features[:, : self.feature_extractor.nb_max_frames]
                 encoder_output = self.encode(segment)
-                results = self.model.detect_language(encoder_output)
-                language_token, language_probability = results[0][0]
-                language = language_token[2:-2]
+                # results is a list of tuple[str, float] with language names and
+                # probabilities.
+                results = self.model.detect_language(encoder_output)[0]
+                # Parse language names to strip out markers
+                all_language_probs = [(token[2:-2], prob) for (token, prob) in results]
+                # Get top language token and probability
+                language, language_probability = all_language_probs[0]
 
                 self.logger.info(
                     "Detected language '%s' with probability %.2f",
@@ -336,6 +342,7 @@ class WhisperModel:
             duration=duration,
             transcription_options=options,
             vad_options=vad_parameters,
+            all_language_probs=all_language_probs,
         )
 
         return segments, info
