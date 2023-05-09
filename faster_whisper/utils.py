@@ -77,8 +77,8 @@ def download_model(
         "tokenizer.json",
         "vocabulary.txt",
     ]
-    kwargs['allow_patterns'] = allow_patterns
-    kwargs['tqdm_class'] = disabled_tqdm
+    kwargs["allow_patterns"] = allow_patterns
+    kwargs["tqdm_class"] = disabled_tqdm
 
     try:
         return huggingface_hub.snapshot_download(
@@ -88,7 +88,7 @@ def download_model(
     except huggingface_hub.utils._errors.HfHubHTTPError:
         return huggingface_hub.snapshot_download(
             repo_id,
-            local_files_only=True
+            local_files_only=True,
             **kwargs,
         )
 
