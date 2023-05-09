@@ -77,13 +77,20 @@ def download_model(
         "tokenizer.json",
         "vocabulary.txt",
     ]
+    kwargs["allow_patterns"] = allow_patterns
+    kwargs["tqdm_class"] = disabled_tqdm
 
-    return huggingface_hub.snapshot_download(
-        repo_id,
-        allow_patterns=allow_patterns,
-        tqdm_class=disabled_tqdm,
-        **kwargs,
-    )
+    try:
+        return huggingface_hub.snapshot_download(
+            repo_id,
+            **kwargs,
+        )
+    except huggingface_hub.utils.HfHubHTTPError:
+        kwargs["local_files_only"] = True
+        return huggingface_hub.snapshot_download(
+            repo_id,
+            **kwargs,
+        )
 
 
 def format_timestamp(
