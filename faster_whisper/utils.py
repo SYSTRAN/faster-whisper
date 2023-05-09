@@ -85,7 +85,7 @@ def download_model(
             repo_id,
             **kwargs,
         )
-    except huggingface_hub.utils._errors.HfHubHTTPError:
+    except huggingface_hub.utils.HfHubHTTPError:
         kwargs["local_files_only"] = True
         return huggingface_hub.snapshot_download(
             repo_id,
