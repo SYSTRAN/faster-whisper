@@ -165,7 +165,7 @@ Models can also be converted from the code. See the [conversion API](https://ope
 
 If you are comparing the performance against other Whisper implementations, you should make sure to run the comparison with similar settings. In particular:
 
-* Verify that the same transcription options are used, especially the same beam size. For example in openai/whisper, `model.transcribe` uses a default beam size of 1 but here we use a default beam size of 5.
+* Verify that the same transcription options are used, especially the same beam size. For example in whisper.cpp/Const-me, `model.transcribe` uses a default beam size of 1 but here we use a default beam size of 5.
 * When running on CPU, make sure to set the same number of threads. Many frameworks will read the environment variable `OMP_NUM_THREADS`, which can be set when running your script:
 
 ```bash
