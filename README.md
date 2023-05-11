@@ -52,10 +52,6 @@ pip install --force-reinstall "faster-whisper @ https://github.com/guillaumekln/
 
 # Install a specific commit:
 pip install --force-reinstall "faster-whisper @ https://github.com/guillaumekln/faster-whisper/archive/a4f1cc8f11433e454c3934442b5e1a4ed5e865c3.tar.gz"
-
-# Install for development:
-git clone https://github.com/guillaumekln/faster-whisper.git
-pip install -e faster-whisper/
 ```
 
 ### GPU support
