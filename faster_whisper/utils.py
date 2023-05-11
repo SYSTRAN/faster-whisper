@@ -62,14 +62,6 @@ def download_model(
         )
 
     repo_id = "guillaumekln/faster-whisper-%s" % size
-    kwargs = {}
-    kwargs["local_files_only"] = local_files_only
-    if output_dir is not None:
-        kwargs["local_dir"] = output_dir
-        kwargs["local_dir_use_symlinks"] = False
-
-    if cache_dir is not None:
-        kwargs["cache_dir"] = cache_dir
 
     allow_patterns = [
         "config.json",
@@ -77,8 +69,19 @@ def download_model(
         "tokenizer.json",
         "vocabulary.txt",
     ]
-    kwargs["allow_patterns"] = allow_patterns
-    kwargs["tqdm_class"] = disabled_tqdm
+
+    kwargs = {
+        "local_files_only": local_files_only,
+        "allow_patterns": allow_patterns,
+        "tqdm_class": disabled_tqdm,
+    }
+
+    if output_dir is not None:
+        kwargs["local_dir"] = output_dir
+        kwargs["local_dir_use_symlinks"] = False
+
+    if cache_dir is not None:
+        kwargs["cache_dir"] = cache_dir
 
     try:
         return huggingface_hub.snapshot_download(
