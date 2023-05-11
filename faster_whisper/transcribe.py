@@ -763,6 +763,8 @@ class WhisperModel:
             text_tokens + [tokenizer.eot]
         )
         word_boundaries = np.pad(np.cumsum([len(t) for t in word_tokens[:-1]]), (1, 0))
+        if len(word_boundaries) <= 1:
+            return []
 
         jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
         jump_times = time_indices[jumps] / self.tokens_per_second
