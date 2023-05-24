@@ -40,19 +40,22 @@ class VadOptions(NamedTuple):
 
 
 def get_speech_timestamps(
-    audio: np.ndarray, vad_options: Optional[VadOptions] = None
+    audio: np.ndarray,
+    vad_options: Optional[VadOptions] = None,
+    **kwargs,
 ) -> List[dict]:
     """This method is used for splitting long audios into speech chunks using silero VAD.
 
     Args:
       audio: One dimensional float array.
       vad_options: Options for VAD processing.
+      kwargs: VAD options passed as keyword arguments for backward compatibility.
 
     Returns:
       List of dicts containing begin and end samples of each speech chunk.
     """
     if vad_options is None:
-        vad_options = VadOptions()
+        vad_options = VadOptions(**kwargs)
 
     threshold = vad_options.threshold
     min_speech_duration_ms = vad_options.min_speech_duration_ms
