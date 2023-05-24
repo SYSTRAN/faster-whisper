@@ -2,4 +2,4 @@ av==10.*
 ctranslate2>=3.10,<4
 huggingface_hub>=0.13
 tokenizers==0.13.*
-onnxruntime==1.14.* ; python_version < "3.11"
+onnxruntime>=1.14,<2
