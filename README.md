@@ -109,7 +109,11 @@ segments, _ = model.transcribe("audio.mp3", vad_filter=True)
 The default behavior is conservative and only removes silence longer than 2 seconds. See the available VAD parameters and default values in the [source code](https://github.com/guillaumekln/faster-whisper/blob/master/faster_whisper/vad.py). They can be customized with the dictionary argument `vad_parameters`:
 
 ```python
-segments, _ = model.transcribe("audio.mp3", vad_filter=True, vad_parameters=dict(min_silence_duration_ms=500))
+segments, _ = model.transcribe(
+    "audio.mp3",
+    vad_filter=True,
+    vad_parameters=dict(min_silence_duration_ms=500),
+)
 ```
 
 ### Logging
