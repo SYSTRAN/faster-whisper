@@ -11,6 +11,14 @@ def get_long_description():
         return readme_file.read()
 
 
+def get_project_version():
+    version_path = os.path.join(base_dir, "faster_whisper", "version.py")
+    version = {}
+    with open(version_path, encoding="utf-8") as fp:
+        exec(fp.read(), version)
+    return version["__version__"]
+
+
 def get_requirements(path):
     with open(path, encoding="utf-8") as requirements:
         return [requirement.strip() for requirement in requirements]
@@ -23,7 +31,7 @@ conversion_requires = get_requirements(
 
 setup(
     name="faster-whisper",
-    version="0.5.1",
+    version=get_project_version(),
     license="MIT",
     description="Faster Whisper transcription with CTranslate2",
     long_description=get_long_description(),
