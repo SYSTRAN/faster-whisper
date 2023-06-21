@@ -412,7 +412,7 @@ class WhisperModel:
             if encoder_output is None:
                 encoder_output = self.encode(segment)
 
-            if options.multilingual and seek != 0: # language is already detected for first segment
+            if options.multilingual: # perform lang detection to update task based on output language
                 results = self.model.detect_language(encoder_output)
                 language_token, language_probability = results[0][0]
                 language = language_token[2:-2]
@@ -427,8 +427,6 @@ class WhisperModel:
                     task=task,
                     language=language,
                     )
-                #print(language)
-                #print(task)
 
             prompt = self.get_prompt(
                 tokenizer,
