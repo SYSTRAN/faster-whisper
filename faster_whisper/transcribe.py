@@ -362,12 +362,12 @@ class WhisperModel:
         prompt_reset_since = 0
 
         if options.initial_prompt is not None:
-            if isinstance(options.initial_prompt, Iterable):
-                all_tokens.extend(options.initial_prompt)
-            else:
+            if isinstance(options.initial_prompt, str):
                 initial_prompt = " " + options.initial_prompt.strip()
                 initial_prompt_tokens = tokenizer.encode(initial_prompt)
                 all_tokens.extend(initial_prompt_tokens)
+            else:
+                all_tokens.extend(options.initial_prompt)
 
         while seek < content_frames:
             time_offset = seek * self.feature_extractor.time_per_frame
