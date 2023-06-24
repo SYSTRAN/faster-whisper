@@ -52,10 +52,6 @@ pip install --force-reinstall "faster-whisper @ https://github.com/guillaumekln/
 
 # Install a specific commit:
 pip install --force-reinstall "faster-whisper @ https://github.com/guillaumekln/faster-whisper/archive/a4f1cc8f11433e454c3934442b5e1a4ed5e865c3.tar.gz"
-
-# Install for development:
-git clone https://github.com/guillaumekln/faster-whisper.git
-pip install -e faster-whisper/
 ```
 
 ### GPU support
@@ -63,8 +59,6 @@ pip install -e faster-whisper/
 GPU execution requires the NVIDIA libraries cuBLAS 11.x and cuDNN 8.x to be installed on the system. Please refer to the [CTranslate2 documentation](https://opennmt.net/CTranslate2/installation.html).
 
 ## Usage
-
-### Library
 
 ```python
 from faster_whisper import WhisperModel
@@ -94,7 +88,7 @@ segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
 
-#### Word-level timestamps
+### Word-level timestamps
 
 ```python
 segments, _ = model.transcribe("audio.mp3", word_timestamps=True)
@@ -104,7 +98,7 @@ for segment in segments:
         print("[%.2fs -> %.2fs] %s" % (word.start, word.end, word.word))
 ```
 
-#### VAD filter
+### VAD filter
 
 The library integrates the [Silero VAD](https://github.com/snakers4/silero-vad) model to filter out parts of the audio without speech:
 
@@ -112,19 +106,40 @@ The library integrates the [Silero VAD](https://github.com/snakers4/silero-vad) 
 segments, _ = model.transcribe("audio.mp3", vad_filter=True)
 ```
 
-The default behavior is conservative and only removes silence longer than 2 seconds. See the available VAD parameters and default values in the function [`get_speech_timestamps`](https://github.com/guillaumekln/faster-whisper/blob/master/faster_whisper/vad.py). They can be customized with the dictionary argument `vad_parameters`:
+The default behavior is conservative and only removes silence longer than 2 seconds. See the available VAD parameters and default values in the [source code](https://github.com/guillaumekln/faster-whisper/blob/master/faster_whisper/vad.py). They can be customized with the dictionary argument `vad_parameters`:
 
 ```python
-segments, _ = model.transcribe("audio.mp3", vad_filter=True, vad_parameters=dict(min_silence_duration_ms=500))
+segments, _ = model.transcribe(
+    "audio.mp3",
+    vad_filter=True,
+    vad_parameters=dict(min_silence_duration_ms=500),
+)
 ```
 
-#### Going further
+### Logging
+
+The library logging level can be configured like this:
+
+```python
+import logging
+
+logging.basicConfig()
+logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
+```
+
+### Going further
 
 See more model and transcription options in the [`WhisperModel`](https://github.com/guillaumekln/faster-whisper/blob/master/faster_whisper/transcribe.py) class implementation.
 
-### CLI
+## Community integrations
 
-You can use [jordimas/whisper-ctranslate2](https://github.com/jordimas/whisper-ctranslate2) to access `faster-whisper` through a CLI interface similar to what is offered by Whisper.
+Here is a non exhaustive list of open-source projects using faster-whisper. Feel free to add your project to the list!
+
+* [whisper-ctranslate2](https://github.com/Softcatala/whisper-ctranslate2) is a command line client based on faster-whisper and compatible with the original client from openai/whisper.
+* [whisper-diarize](https://github.com/MahmoudAshraf97/whisper-diarization) is a speaker diarization tool that is based on faster-whisper and NVIDIA NeMo.
+* [whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win) contains the portable ready to run binaries of faster-whisper for Windows.
+* [asr-sd-pipeline](https://github.com/hedrergudene/asr-sd-pipeline) provides a scalable, modular, end to end multi-speaker speech to text solution implemented using AzureML pipelines.
+* [Open-Lyrics](https://github.com/zh-plus/Open-Lyrics) is a Python library that transcribes voice files using faster-whisper, and translates/polishes the resulting text into `.lrc` files in the desired language using OpenAI-GPT.
 
 ## Model conversion
 

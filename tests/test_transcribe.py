@@ -6,10 +6,17 @@ from faster_whisper import WhisperModel, decode_audio
 def test_transcribe(jfk_path):
     model = WhisperModel("tiny")
     segments, info = model.transcribe(jfk_path, word_timestamps=True)
+    assert info.all_language_probs is not None
 
     assert info.language == "en"
     assert info.language_probability > 0.9
     assert info.duration == 11
+
+    # Get top language info from all results, which should match the
+    # already existing metadata
+    top_lang, top_lang_score = info.all_language_probs[0]
+    assert info.language == top_lang
+    assert abs(info.language_probability - top_lang_score) < 1e-16
 
     segments = list(segments)
 
@@ -29,10 +36,10 @@ def test_transcribe(jfk_path):
 
 def test_vad(jfk_path):
     model = WhisperModel("tiny")
-    segments, _ = model.transcribe(
+    segments, info = model.transcribe(
         jfk_path,
         vad_filter=True,
-        vad_parameters=dict(min_silence_duration_ms=500),
+        vad_parameters=dict(min_silence_duration_ms=500, speech_pad_ms=200),
     )
     segments = list(segments)
 
@@ -46,6 +53,9 @@ def test_vad(jfk_path):
 
     assert 0 < segment.start < 1
     assert 10 < segment.end < 11
+
+    assert info.vad_options.min_silence_duration_ms == 500
+    assert info.vad_options.speech_pad_ms == 200
 
 
 def test_stereo_diarization(data_dir):

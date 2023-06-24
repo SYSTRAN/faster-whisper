@@ -4,6 +4,7 @@ import os
 from typing import Optional
 
 import huggingface_hub
+import requests
 
 from tqdm.auto import tqdm
 
@@ -31,7 +32,12 @@ def get_logger():
     return logging.getLogger("faster_whisper")
 
 
-def download_model(size: str, output_dir: Optional[str] = None):
+def download_model(
+    size: str,
+    output_dir: Optional[str] = None,
+    local_files_only: bool = False,
+    cache_dir: Optional[str] = None,
+):
     """Downloads a CTranslate2 Whisper model from the Hugging Face Hub.
 
     The model is downloaded from https://huggingface.co/guillaumekln.
@@ -40,7 +46,10 @@ def download_model(size: str, output_dir: Optional[str] = None):
       size: Size of the model to download (tiny, tiny.en, base, base.en, small, small.en,
         medium, medium.en, large-v1, or large-v2).
       output_dir: Directory where the model should be saved. If not set, the model is saved in
-        the standard Hugging Face cache directory.
+        the cache directory.
+      local_files_only:  If True, avoid downloading the file and return the path to the local
+        cached file if it exists.
+      cache_dir: Path to the folder where cached files are stored.
 
     Returns:
       The path to the downloaded model.
@@ -54,25 +63,45 @@ def download_model(size: str, output_dir: Optional[str] = None):
         )
 
     repo_id = "guillaumekln/faster-whisper-%s" % size
-    kwargs = {}
-
-    if output_dir is not None:
-        kwargs["local_dir"] = output_dir
-        kwargs["local_dir_use_symlinks"] = False
 
     allow_patterns = [
         "config.json",
         "model.bin",
         "tokenizer.json",
-        "vocabulary.txt",
+        "vocabulary.*",
     ]
 
-    return huggingface_hub.snapshot_download(
-        repo_id,
-        allow_patterns=allow_patterns,
-        tqdm_class=disabled_tqdm,
-        **kwargs,
-    )
+    kwargs = {
+        "local_files_only": local_files_only,
+        "allow_patterns": allow_patterns,
+        "tqdm_class": disabled_tqdm,
+    }
+
+    if output_dir is not None:
+        kwargs["local_dir"] = output_dir
+        kwargs["local_dir_use_symlinks"] = False
+
+    if cache_dir is not None:
+        kwargs["cache_dir"] = cache_dir
+
+    try:
+        return huggingface_hub.snapshot_download(repo_id, **kwargs)
+    except (
+        huggingface_hub.utils.HfHubHTTPError,
+        requests.exceptions.ConnectionError,
+    ) as exception:
+        logger = get_logger()
+        logger.warning(
+            "An error occured while synchronizing the model %s from the Hugging Face Hub:\n%s",
+            repo_id,
+            exception,
+        )
+        logger.warning(
+            "Trying to load the model directly from the local cache, if it exists."
+        )
+
+        kwargs["local_files_only"] = True
+        return huggingface_hub.snapshot_download(repo_id, **kwargs)
 
 
 def format_timestamp(

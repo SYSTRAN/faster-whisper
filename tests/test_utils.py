@@ -15,3 +15,9 @@ def test_download_model(tmpdir):
     for filename in os.listdir(model_dir):
         path = os.path.join(model_dir, filename)
         assert not os.path.islink(path)
+
+
+def test_download_model_in_cache(tmpdir):
+    cache_dir = str(tmpdir.join("model"))
+    download_model("tiny", cache_dir=cache_dir)
+    assert os.path.isdir(cache_dir)
