@@ -246,6 +246,7 @@ class WhisperModel:
             - a generator over transcribed segments
             - an instance of TranscriptionInfo
         """
+        
         sampling_rate = self.feature_extractor.sampling_rate
 
         if not isinstance(audio, np.ndarray):
@@ -257,6 +258,7 @@ class WhisperModel:
             "Processing audio with duration %s", format_timestamp(duration)
         )
 
+        #setting vad chunks if enabled
         if vad_filter:
             if vad_parameters is None:
                 vad_parameters = VadOptions()
@@ -291,12 +293,8 @@ class WhisperModel:
         encoder_output = None
         all_language_probs = None
 
-        if not multilingual:
-            if output_language is not None:
-                self.logger.info(
-                "No need to set the output language for mono-lingual videos. Ignoring the parameter..."
-                )
-        else:
+        #setting output_language for multilingual videos
+        if multilingual:
             if output_language is None:
                 output_language = "en"
             elif output_language not in ["en","hybrid"]:
@@ -304,6 +302,7 @@ class WhisperModel:
                 self.logger.info(
                 "Output language needs to be one of 'en'/'hybrid'. Setting to default language:'en'"
                 )
+        #detecting the language if not provided
         if language is None:
             if not self.model.is_multilingual:
                 language = "en"
