@@ -45,8 +45,8 @@ def download_model(
 
     Args:
       size_or_id: Size of the model to download (tiny, tiny.en, base, base.en, small, small.en,
-        medium, medium.en, large-v1, or large-v2), or CTranslate-converted model ID
-        from Huggingface (e.g. guillaumekln/faster-whisper-large-v2).
+        medium, medium.en, large-v1, or large-v2), or a CTranslate2-converted model ID
+        from the Hugging Face Hub (e.g. guillaumekln/faster-whisper-large-v2).
       output_dir: Directory where the model should be saved. If not set, the model is saved in
         the cache directory.
       local_files_only:  If True, avoid downloading the file and return the path to the local
