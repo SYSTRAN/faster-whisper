@@ -161,6 +161,18 @@ ct2-transformers-converter --model openai/whisper-large-v2 --output_dir whisper-
 
 Models can also be converted from the code. See the [conversion API](https://opennmt.net/CTranslate2/python/ctranslate2.converters.TransformersConverter.html).
 
+### Load a converted model
+
+1. Directly load the model from a local directory:
+```python
+model = faster_whisper.WhisperModel('whisper-large-v2-ct2')
+```
+
+2. [Upload your model to the Hugging Face Hub](https://huggingface.co/docs/transformers/model_sharing#upload-with-the-web-interface) and load it from its name:
+```python
+model = faster_whisper.WhisperModel('username/whisper-large-v2-ct2')
+```
+
 ## Comparing performance against other implementations
 
 If you are comparing the performance against other Whisper implementations, you should make sure to run the comparison with similar settings. In particular:

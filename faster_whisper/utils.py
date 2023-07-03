@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 
 from typing import Optional
 
@@ -33,7 +34,7 @@ def get_logger():
 
 
 def download_model(
-    size: str,
+    size_or_id: str,
     output_dir: Optional[str] = None,
     local_files_only: bool = False,
     cache_dir: Optional[str] = None,
@@ -43,8 +44,9 @@ def download_model(
     The model is downloaded from https://huggingface.co/guillaumekln.
 
     Args:
-      size: Size of the model to download (tiny, tiny.en, base, base.en, small, small.en,
-        medium, medium.en, large-v1, or large-v2).
+      size_or_id: Size of the model to download (tiny, tiny.en, base, base.en, small, small.en,
+        medium, medium.en, large-v1, or large-v2), or a CTranslate2-converted model ID
+        from the Hugging Face Hub (e.g. guillaumekln/faster-whisper-large-v2).
       output_dir: Directory where the model should be saved. If not set, the model is saved in
         the cache directory.
       local_files_only:  If True, avoid downloading the file and return the path to the local
@@ -57,12 +59,16 @@ def download_model(
     Raises:
       ValueError: if the model size is invalid.
     """
-    if size not in _MODELS:
-        raise ValueError(
-            "Invalid model size '%s', expected one of: %s" % (size, ", ".join(_MODELS))
-        )
+    if re.match(r".*/.*", size_or_id):
+        repo_id = size_or_id
+    else:
+        if size_or_id not in _MODELS:
+            raise ValueError(
+                "Invalid model size '%s', expected one of: %s"
+                % (size_or_id, ", ".join(_MODELS))
+            )
 
-    repo_id = "guillaumekln/faster-whisper-%s" % size
+        repo_id = "guillaumekln/faster-whisper-%s" % size_or_id
 
     allow_patterns = [
         "config.json",
