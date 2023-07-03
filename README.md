@@ -72,6 +72,8 @@ model = WhisperModel(model_size, device="cuda", compute_type="float16")
 # model = WhisperModel(model_size, device="cuda", compute_type="int8_float16")
 # or run on CPU with INT8
 # model = WhisperModel(model_size, device="cpu", compute_type="int8")
+# or use available models (https://huggingface.co/models?search=faster-whisper) from Huggingface
+# model = WhisperModel('zh-plus/faster-whisper-large-v2-japanese-5k-steps')
 
 segments, info = model.transcribe("audio.mp3", beam_size=5)
 
@@ -160,6 +162,18 @@ ct2-transformers-converter --model openai/whisper-large-v2 --output_dir whisper-
 * If the option `--copy_files tokenizer.json` is not used, the tokenizer configuration is automatically downloaded when the model is loaded later.
 
 Models can also be converted from the code. See the [conversion API](https://opennmt.net/CTranslate2/python/ctranslate2.converters.TransformersConverter.html).
+
+### Use converted model
+
+1. Directly use model from local directory:
+```python
+model = faster_whisper.WhisperModel('whisper-large-v2-ct2')
+```
+
+2. [Upload your model to Huggingface](https://huggingface.co/docs/transformers/model_sharing#upload-with-the-web-interface) and use online:
+```python
+model = faster_whisper.WhisperModel('username/whisper-large-v2-ct2')
+```
 
 ## Comparing performance against other implementations
 
