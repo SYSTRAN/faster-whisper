@@ -59,12 +59,13 @@ def download_model(
     Raises:
       ValueError: if the model size is invalid.
     """
-    if re.match(r'.*/.*', size_or_id):
+    if re.match(r".*/.*", size_or_id):
         repo_id = size_or_id
     else:
         if size_or_id not in _MODELS:
             raise ValueError(
-                "Invalid model size '%s', expected one of: %s" % (size_or_id, ", ".join(_MODELS))
+                "Invalid model size '%s', expected one of: %s"
+                % (size_or_id, ", ".join(_MODELS))
             )
 
         repo_id = "guillaumekln/faster-whisper-%s" % size_or_id
