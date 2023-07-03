@@ -72,8 +72,6 @@ model = WhisperModel(model_size, device="cuda", compute_type="float16")
 # model = WhisperModel(model_size, device="cuda", compute_type="int8_float16")
 # or run on CPU with INT8
 # model = WhisperModel(model_size, device="cpu", compute_type="int8")
-# or use available models (https://huggingface.co/models?search=faster-whisper) from Huggingface
-# model = WhisperModel('zh-plus/faster-whisper-large-v2-japanese-5k-steps')
 
 segments, info = model.transcribe("audio.mp3", beam_size=5)
 
