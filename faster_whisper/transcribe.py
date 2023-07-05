@@ -723,7 +723,8 @@ class WhisperModel:
             median_duration = np.median(word_durations)
             max_duration = median_duration * 2
             sentence_end_marks = ".。!！?？"
-            # ensure words at sentence boundaries are not longer than twice the median word duration.
+            # ensure words at sentence boundaries
+            # are not longer than twice the median word duration.
             for i in range(1, len(alignment)):
                 if alignment[i]["end"] - alignment[i]["start"] > max_duration:
                     if alignment[i]["word"] in sentence_end_marks:
