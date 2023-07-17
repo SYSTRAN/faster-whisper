@@ -586,6 +586,7 @@ class WhisperModel:
         max_initial_timestamp_index = int(
             round(options.max_initial_timestamp / self.time_precision)
         )
+        results = {}
 
         for temperature in options.temperatures:
             if temperature > 0:
@@ -625,6 +626,13 @@ class WhisperModel:
             text = tokenizer.decode(tokens).strip()
             compression_ratio = get_compression_ratio(text)
 
+            results[temperature] = (
+                result,
+                avg_logprob,
+                final_temperature,
+                compression_ratio,
+            )
+
             needs_fallback = False
 
             if (
@@ -661,6 +669,9 @@ class WhisperModel:
 
             if not needs_fallback:
                 break
+        else:
+            # all failed
+            return max(results.values(), key=lambda r: r[1])
 
         return result, avg_logprob, final_temperature, compression_ratio
 
