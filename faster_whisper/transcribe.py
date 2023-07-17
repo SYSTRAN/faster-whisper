@@ -671,7 +671,9 @@ class WhisperModel:
                 break
         else:
             # all failed
-            return max(results.values(), key=lambda r: r[1])
+            result, avg_logprob, final_temperature, compression_ratio = max(
+                results.values(), key=lambda r: r[1]
+            )
 
         return result, avg_logprob, final_temperature, compression_ratio
 
