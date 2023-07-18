@@ -722,8 +722,6 @@ class WhisperModel:
         # hack: truncate long words at sentence boundaries.
         # a better segmentation algorithm based on VAD should be able to replace this.
         if len(word_durations) > 0:
-            median_duration = np.median(word_durations)
-            max_duration = median_duration * 2
             sentence_end_marks = ".。!！?？"
             # ensure words at sentence boundaries
             # are not longer than twice the median word duration.
