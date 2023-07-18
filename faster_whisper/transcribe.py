@@ -686,6 +686,8 @@ class WhisperModel:
             prefix_tokens = tokenizer.encode(" " + prefix.strip())
             if len(prefix_tokens) >= self.max_length // 2:
                 prefix_tokens = prefix_tokens[: self.max_length // 2 - 1]
+            if not without_timestamps:
+                prompt.append(tokenizer.timestamp_begin)
             prompt.extend(prefix_tokens)
 
         return prompt
