@@ -165,12 +165,12 @@ Models can also be converted from the code. See the [conversion API](https://ope
 
 1. Directly load the model from a local directory:
 ```python
-model = faster_whisper.WhisperModel('whisper-large-v2-ct2')
+model = faster_whisper.WhisperModel("whisper-large-v2-ct2")
 ```
 
 2. [Upload your model to the Hugging Face Hub](https://huggingface.co/docs/transformers/model_sharing#upload-with-the-web-interface) and load it from its name:
 ```python
-model = faster_whisper.WhisperModel('username/whisper-large-v2-ct2')
+model = faster_whisper.WhisperModel("username/whisper-large-v2-ct2")
 ```
 
 ## Comparing performance against other implementations
