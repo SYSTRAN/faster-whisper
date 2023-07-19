@@ -671,9 +671,30 @@ class WhisperModel:
                 break
         else:
             # all failed
-            result, avg_logprob, final_temperature, compression_ratio = max(
-                results.values(), key=lambda r: r[1]
-            )
+            filtered_results = {}
+            avg_logprob_index = 1
+            compression_ratio_index = 3
+
+            # filter out results with compression ratio below compression_ratio_threshold
+            for key, result_data in results.items():
+                if (
+                    options.no_speech_threshold is not None
+                    and result_data[compression_ratio_index]
+                    < options.compression_ratio_threshold
+                ):
+                    filtered_results[key] = result_data
+
+            # select the optimal result based on the maximum avg_logprob
+            if filtered_results:
+                result, avg_logprob, final_temperature, compression_ratio = max(
+                    filtered_results.values(),
+                    key=lambda result_data: result_data[avg_logprob_index],
+                )
+            else:
+                result, avg_logprob, final_temperature, compression_ratio = max(
+                    results.values(),
+                    key=lambda result_data: result_data[avg_logprob_index],
+                )
 
         return result, avg_logprob, final_temperature, compression_ratio
 
