@@ -578,17 +578,13 @@ class WhisperModel:
         tokenizer: Tokenizer,
         options: TranscriptionOptions,
     ) -> Tuple[ctranslate2.models.WhisperGenerationResult, float, float, float]:
-        result = None
-        avg_logprob = None
-        final_temperature = None
-        compression_ratio = None
+        decode_result = None
+        all_results = []
+        below_cr_threshold_results = []
 
         max_initial_timestamp_index = int(
             round(options.max_initial_timestamp / self.time_precision)
         )
-
-        all_results = []
-        below_cr_threshold_results = []
 
         for temperature in options.temperatures:
             if temperature > 0:
@@ -673,11 +669,10 @@ class WhisperModel:
             if not needs_fallback:
                 break
         else:
-            # all failed, select the result with the highest log prob
-            if below_cr_threshold_results:
-                decode_result = max(below_cr_threshold_results, key=lambda x: x[3])
-            else:
-                decode_result = max(all_results, key=lambda x: x[3])
+            # all failed, select the result with the highest average log probability
+            decode_result = max(
+                below_cr_threshold_results or all_results, key=lambda x: x[1]
+            )
 
         return decode_result
 
