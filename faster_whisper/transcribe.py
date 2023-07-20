@@ -600,7 +600,6 @@ class WhisperModel:
                     "patience": options.patience,
                 }
 
-            final_temperature = temperature
             result = self.model.generate(
                 encoder_output,
                 [prompt],
@@ -627,7 +626,7 @@ class WhisperModel:
             decode_result = (
                 result,
                 avg_logprob,
-                final_temperature,
+                temperature,
                 compression_ratio,
             )
             all_results.append(decode_result)
