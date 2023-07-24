@@ -422,6 +422,7 @@ class WhisperModel:
 
                     # fast-forward to the next segment boundary
                     seek += segment_size
+                    encoder_output = None
                     continue
 
             tokens = result.sequences_ids[0]
