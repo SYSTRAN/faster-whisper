@@ -41,14 +41,14 @@ class Segment(NamedTuple):
     no_speech_prob: float
     words: Optional[List[Word]]
 
-
+#Added additional parameters for multilingual videos and fixes below
 class TranscriptionOptions(NamedTuple):
     beam_size: int
     best_of: int
     patience: float
     length_penalty: float
     log_prob_threshold: Optional[float]
-    log_prob_low_threshold: Optional[float]
+    log_prob_low_threshold: Optional[float] #New parameter
     no_speech_threshold: Optional[float]
     compression_ratio_threshold: Optional[float]
     condition_on_previous_text: bool
@@ -62,8 +62,8 @@ class TranscriptionOptions(NamedTuple):
     word_timestamps: bool
     prepend_punctuations: str
     append_punctuations: str
-    multilingual: bool
-    output_language: str
+    multilingual: bool #New parameter
+    output_language: str #New parameter
 
 class TranscriptionInfo(NamedTuple):
     language: str
@@ -122,6 +122,7 @@ class WhisperModel:
                 cache_dir=download_root,
             )
 
+        #set the random seed to make sure consistency across runs
         ctranslate2.set_random_seed(42)
         self.model = ctranslate2.models.Whisper(
             model_path,
@@ -411,7 +412,9 @@ class WhisperModel:
             if encoder_output is None:
                 encoder_output = self.encode(segment)
 
-            if options.multilingual: # perform lang detection to update task based on output language
+            # Perform language detection at every segment to update task based on output language, 
+            # if the language is english, task is transcribe, else the task is translate to english (default settings) or transcribe if 'output_language' is 'hybrid'
+            if options.multilingual: 
                 results = self.model.detect_language(encoder_output)
                 language_token, language_probability = results[0][0]
                 language = language_token[2:-2]
@@ -420,13 +423,14 @@ class WhisperModel:
                 else:
                     task = "transcribe"
                 
+                #Update tokenizer based on task and language
                 tokenizer = Tokenizer(
                     self.hf_tokenizer,
                     self.model.is_multilingual,
                     task=task,
                     language=language,
                     )
-
+            #Update prompt based on task and language
             prompt = self.get_prompt(
                 tokenizer,
                 previous_tokens,
@@ -434,6 +438,7 @@ class WhisperModel:
                 prefix=options.prefix if seek == 0 else None,
             )
 
+            #now generate predictions for the 30sec segment video 
             (
                 result,
                 avg_logprob,
@@ -452,6 +457,8 @@ class WhisperModel:
                     # don't skip if the logprob is high enough, despite the no_speech_prob
                     should_skip = False
                 
+                # Added the option to skip a segment if its average log probability is below the threshold value set at -2. 
+                # log_prob_threshold is set to a larger value (-1.0) compared to this.
                 if (
                     # skip if the logprob is very low, despite no_speech_prob being low (ex: Too ambiguous outputs for input music and noise)
                     avg_logprob < options.log_prob_low_threshold 

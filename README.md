@@ -6,6 +6,14 @@
 
 This implementation is up to 4 times faster than [openai/whisper](https://github.com/openai/whisper) for the same accuracy while using less memory. The efficiency can be further improved with 8-bit quantization on both CPU and GPU.
 
+Mobius faster-whisper builds on top of faster-whisper and support additional functionalities:
+
+- Handling multilingual videos.
+- Seed fixing for consistency across runs.
+- Use `log_prob_low_threshold` to skip ambiguous segments from transcription.
+- Merged some of the later commits of faster-whisper.
+- Added languages in the tokenizer for SDK output.
+
 ## Benchmark
 
 For reference, here's the time and memory usage that are required to transcribe [**13 minutes**](https://www.youtube.com/watch?v=0u7tTptBo9I) of audio using different implementations:

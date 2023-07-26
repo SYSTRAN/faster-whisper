@@ -162,6 +162,7 @@ class Tokenizer:
 
         return words, word_tokens
 
+#Added languages for returning the actual names in the SDK
 LANGUAGES = {
     "en": "english",
     "zh": "chinese",
