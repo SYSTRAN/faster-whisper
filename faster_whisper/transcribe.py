@@ -900,10 +900,9 @@ def restore_speech_timestamps(
             )
 
         else:
-            segment = segment._replace(
-                start=ts_map.get_original_time(segment.start),
-                end=ts_map.get_original_time(segment.end),
-            )
+            seg_start, seg_end = ts_map.get_original_segment_time(
+                segment.start, segment.end)
+            segment = segment._replace(start=seg_start, end=seg_end)
 
         yield segment
 

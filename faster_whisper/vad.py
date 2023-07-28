@@ -233,6 +233,33 @@ class SpeechTimestampsMap:
             len(self.chunk_end_sample) - 1,
         )
 
+    def get_original_segment_time(
+        self,
+        start_time: float,
+        end_time: float,
+    ) -> float:
+        start_chunk_index = self.get_chunk_index(start_time)
+        end_chunk_index = self.get_chunk_index(end_time)
+        if start_chunk_index != end_chunk_index:
+            span_chunk_sample = self.chunk_end_sample[start_chunk_index]
+            start_sample = int(start_time * self.sampling_rate)
+            end_sample = int(end_time * self.sampling_rate)
+            if ((span_chunk_sample - start_sample)
+                > (end_sample - span_chunk_sample)
+            ):
+                end_chunk_index = start_chunk_index
+            else:
+                start_chunk_index = end_chunk_index
+        original_start_time = self.get_original_time(
+            start_time,
+            chunk_index=start_chunk_index,
+        )
+        original_end_time = self.get_original_time(
+            end_time,
+            chunk_index=end_chunk_index,
+        )
+        return (original_start_time, original_end_time)
+
 
 @functools.lru_cache
 def get_vad_model():
