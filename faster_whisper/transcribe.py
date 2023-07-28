@@ -81,7 +81,7 @@ class WhisperModel:
         device: str = "auto",
         device_index: Union[int, List[int]] = 0,
         compute_type: str = "default",
-        cpu_threads: int = 16,
+        cpu_threads: int = 0,
         num_workers: int = 1,
         download_root: Optional[str] = None,
         local_files_only: bool = False,
@@ -299,10 +299,8 @@ class WhisperModel:
             if output_language is None:
                 output_language = "en"
             elif output_language not in ["en","hybrid"]:
-                output_language = "en"
-                self.logger.info(
-                "Output language needs to be one of 'en'/'hybrid'. Setting to default language:'en'"
-                )
+                raise ValueError("Output language needs to be one of 'en'/'hybrid'.")
+
         #detecting the language if not provided
         if language is None:
             if not self.model.is_multilingual:
@@ -457,10 +455,8 @@ class WhisperModel:
                     # don't skip if the logprob is high enough, despite the no_speech_prob
                     should_skip = False
                 
-                # Added the option to skip a segment if its average log probability is below the threshold value set at -2. 
-                # log_prob_threshold is set to a larger value (-1.0) compared to this.
+                # Skip if the logprob is very low (below the threshold value), despite no_speech_prob being low (ex: Too ambiguous outputs for input music and noise)
                 if (
-                    # skip if the logprob is very low, despite no_speech_prob being low (ex: Too ambiguous outputs for input music and noise)
                     avg_logprob < options.log_prob_low_threshold 
                 ):
                     should_skip = True
@@ -857,7 +853,11 @@ class WhisperModel:
             max_duration = median_duration * 2
             sentence_end_marks = ".。!！?？"
             # ensure words at sentence boundaries are not longer than twice the median
-            # word duration.
+            # word duration. 
+
+            # This is because the words on the boundaries can be inappropriately long because dtw alignment
+            # tries to match final word boundary to segment boundary
+            
             for i in range(1, len(start_times)):
                 if end_times[i] - start_times[i] > max_duration:
                     if words[i] in sentence_end_marks:
