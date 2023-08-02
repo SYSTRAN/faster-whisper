@@ -532,6 +532,40 @@ class WhisperModel:
                     if seek_shift > 0:
                         seek = previous_seek + seek_shift
 
+            # low avg_logprob check
+            if (
+                options.log_prob_threshold is not None
+                and options.threshold_limit_ratio is not None
+                and avg_logprob
+                < options.log_prob_threshold * options.threshold_limit_ratio
+            ):
+                self.logger.debug(
+                    "Average log probability is too low (%f < %f * %f)",
+                    avg_logprob,
+                    options.log_prob_threshold,
+                    options.threshold_limit_ratio,
+                )
+
+                encoder_output = None
+                continue
+
+            # high compression ratio check
+            if (
+                options.compression_ratio_threshold is not None
+                and options.log_prob_threshold is not None
+                and compression_ratio
+                > options.compression_ratio_threshold * options.threshold_limit_ratio
+            ):
+                self.logger.debug(
+                    "Compression ratio is too high (%f > %f * %f)",
+                    compression_ratio,
+                    options.compression_ratio_threshold,
+                    options.threshold_limit_ratio,
+                )
+
+                encoder_output = None
+                continue
+
             encoder_output = None
 
             for segment in current_segments:
