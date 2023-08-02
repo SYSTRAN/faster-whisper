@@ -448,16 +448,6 @@ class WhisperModel:
 
             tokens = result.sequences_ids[0]
 
-            if options.token_repeat_limit > 0:
-                counts = consecutive_repeat_sizes(tokens)
-                for k, v in counts.items():
-                    if v > options.token_repeat_limit:
-                        self.logger.debug(f"Many token repeats, likely hallucination ({v} > {options.token_repeat_limit})")
-                        # fast-forward to the next segment boundary
-                        seek += min(4, segment_size // 10)
-                        encoder_output = None
-                        continue
-
             previous_seek = seek
             current_segments = []
 
@@ -664,6 +654,13 @@ class WhisperModel:
             all_results.append(decode_result)
 
             needs_fallback = False
+
+            if options.token_repeat_limit > 0:
+                counts = consecutive_repeat_sizes(tokens)
+                for k, v in counts.items():
+                    if v > options.token_repeat_limit:
+                        self.logger.debug(f"Fallback. Many token repeats, likely hallucination ({v} > {options.token_repeat_limit})")
+                        needs_fallback = True
 
             if options.compression_ratio_threshold is not None:
                 if compression_ratio > options.compression_ratio_threshold:
