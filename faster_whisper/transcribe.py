@@ -201,7 +201,7 @@ class WhisperModel:
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         vad_filter: bool = False,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
-        token_repeat_limit: int = 100,
+        token_repeat_limit: int = 0,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
@@ -447,15 +447,16 @@ class WhisperModel:
                     continue
 
             tokens = result.sequences_ids[0]
-            counts = consecutive_repeat_sizes(tokens)
-            
-            for k, v in counts.items():
-                if v > options.token_repeat_limit:
-                    self.logger.debug(f"Many token repets, likely hallucination ({v} > {options.token_repeat_limit})")
-                    # fast-forward to the next segment boundary
-                    seek += min(4, segment_size // 10)
-                    encoder_output = None
-                    continue
+
+            if options.token_repeat_limit > 0:
+                counts = consecutive_repeat_sizes(tokens)
+                for k, v in counts.items():
+                    if v > options.token_repeat_limit:
+                        self.logger.debug(f"Many token repeats, likely hallucination ({v} > {options.token_repeat_limit})")
+                        # fast-forward to the next segment boundary
+                        seek += min(4, segment_size // 10)
+                        encoder_output = None
+                        continue
 
             previous_seek = seek
             current_segments = []
