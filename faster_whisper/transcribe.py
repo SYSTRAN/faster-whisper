@@ -247,7 +247,7 @@ class WhisperModel:
             without speech. This step is using the Silero VAD model
             https://github.com/snakers4/silero-vad.
           vad_parameters: Dictionary of Silero VAD parameters or VadOptions class (see available
-            parameters and default values in the class `VadOptions`).
+          token_repeat_limit: Predictions with token repeats (consecutive) over this, are failed
 
         Returns:
           A tuple with:
