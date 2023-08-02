@@ -50,6 +50,7 @@ class TranscriptionOptions(NamedTuple):
     log_prob_threshold: Optional[float]
     no_speech_threshold: Optional[float]
     compression_ratio_threshold: Optional[float]
+    threshold_limit_ratio: Optional[float]
     condition_on_previous_text: bool
     temperatures: List[float]
     initial_prompt: Optional[Union[str, Iterable[int]]]
@@ -170,6 +171,7 @@ class WhisperModel:
         compression_ratio_threshold: Optional[float] = 2.4,
         log_prob_threshold: Optional[float] = -1.0,
         no_speech_threshold: Optional[float] = 0.6,
+        threshold_limit_ratio: Optional[float] = None,
         condition_on_previous_text: bool = True,
         initial_prompt: Optional[Union[str, Iterable[int]]] = None,
         prefix: Optional[str] = None,
@@ -318,6 +320,7 @@ class WhisperModel:
             log_prob_threshold=log_prob_threshold,
             no_speech_threshold=no_speech_threshold,
             compression_ratio_threshold=compression_ratio_threshold,
+            threshold_limit_ratio=threshold_limit_ratio,
             condition_on_previous_text=condition_on_previous_text,
             temperatures=(
                 temperature if isinstance(temperature, (list, tuple)) else [temperature]
