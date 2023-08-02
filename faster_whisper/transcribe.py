@@ -20,6 +20,24 @@ from faster_whisper.vad import (
     get_speech_timestamps,
 )
 
+def consecutive_repeat_sizes(arr):
+    result = {}
+    current_num = None
+    current_count = 0
+
+    for num in arr:
+        if num == current_num:
+            current_count += 1
+        else:
+            if current_num is not None:
+                result[current_num] = max(result.get(current_num, 0), current_count)
+            current_num = num
+            current_count = 1
+
+    if current_num is not None:
+        result[current_num] = max(result.get(current_num, 0), current_count)
+
+    return result
 
 class Word(NamedTuple):
     start: float
@@ -61,6 +79,7 @@ class TranscriptionOptions(NamedTuple):
     word_timestamps: bool
     prepend_punctuations: str
     append_punctuations: str
+    token_repeat_limit: int
 
 
 class TranscriptionInfo(NamedTuple):
@@ -182,6 +201,7 @@ class WhisperModel:
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         vad_filter: bool = False,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
+        token_repeat_limit: int = 100,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
@@ -331,6 +351,7 @@ class WhisperModel:
             word_timestamps=word_timestamps,
             prepend_punctuations=prepend_punctuations,
             append_punctuations=append_punctuations,
+            token_repeat_limit=token_repeat_limit,
         )
 
         segments = self.generate_segments(features, tokenizer, options, encoder_output)
@@ -426,6 +447,15 @@ class WhisperModel:
                     continue
 
             tokens = result.sequences_ids[0]
+            counts = consecutive_repeat_sizes(tokens)
+            
+            for k, v in counts.items():
+                if v > options.token_repeat_limit:
+                    self.logger.debug(f"Many token repets, likely hallucination ({v} > {options.token_repeat_limit})")
+                    # fast-forward to the next segment boundary
+                    seek += min(4, segment_size // 10)
+                    encoder_output = None
+                    continue
 
             previous_seek = seek
             current_segments = []
