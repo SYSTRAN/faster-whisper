@@ -552,7 +552,7 @@ class WhisperModel:
             # high compression ratio check
             if (
                 options.compression_ratio_threshold is not None
-                and options.log_prob_threshold is not None
+                and options.threshold_limit_ratio is not None
                 and compression_ratio
                 > options.compression_ratio_threshold * options.threshold_limit_ratio
             ):
