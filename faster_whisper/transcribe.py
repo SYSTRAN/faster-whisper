@@ -20,6 +20,7 @@ from faster_whisper.vad import (
     get_speech_timestamps,
 )
 
+
 def consecutive_repeat_sizes(arr):
     result = {}
     current_num = None
@@ -38,6 +39,7 @@ def consecutive_repeat_sizes(arr):
         result[current_num] = max(result.get(current_num, 0), current_count)
 
     return result
+
 
 class Word(NamedTuple):
     start: float
@@ -659,7 +661,10 @@ class WhisperModel:
                 counts = consecutive_repeat_sizes(tokens)
                 for k, v in counts.items():
                     if v > options.token_repeat_limit:
-                        self.logger.debug(f"Fallback. Many token repeats, likely hallucination ({v} > {options.token_repeat_limit})")
+                        self.logger.debug(
+                            "Fallback. Many token repeats, likely hallucination"
+                            f"({v} > {options.token_repeat_limit})"
+                        )
                         needs_fallback = True
 
             if options.compression_ratio_threshold is not None:
