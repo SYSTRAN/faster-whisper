@@ -51,6 +51,7 @@ class TranscriptionOptions(NamedTuple):
     no_speech_threshold: Optional[float]
     compression_ratio_threshold: Optional[float]
     condition_on_previous_text: bool
+    clear_previous_text_on_temperature: float
     temperatures: List[float]
     initial_prompt: Optional[Union[str, Iterable[int]]]
     prefix: Optional[str]
@@ -171,6 +172,7 @@ class WhisperModel:
         log_prob_threshold: Optional[float] = -1.0,
         no_speech_threshold: Optional[float] = 0.6,
         condition_on_previous_text: bool = True,
+        clear_previous_text_on_temperature: float = 0.5,
         initial_prompt: Optional[Union[str, Iterable[int]]] = None,
         prefix: Optional[str] = None,
         suppress_blank: bool = True,
@@ -209,6 +211,8 @@ class WhisperModel:
             as a prompt for the next window; disabling may make the text inconsistent across
             windows, but the model becomes less prone to getting stuck in a failure loop,
             such as repetition looping or timestamps going out of sync.
+          clear_previous_text_on_temperature: If the temperature is above this value,
+            clear the previous text.
           initial_prompt: Optional text string or iterable of token ids to provide as a
             prompt for the first window.
           prefix: Optional text to provide as a prefix for the first window.
@@ -319,6 +323,7 @@ class WhisperModel:
             no_speech_threshold=no_speech_threshold,
             compression_ratio_threshold=compression_ratio_threshold,
             condition_on_previous_text=condition_on_previous_text,
+            clear_previous_text_on_temperature=clear_previous_text_on_temperature,
             temperatures=(
                 temperature if isinstance(temperature, (list, tuple)) else [temperature]
             ),
@@ -559,7 +564,10 @@ class WhisperModel:
                     ),
                 )
 
-            if not options.condition_on_previous_text or temperature > 0.5:
+            if (
+                not options.condition_on_previous_text
+                or temperature > options.clear_previous_text_on_temperature
+            ):
                 prompt_reset_since = len(all_tokens)
 
     def encode(self, features: np.ndarray) -> ctranslate2.StorageView:
