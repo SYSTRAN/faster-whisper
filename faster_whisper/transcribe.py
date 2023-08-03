@@ -211,6 +211,8 @@ class WhisperModel:
             as a prompt for the next window; disabling may make the text inconsistent across
             windows, but the model becomes less prone to getting stuck in a failure loop,
             such as repetition looping or timestamps going out of sync.
+          clear_previous_text_on_temperature: If the temperature is above this value,
+            clear the previous text.
           initial_prompt: Optional text string or iterable of token ids to provide as a
             prompt for the first window.
           prefix: Optional text to provide as a prefix for the first window.
