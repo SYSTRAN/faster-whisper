@@ -568,6 +568,13 @@ class WhisperModel:
                 not options.condition_on_previous_text
                 or temperature > options.prompt_reset_on_temperature
             ):
+                if options.condition_on_previous_text:
+                    self.logger.debug(
+                        "Reset prompt. prompt_reset_on_temperature threshold is met %f > %f",
+                        temperature,
+                        options.prompt_reset_on_temperature,
+                    )
+
                 prompt_reset_since = len(all_tokens)
 
     def encode(self, features: np.ndarray) -> ctranslate2.StorageView:
