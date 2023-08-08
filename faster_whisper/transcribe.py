@@ -620,6 +620,7 @@ class WhisperModel:
                 kwargs = {
                     "beam_size": 1,
                     "num_hypotheses": options.best_of,
+                    "repetition_penalty": 1.2,
                     "sampling_topk": 0,
                     "sampling_temperature": temperature,
                 }
