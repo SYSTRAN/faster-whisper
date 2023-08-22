@@ -376,9 +376,10 @@ class WhisperModel:
             if isinstance(options.initial_prompt, str):
                 initial_prompt = " " + options.initial_prompt.strip()
                 initial_prompt_tokens = tokenizer.encode(initial_prompt)
-                all_tokens.extend(initial_prompt_tokens)
+                
             else:
-                all_tokens.extend(options.initial_prompt)
+                initial_prompt_tokens = options.initial_prompt
+            all_tokens.extend(initial_prompt_tokens)
 
         last_speech_timestamp = 0.0
         while seek < content_frames:
@@ -394,7 +395,10 @@ class WhisperModel:
                     "Processing segment at %s", format_timestamp(time_offset)
                 )
 
-            previous_tokens = all_tokens[prompt_reset_since:]
+            if options.initial_prompt is not None and not options.condition_on_previous_text:
+                previous_tokens = initial_prompt_tokens
+            else:
+                previous_tokens = all_tokens[prompt_reset_since:]
             prompt = self.get_prompt(
                 tokenizer,
                 previous_tokens,
