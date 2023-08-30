@@ -69,6 +69,7 @@ class TranscriptionInfo(NamedTuple):
     language: str
     language_probability: float
     duration: float
+    silence: float
     all_language_probs: Optional[List[Tuple[str, float]]]
     transcription_options: TranscriptionOptions
     vad_options: VadOptions
@@ -249,6 +250,7 @@ class WhisperModel:
             audio = decode_audio(audio, sampling_rate=sampling_rate)
 
         duration = audio.shape[0] / sampling_rate
+        silence = None
 
         self.logger.info(
             "Processing audio with duration %s", format_timestamp(duration)
@@ -261,6 +263,7 @@ class WhisperModel:
                 vad_parameters = VadOptions(**vad_parameters)
             speech_chunks = get_speech_timestamps(audio, vad_parameters)
             audio = collect_chunks(audio, speech_chunks)
+            silence = duration - (audio.shape[0] / sampling_rate)
 
             self.logger.info(
                 "VAD filter removed %s of audio",
@@ -352,6 +355,7 @@ class WhisperModel:
             language=language,
             language_probability=language_probability,
             duration=duration,
+            silence=silence,
             transcription_options=options,
             vad_options=vad_parameters,
             all_language_probs=all_language_probs,
