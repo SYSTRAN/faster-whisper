@@ -92,7 +92,7 @@ class WhisperModel:
 
         Args:
           model_size_or_path: Size of the model to use (tiny, tiny.en, base, base.en,
-            small, small.en, medium, medium.en, large-v1, or large-v2), a path to a converted
+            small, small.en, medium, medium.en, large-v1, large-v2, or large), a path to a converted
             model directory, or a CTranslate2-converted Whisper model ID from the Hugging Face Hub.
             When a size or a model ID is configured, the converted model is downloaded
             from the Hugging Face Hub.
