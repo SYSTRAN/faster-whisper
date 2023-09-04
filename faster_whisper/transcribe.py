@@ -315,6 +315,13 @@ class WhisperModel:
                     language_probability,
                 )
         else:
+            if not self.model.is_multilingual and language != "en":
+                self.logger.warning(
+                    "The current model is English-only but the language parameter is set to '%s'; "
+                    "using 'en' instead." % language
+                )
+                language = "en"
+
             language_probability = 1
 
         tokenizer = Tokenizer(
