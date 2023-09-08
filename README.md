@@ -36,6 +36,44 @@ For reference, here's the time and memory usage that are required to transcribe 
 
 *Executed with 8 threads on a Intel(R) Xeon(R) Gold 6226R.*
 
+## Requirements
+
+* Python 3.8 or greater
+
+Unlike openai-whisper, FFmpeg does **not** need to be installed on the system. The audio is decoded with the Python library [PyAV](https://github.com/PyAV-Org/PyAV) which bundles the FFmpeg libraries in its package.
+
+### GPU
+
+GPU execution requires the following NVIDIA libraries to be installed:
+
+* [cuBLAS for CUDA 11](https://developer.nvidia.com/cublas)
+* [cuDNN 8 for CUDA 11](https://developer.nvidia.com/cudnn)
+
+There are multiple ways to install these libraries. The recommended way is described in the official NVIDIA documentation, but we also suggest other installation methods below.
+
+<details>
+<summary>Other installation methods (click to expand)</summary>
+
+#### Use Docker
+
+The libraries are installed in this official NVIDIA Docker image: `nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04`.
+
+#### Install with `pip` (Linux only)
+
+On Linux these libraries can be installed with `pip`. Note that `LD_LIBRARY_PATH` must be set before launching Python.
+
+```bash
+pip install nvidia-cublas-cu11 nvidia-cudnn-cu11
+
+export LD_LIBRARY_PATH=`python3 -c 'import os; import nvidia.cublas.lib; import nvidia.cudnn.lib; print(os.path.dirname(nvidia.cublas.lib.__file__) + ":" + os.path.dirname(nvidia.cudnn.lib.__file__))'`
+```
+
+#### Download the libraries from Purfview's repository (Windows only)
+
+Purfview's [whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win) provides the required NVIDIA libraries for Windows in a [single archive](https://github.com/Purfview/whisper-standalone-win/releases/tag/libs). Decompress the archive and place the libraries in a directory included in the `PATH`.
+
+</details>
+
 ## Installation
 
 The module can be installed from [PyPI](https://pypi.org/project/faster-whisper/):
@@ -44,19 +82,22 @@ The module can be installed from [PyPI](https://pypi.org/project/faster-whisper/
 pip install faster-whisper
 ```
 
-**Other installation methods:**
+<details>
+<summary>Other installation methods (click to expand)</summary>
+
+### Install the master branch
 
 ```bash
-# Install the master branch:
 pip install --force-reinstall "faster-whisper @ https://github.com/guillaumekln/faster-whisper/archive/refs/heads/master.tar.gz"
+```
 
-# Install a specific commit:
+### Install a specific commit
+
+```bash
 pip install --force-reinstall "faster-whisper @ https://github.com/guillaumekln/faster-whisper/archive/a4f1cc8f11433e454c3934442b5e1a4ed5e865c3.tar.gz"
 ```
 
-### GPU support
-
-GPU execution requires the NVIDIA libraries cuBLAS 11.x and cuDNN 8.x to be installed on the system. Please refer to the [CTranslate2 documentation](https://opennmt.net/CTranslate2/installation.html).
+</details>
 
 ## Usage
 
