@@ -747,7 +747,7 @@ class WhisperModel:
         prepend_punctuations: str,
         append_punctuations: str,
         last_speech_timestamp: float,
-    ):
+    ) -> None:
         if len(segments) == 0:
             return
 
@@ -953,7 +953,10 @@ def get_compression_ratio(text: str) -> float:
     return len(text_bytes) / len(zlib.compress(text_bytes))
 
 
-def get_suppressed_tokens(tokenizer, suppress_tokens):
+def get_suppressed_tokens(
+    tokenizer: Tokenizer,
+    suppress_tokens: Optional[List[int]],
+) -> Optional[List[int]]:
     if not suppress_tokens or -1 in suppress_tokens:
         return suppress_tokens
 
@@ -974,7 +977,7 @@ def get_suppressed_tokens(tokenizer, suppress_tokens):
     return sorted(set(suppress_tokens))
 
 
-def merge_punctuations(alignment: List[dict], prepended: str, appended: str):
+def merge_punctuations(alignment: List[dict], prepended: str, appended: str) -> None:
     # merge prepended punctuations
     i = len(alignment) - 2
     j = len(alignment) - 1
