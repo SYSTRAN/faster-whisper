@@ -31,6 +31,7 @@ class Word(NamedTuple):
 class Segment(NamedTuple):
     id: int
     seek: int
+    content_frames: int
     start: float
     end: float
     text: str
@@ -569,6 +570,7 @@ class WhisperModel:
                 yield Segment(
                     id=idx,
                     seek=seek,
+                    content_frames=content_frames,
                     start=segment["start"],
                     end=segment["end"],
                     text=text,
