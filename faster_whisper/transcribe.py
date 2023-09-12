@@ -417,7 +417,7 @@ class WhisperModel:
                 prefix=options.prefix if seek == 0 else None,
             )
 
-            if encoder_output is None:
+            if seek > 0 or encoder_output is None:
                 encoder_output = self.encode(segment)
 
             (
@@ -447,7 +447,6 @@ class WhisperModel:
 
                     # fast-forward to the next segment boundary
                     seek += segment_size
-                    encoder_output = None
                     continue
 
             tokens = result.sequences_ids[0]
@@ -553,8 +552,6 @@ class WhisperModel:
 
                     if seek_shift > 0:
                         seek = previous_seek + seek_shift
-
-            encoder_output = None
 
             for segment in current_segments:
                 tokens = segment["tokens"]
