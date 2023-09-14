@@ -6,11 +6,6 @@ from typing import List, Optional, Tuple
 import tokenizers
 
 
-def supported_languages() -> List[str]:
-    """Returns the supported language codes."""
-    return list(_LANGUAGE_CODES)
-
-
 class Tokenizer:
     """Simple wrapper around a tokenizers.Tokenizer."""
 

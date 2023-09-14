@@ -11,7 +11,7 @@ import tokenizers
 
 from faster_whisper.audio import decode_audio
 from faster_whisper.feature_extractor import FeatureExtractor
-from faster_whisper.tokenizer import Tokenizer
+from faster_whisper.tokenizer import _LANGUAGE_CODES, Tokenizer
 from faster_whisper.utils import download_model, format_timestamp, get_logger
 from faster_whisper.vad import (
     SpeechTimestampsMap,
@@ -153,6 +153,11 @@ class WhisperModel:
         self.input_stride = 2
         self.time_precision = 0.02
         self.max_length = 448
+
+    @property
+    def supported_languages(self) -> List[str]:
+        """The languages supported by the model."""
+        return list(_LANGUAGE_CODES) if self.model.is_multilingual else ["en"]
 
     def transcribe(
         self,
