@@ -1,6 +1,12 @@
 import os
 
-from faster_whisper import download_model
+from faster_whisper import available_models, download_model
+
+
+def test_available_models():
+    models = available_models()
+    assert isinstance(models, list)
+    assert "tiny" in models
 
 
 def test_download_model(tmpdir):
