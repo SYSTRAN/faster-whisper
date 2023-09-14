@@ -2,7 +2,7 @@ import logging
 import os
 import re
 
-from typing import Optional
+from typing import List, Optional
 
 import huggingface_hub
 import requests
@@ -22,6 +22,11 @@ _MODELS = {
     "large-v2": "guillaumekln/faster-whisper-large-v2",
     "large": "guillaumekln/faster-whisper-large-v2",
 }
+
+
+def available_models() -> List[str]:
+    """Returns the names of available models."""
+    return list(_MODELS.keys())
 
 
 def get_assets_path():
