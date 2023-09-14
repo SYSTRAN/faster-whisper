@@ -3,6 +3,11 @@ import os
 from faster_whisper import WhisperModel, decode_audio
 
 
+def test_supported_languages():
+    model = WhisperModel("tiny.en")
+    assert model.supported_languages == ["en"]
+
+
 def test_transcribe(jfk_path):
     model = WhisperModel("tiny")
     segments, info = model.transcribe(jfk_path, word_timestamps=True)
