@@ -251,13 +251,13 @@ class SileroVADModel:
             ) from e
 
         opts = onnxruntime.SessionOptions()
-        opts.inter_op_num_threads = 1
-        opts.intra_op_num_threads = 1
         opts.log_severity_level = 4
+        opts.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_BASIC
+        # https://github.com/microsoft/onnxruntime/issues/11548#issuecomment-1158314424
 
         self.session = onnxruntime.InferenceSession(
             path,
-            providers=["CPUExecutionProvider"],
+            providers=["CUDAExecutionProvider"],
             sess_options=opts,
         )
 
