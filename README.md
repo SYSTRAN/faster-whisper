@@ -182,6 +182,7 @@ Here is a non exhaustive list of open-source projects using faster-whisper. Feel
 * [asr-sd-pipeline](https://github.com/hedrergudene/asr-sd-pipeline) provides a scalable, modular, end to end multi-speaker speech to text solution implemented using AzureML pipelines.
 * [Open-Lyrics](https://github.com/zh-plus/Open-Lyrics) is a Python library that transcribes voice files using faster-whisper, and translates/polishes the resulting text into `.lrc` files in the desired language using OpenAI-GPT.
 * [wscribe](https://github.com/geekodour/wscribe) is a flexible transcript generation tool supporting faster-whisper, it can export word level transcript and the exported transcript then can be edited with [wscribe-editor](https://github.com/geekodour/wscribe-editor)
+* [SpyroDictate](https://github.com/STocidlowski/SpyroDictate) is a dictation tool supporting faster-whisper, text to be sent into any input field when a push to talk button is activated. Included faster-whisper server can be run locally or on your local LAN. 
 
 ## Model conversion
 
