@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>File Selector Example</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>File Selector</h1>
+
+    <form action="/transcribe" method="POST" enctype="multipart/form-data">
+    <input type="file" name="audio_files" multiple accept=".mp3, .mp4">
+    <button type="submit">Transcribe Audio</button>
+</form>
+
+</body>
+</html>

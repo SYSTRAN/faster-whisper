@@ -1,0 +1,61 @@
+/* Apply a reset style to remove default browser styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Set the background color and text color for the body */
+body {
+    background-color: #333; /* Dark background color */
+    color: #fff; /* Light text color */
+    font-family: Arial, sans-serif;
+    text-align: center;
+}
+
+/* Style the header */
+h1 {
+    padding: 20px;
+}
+
+/* Style the form container */
+form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 20px auto;
+    width: 80%;
+    max-width: 400px;
+    background-color: #444; /* Dark form background */
+    border-radius: 5px;
+    padding: 20px;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+/* Style the file input */
+input[type="file"] {
+    
+}
+
+/* Style the file input label */
+label {
+    display: inline-block;
+    background-color: #0077cc; /* Button color */
+    color: #fff; /* Light text color */
+    padding: 10px 20px;
+    text-align: center;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin: 10px 0;
+}
+
+label:hover {
+    background-color: #0055aa; /* Button color on hover */
+}
+
+/* Style the selected file message */
+p {
+    margin: 20px;
+    font-size: 18px;
+}
