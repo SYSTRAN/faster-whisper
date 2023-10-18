@@ -1,61 +1,63 @@
-/* Apply a reset style to remove default browser styles */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-/* Set the background color and text color for the body */
 body {
-    background-color: #333; /* Dark background color */
-    color: #fff; /* Light text color */
-    font-family: Arial, sans-serif;
-    text-align: center;
+  background-color: #222;
+  color: #e6e6e6;
+  font-family: Arial, sans-serif;
 }
 
-/* Style the header */
-h1 {
-    padding: 20px;
+.center-content {
+  width: 500px;
+  margin: 0 auto;
+  text-align: center;
 }
 
-/* Style the form container */
-form {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin: 20px auto;
-    width: 80%;
-    max-width: 400px;
-    background-color: #444; /* Dark form background */
-    border-radius: 5px;
-    padding: 20px;
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+h1,
+h2 {
+  color: #e6e6e6;
 }
 
-/* Style the file input */
+button,
+label.custom-file-input-label {
+  font-size: 1rem;
+  background-color: #c02d28;
+  color: #e6e6e6;
+  padding: 10px 20px;
+  border-radius: 20px;
+  cursor: pointer;
+  border: none;
+  display: inline-block;
+  position: relative;
+  z-index: 1;
+}
+
+button:hover,
+label.custom-file-input-label:hover {
+  background-color: #d0312b;
+}
+
+.file-name-display {
+  color: #e6e6e6;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  margin-right: 10px;
+  display: inline-block;
+  z-index: 0;
+}
+
 input[type="file"] {
-    
+  display: none;
 }
 
-/* Style the file input label */
-label {
-    display: inline-block;
-    background-color: #0077cc; /* Button color */
-    color: #fff; /* Light text color */
-    padding: 10px 20px;
-    text-align: center;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    margin: 10px 0;
+input {
+  color: #e6e6e6;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  width: 50%;
 }
 
-label:hover {
-    background-color: #0055aa; /* Button color on hover */
-}
-
-/* Style the selected file message */
-p {
-    margin: 20px;
-    font-size: 18px;
+form {
+  background-color: black;
+  padding: 20px;
+  width: 500px;
 }

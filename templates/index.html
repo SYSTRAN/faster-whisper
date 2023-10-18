@@ -1,16 +1,57 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <title>File Selector Example</title>
-    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-    <h1>File Selector</h1>
+  <head>
+    <title>FM Transcriptions & Descriptions</title>
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    <div class="center-content">
+      <h2>Transcriptions (.vtt & .txt )</h2>
+      <form
+        action="/transcribe"
+        method="POST"
+        enctype="multipart/form-data"
+        id="transcription"
+      >
+        <input
+          type="file"
+          id="fileInput"
+          name="audio_files"
+          multiple
+          accept=".mp3, .mp4"
+        />
+        <label for="fileInput" class="custom-file-input-label">
+          Choose File
+        </label>
+        <div id="fileNameDisplay" class="file-name-display">No file chosen</div>
 
-    <form action="/transcribe" method="POST" enctype="multipart/form-data">
-    <input type="file" name="audio_files" multiple accept=".mp3, .mp4">
-    <button type="submit">Transcribe Audio</button>
-</form>
+        <button type="submit">Generate & Download</button>
+      </form>
+      <h2>Lesson Descriptions</h2>
+      <form id="description">
+        <div>
+          <input type="text" placeholder="Google Sheets sid" />
+          <button type="submit">Generate Descriptions</button>
+        </div>
+      </form>
+    </div>
+  </body>
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const fileNameDisplay = document.getElementById("fileNameDisplay");
 
-</body>
+    fileInput.addEventListener("change", function () {
+      const files = fileInput.files;
+      if (files.length > 0) {
+        const fileNames = Array.from(files).map((file) => file.name);
+        fileNameDisplay.innerText = fileNames.join(", ");
+      } else {
+        fileNameDisplay.innerText = "No file chosen";
+      }
+    });
+  </script>
 </html>
