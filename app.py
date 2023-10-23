@@ -124,7 +124,7 @@ def generate_descriptions():
         global transcription_text  # Make sure to access the global variable
 
          # Initialize the OpenAI API key
-        openai.api_key = "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"
+        openai.api_key = "OPENAPIKEY"
 
         # Initialize the transcription_text
         transcription_text = ""
