@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, send_file
+from flask import Flask, request, render_template, send_file, jsonify
 import os
 import openai
 import shutil
@@ -6,6 +6,10 @@ import zipfile  # Import the zipfile module
 from faster_whisper import WhisperModel
 
 app = Flask(__name__)
+
+# Define global variables to store transcription results and text file paths
+transcription_results = []
+txt_file_paths = []  # Initialize the list for text file paths
 
 # Create the 'temp' directory if it doesn't exist
 if not os.path.exists('temp'):
@@ -110,6 +114,66 @@ def transcribe_audio():
     except Exception as e:
         # Handle exceptions here
         return "An error occurred during transcription: " + str(e)
+
+# ...
+
+@app.route('/generate_descriptions', methods=['POST'])
+def generate_descriptions():
+    try:
+        global transcription_text  # Make sure to access the global variable
+
+        # Initialize the OpenAI API key
+        openai.api_key = "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"
+
+        # Initialize the transcription_text
+        transcription_text = ""
+
+        # Loop through .txt files in the 'temp' directory
+        temp_directory = 'temp'
+        for filename in os.listdir(temp_directory):
+            if filename.endswith(".txt"):
+                txt_file_path = os.path.join(temp_directory, filename)
+                with open(txt_file_path, 'r') as text_file:
+                    transcription_text += text_file.read() + "\n"
+
+        # Print the transcription text for verification
+        print("Transcription Text:")
+        print(transcription_text)
+
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Provide a 2 or 3 sentence description of what happens in the lesson you are provided"
+                },
+                {
+                    "role": "user",
+                    "content": transcription_text  # Include your transcription text here
+                }
+            ],
+            temperature=0,
+            max_tokens=1024,
+            top_p=1,
+            frequency_penalty=0,
+            presence_penalty=0
+        )
+
+        # Get the generated description from the API response
+        description = response.choices[0].message["content"]
+
+        # Print the description and transcription text to the console
+        print("Generated Description:")
+        print(description)
+        print("Transcription Text:")
+        print(transcription_text)
+
+        # Return the description as JSON
+        return jsonify({"description": description})
+
+    except Exception as e:
+        # Handle exceptions here
+        return jsonify({"error": "An error occurred during description generation: " + str(e)})
 
 # ...
 
