@@ -1,6 +1,7 @@
 from flask import Flask, request, render_template, send_file, jsonify
 import os
 import openai
+import re
 import shutil
 import zipfile  # Import the zipfile module
 from faster_whisper import WhisperModel
@@ -122,8 +123,8 @@ def generate_descriptions():
     try:
         global transcription_text  # Make sure to access the global variable
 
-        # Initialize the OpenAI API key
-        openai.api_key = "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"
+         # Initialize the OpenAI API key
+        openai.api_key = "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"
 
         # Initialize the transcription_text
         transcription_text = ""
@@ -140,6 +141,12 @@ def generate_descriptions():
         print("Transcription Text:")
         print(transcription_text)
 
+        # Use regular expressions to extract the text within square brackets
+        timestamps_removed = re.sub(r'\[\d+\.\d+s -> \d+\.\d+s\] ', '', transcription_text)
+
+        # Concatenate the text into a single block
+        resulting_text = ' '.join(timestamps_removed.splitlines())
+
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -149,7 +156,7 @@ def generate_descriptions():
                 },
                 {
                     "role": "user",
-                    "content": transcription_text  # Include your transcription text here
+                    "content": resulting_text
                 }
             ],
             temperature=0,
@@ -165,8 +172,6 @@ def generate_descriptions():
         # Print the description and transcription text to the console
         print("Generated Description:")
         print(description)
-        print("Transcription Text:")
-        print(transcription_text)
 
         # Return the description as JSON
         return jsonify({"description": description})
