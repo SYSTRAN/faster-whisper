@@ -47,7 +47,13 @@ def transcribe_audio():
             except Exception as e:
                 print(f"Failed to remove {file_path}: {e}")
 
+        # Remove previously generated .zip file
+        for filename in os.listdir(os.getcwd()):
+            if filename.endswith('.zip'):
+                os.unlink(filename)
+
         transcription_results = []  # Store transcription results
+        txt_file_paths = []
 
         for audio_file in audio_files:
             # Determine the file extension
@@ -75,9 +81,9 @@ def transcribe_audio():
             else:
                 return f"Invalid file type: {audio_file.filename}. Supported types: .mp3 and .mp4"
 
-        # Create and save .txt files with transcription results
+        # Create and save .txt and .vtt files
         txt_file_paths = []
-        vtt_file_paths = []  # Initialize a list for .vtt file paths
+        vtt_file_paths = []
 
         for filename, transcription_text in transcription_results:
             txt_file_path = os.path.join('temp', f'{os.path.splitext(filename)[0]}.txt')
@@ -85,7 +91,6 @@ def transcribe_audio():
                 text_file.write(transcription_text)
             txt_file_paths.append(txt_file_path)
 
-            # Generate and save .vtt files (WebVTT)
             vtt_file_path = os.path.join('temp', f'{os.path.splitext(filename)[0]}.vtt')
             with open(vtt_file_path, 'w') as vtt_file:
                 vtt_file.write("WEBVTT\n\n")
@@ -96,21 +101,22 @@ def transcribe_audio():
                         vtt_file.write(f"{segment}\n\n")
             vtt_file_paths.append(vtt_file_path)
 
-        # Automatically download the .txt and .vtt files
-        response = None
-        if len(txt_file_paths) == 1:
-            response = send_file(txt_file_paths[0], as_attachment=True)
-        elif len(txt_file_paths) > 1:
-            # Create a ZIP archive with the .txt and .vtt files if there are multiple
+        # Generate a single .zip file containing both .txt and .vtt files
+        if len(txt_file_paths) > 0:
             zip_filename = 'transcriptions.zip'
             with zipfile.ZipFile(zip_filename, 'w') as zipf:
                 for txt_file_path in txt_file_paths:
                     zipf.write(txt_file_path, os.path.basename(txt_file_path))
-                for vtt_file_path in vtt_file_paths:
-                    zipf.write(vtt_file_path, os.path.basename(vtt_file_path))
-            response = send_file(zip_filename, as_attachment=True)
+                    vtt_file_path = txt_file_path.replace('.txt', '.vtt')
+                    if os.path.exists(vtt_file_path):
+                        zipf.write(vtt_file_path, os.path.basename(vtt_file_path))
 
-        return response
+        # Automatically download the .zip file
+        if os.path.exists(zip_filename):
+            response = send_file(zip_filename, as_attachment=True)
+            return response
+
+        return "No valid transcription files found."
 
     except Exception as e:
         # Handle exceptions here
@@ -121,60 +127,54 @@ def transcribe_audio():
 @app.route('/generate_descriptions', methods=['POST'])
 def generate_descriptions():
     try:
-        global transcription_text  # Make sure to access the global variable
+        # Initialize the OpenAI API key
+        openai.api_key = "OPENAI_API_KEY"
 
-         # Initialize the OpenAI API key
-        openai.api_key = "OPENAPIKEY"
-
-        # Initialize the transcription_text
-        transcription_text = ""
-
-        # Loop through .txt files in the 'temp' directory
         temp_directory = 'temp'
+        response_descriptions = {}
+
         for filename in os.listdir(temp_directory):
             if filename.endswith(".txt"):
                 txt_file_path = os.path.join(temp_directory, filename)
                 with open(txt_file_path, 'r') as text_file:
-                    transcription_text += text_file.read() + "\n"
+                    transcription_text = text_file.read()
 
-        # Print the transcription text for verification
-        print("Transcription Text:")
-        print(transcription_text)
+                # Use regular expressions to extract the text within square brackets
+                timestamps_removed = re.sub(r'\[\d+\.\d+s -> \d+\.\d+s\] ', '', transcription_text)
 
-        # Use regular expressions to extract the text within square brackets
-        timestamps_removed = re.sub(r'\[\d+\.\d+s -> \d+\.\d+s\] ', '', transcription_text)
+                # Concatenate the text into a single block
+                resulting_text = ' '.join(timestamps_removed.splitlines())
 
-        # Concatenate the text into a single block
-        resulting_text = ' '.join(timestamps_removed.splitlines())
+                response = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "Provide a 2 or 3 sentence description of what happens in the lesson you are provided"
+                        },
+                        {
+                            "role": "user",
+                            "content": resulting_text
+                        }
+                    ],
+                    temperature=0,
+                    max_tokens=1024,
+                    top_p=1,
+                    frequency_penalty=0,
+                    presence_penalty=0
+                )
 
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Provide a 2 or 3 sentence description of what happens in the lesson you are provided"
-                },
-                {
-                    "role": "user",
-                    "content": resulting_text
-                }
-            ],
-            temperature=0,
-            max_tokens=1024,
-            top_p=1,
-            frequency_penalty=0,
-            presence_penalty=0
-        )
+                # Get the generated description from the API response
+                description = response.choices[0].message["content"]
 
-        # Get the generated description from the API response
-        description = response.choices[0].message["content"]
+                # Print the description and transcription text to the console
+                print(f"Generated Description for {filename}:")
+                print(description)
 
-        # Print the description and transcription text to the console
-        print("Generated Description:")
-        print(description)
+                response_descriptions[filename] = description
 
-        # Return the description as JSON
-        return jsonify({"description": description})
+        # Return the descriptions as a JSON object
+        return jsonify(response_descriptions)
 
     except Exception as e:
         # Handle exceptions here
