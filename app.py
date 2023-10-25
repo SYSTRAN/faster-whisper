@@ -128,13 +128,16 @@ def transcribe_audio():
 def generate_descriptions():
     try:
         # Initialize the OpenAI API key
-        openai.api_key = "OPENAI_API_KEY"
+        openai.api_key = "OPENAI API key"
 
         temp_directory = 'temp'
         response_descriptions = {}
 
         for filename in os.listdir(temp_directory):
             if filename.endswith(".txt"):
+                # Extract the file name without extension
+                file_name_without_extension = os.path.splitext(filename)[0]
+
                 txt_file_path = os.path.join(temp_directory, filename)
                 with open(txt_file_path, 'r') as text_file:
                     transcription_text = text_file.read()
@@ -168,10 +171,10 @@ def generate_descriptions():
                 description = response.choices[0].message["content"]
 
                 # Print the description and transcription text to the console
-                print(f"Generated Description for {filename}:")
+                print(f"Generated Description for {file_name_without_extension}:")
                 print(description)
 
-                response_descriptions[filename] = description
+                response_descriptions[file_name_without_extension] = description
 
         # Return the descriptions as a JSON object
         return jsonify(response_descriptions)
