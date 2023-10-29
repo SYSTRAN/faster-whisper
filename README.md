@@ -184,7 +184,6 @@ Here is a non exhaustive list of open-source projects using faster-whisper. Feel
 * [wscribe](https://github.com/geekodour/wscribe) is a flexible transcript generation tool supporting faster-whisper, it can export word level transcript and the exported transcript then can be edited with [wscribe-editor](https://github.com/geekodour/wscribe-editor)
 * [whisper-speech-typing](https://github.com/spottenn/whisper-speech-typing) is a speech-to-text typing tool that leverages the power of faster-whisper for on-the-fly, high accuracy voice typing with automatic punctuation and capitalization.
 
-
 ## Model conversion
 
 When loading a model from its size such as `WhisperModel("large-v2")`, the correspondig CTranslate2 model is automatically downloaded from the [Hugging Face Hub](https://huggingface.co/guillaumekln).
