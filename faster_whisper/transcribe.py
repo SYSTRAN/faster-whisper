@@ -151,7 +151,7 @@ class WhisperModel:
             self.feature_extractor.sampling_rate // self.num_samples_per_token
         )
         self.input_stride = 2
-        self.time_precision = 0.02
+        self.time_precision = 0.001
         self.max_length = 448
 
     @property

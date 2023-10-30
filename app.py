@@ -87,18 +87,30 @@ def transcribe_audio():
 
         for filename, transcription_text in transcription_results:
             txt_file_path = os.path.join('temp', f'{os.path.splitext(filename)[0]}.txt')
-            with open(txt_file_path, 'w') as text_file:
-                text_file.write(transcription_text)
-            txt_file_paths.append(txt_file_path)
-
             vtt_file_path = os.path.join('temp', f'{os.path.splitext(filename)[0]}.vtt')
-            with open(vtt_file_path, 'w') as vtt_file:
+
+            with open(txt_file_path, 'w') as text_file, open(vtt_file_path, 'w') as vtt_file:
+                lines = transcription_text.strip().split('\n')
                 vtt_file.write("WEBVTT\n\n")
-                segments = transcription_text.strip().split('\n')
-                for i, segment in enumerate(segments):
-                    if segment.strip():
-                        vtt_file.write(f"{i + 1}\n")
-                        vtt_file.write(f"{segment}\n\n")
+
+                i = 1  # Initialize line number
+                for line in lines:
+                    timestamp_start = f"{i * 3:02d}.100"
+                    timestamp_end = f"{(i + 1) * 3:02d}.830"
+
+                    if i == 1:
+                        text_file.write(f"[00:00:{timestamp_start}]\n>> {line}\n")
+                    else:
+                        text_file.write(f"[00:00:{timestamp_start}]\n{line}\n")
+
+                    # Remove the timestamps from the .vtt file
+                    vtt_file.write(f"{i}\n")
+                    vtt_file.write(f"00:00:{timestamp_start} --> 00:00:{timestamp_end}\n")
+                    vtt_file.write(re.sub(r'\[\d+\.\d+s -> \d+\.\d+s\] ', '', line) + "\n\n")
+                    
+                    i += 1  # Increment line number
+
+            txt_file_paths.append(txt_file_path)
             vtt_file_paths.append(vtt_file_path)
 
         # Generate a single .zip file containing both .txt and .vtt files
@@ -128,10 +140,10 @@ def transcribe_audio():
 def generate_descriptions():
     try:
         # Initialize the OpenAI API key
-        openai.api_key = "OPENAI API key"
+        openai.api_key = "OPENAI_API_KEY"
 
         temp_directory = 'temp'
-        response_descriptions = {}
+        response_descriptions = []
 
         for filename in os.listdir(temp_directory):
             if filename.endswith(".txt"):
@@ -145,19 +157,17 @@ def generate_descriptions():
                 # Use regular expressions to extract the text within square brackets
                 timestamps_removed = re.sub(r'\[\d+\.\d+s -> \d+\.\d+s\] ', '', transcription_text)
 
-                # Concatenate the text into a single block
-                resulting_text = ' '.join(timestamps_removed.splitlines())
-
+                # Combine the entire text into a single message
                 response = openai.ChatCompletion.create(
-                    model="gpt-3.5-turbo",
+                    model="gpt-3.5-turbo-16k",
                     messages=[
                         {
                             "role": "system",
-                            "content": "Provide a 2 or 3 sentence description of what happens in the lesson you are provided"
+                            "content": "Provide a 2 to 3 sentence description of what happens in the lesson you are provided"
                         },
                         {
                             "role": "user",
-                            "content": resulting_text
+                            "content": timestamps_removed
                         }
                     ],
                     temperature=0,
@@ -167,17 +177,14 @@ def generate_descriptions():
                     presence_penalty=0
                 )
 
-                # Get the generated description from the API response
-                description = response.choices[0].message["content"]
+                # Get the generated description from the API response and replace '\t' with '&nbsp;'
+                description = response.choices[0].message["content"].replace('\t', '&nbsp;')
 
-                # Print the description and transcription text to the console
-                print(f"Generated Description for {file_name_without_extension}:")
-                print(description)
+                # Append the "lesson_name\tlesson_description" to the response_descriptions list
+                response_descriptions.append(f"{file_name_without_extension}\\t{description}")
 
-                response_descriptions[file_name_without_extension] = description
-
-        # Return the descriptions as a JSON object
-        return jsonify(response_descriptions)
+        # Join the descriptions into a single string with HTML non-breaking spaces and return it
+        return "<br>".join(response_descriptions)
 
     except Exception as e:
         # Handle exceptions here

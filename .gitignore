@@ -13,3 +13,5 @@ venv/
 # Ignore IDE, Editor Files
 .idea/
 .vscode/
+
+.DS_Store
