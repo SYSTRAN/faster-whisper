@@ -67,6 +67,7 @@ class TranscriptionOptions(NamedTuple):
 
 
 class TranscriptionInfo(NamedTuple):
+    word_info: list
     language: str
     language_probability: float
     duration: float
@@ -367,7 +368,13 @@ class WhisperModel:
         if speech_chunks:
             segments = restore_speech_timestamps(segments, speech_chunks, sampling_rate)
 
+        # exporting the word timestamps
+        word_info_list = []
+        for segment in segments:
+            word_info_list.append(segment[10])
+
         info = TranscriptionInfo(
+            word_info=word_info_list,
             language=language,
             language_probability=language_probability,
             duration=duration,
