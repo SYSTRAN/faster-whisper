@@ -195,11 +195,12 @@ For example the command below converts the [original "large-v2" Whisper model](h
 pip install transformers[torch]>=4.23
 
 ct2-transformers-converter --model openai/whisper-large-v2 --output_dir whisper-large-v2-ct2 \
-    --copy_files tokenizer.json --quantization float16
+    --copy_files tokenizer.json preprocessor_config.json --quantization float16
 ```
 
 * The option `--model` accepts a model name on the Hub or a path to a model directory.
 * If the option `--copy_files tokenizer.json` is not used, the tokenizer configuration is automatically downloaded when the model is loaded later.
+* If the option `--copy_files preprocessor_config.json` is not used, the melbank feature extractor is instantiated with default parameters. Note that `large-v3` version of Whisper uses different melbank settings in comparison to the previous versions.
 
 Models can also be converted from the code. See the [conversion API](https://opennmt.net/CTranslate2/python/ctranslate2.converters.TransformersConverter.html).
 
