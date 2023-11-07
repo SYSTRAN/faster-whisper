@@ -87,13 +87,15 @@ class WhisperModel:
         num_workers: int = 1,
         download_root: Optional[str] = None,
         local_files_only: bool = False,
+        feature_size: Optional[int] = None,
+        num_languages: Optional[int] = None,
     ):
         """Initializes the Whisper model.
 
         Args:
           model_size_or_path: Size of the model to use (tiny, tiny.en, base, base.en,
-            small, small.en, medium, medium.en, large-v1, large-v2, or large), a path to a converted
-            model directory, or a CTranslate2-converted Whisper model ID from the Hugging Face Hub.
+            small, small.en, medium, medium.en, large-v1, large-v2, large-v3, or large), a path to a
+            converted model directory, or a CTranslate2-converted Whisper model ID from the HF Hub.
             When a size or a model ID is configured, the converted model is downloaded
             from the Hugging Face Hub.
           device: Device to use for computation ("cpu", "cuda", "auto").
@@ -113,6 +115,9 @@ class WhisperModel:
             are saved in the standard Hugging Face cache directory.
           local_files_only:  If True, avoid downloading the file and return the path to the
             local cached file if it exists.
+          feature_size: Number of mel filters to use for feature extraction. If not set,
+            the number of mel filters is inferred from the model version. The first release
+            used 80 bins, but the large-v3 model uses 128 bins.
         """
         self.logger = get_logger()
 
@@ -141,8 +146,27 @@ class WhisperModel:
             self.hf_tokenizer = tokenizers.Tokenizer.from_pretrained(
                 "openai/whisper-tiny" + ("" if self.model.is_multilingual else ".en")
             )
+        # large-v3 uses 128, others use 80
+        # if user explicitly sets n_mels, use that
+        if not feature_size:
+            if "large-v3" in model_size_or_path:
+                feature_size = 128
+            else:
+                feature_size = 80
 
-        self.feature_extractor = FeatureExtractor()
+        # this is hacky - should reference directly from vocab
+        # https://github.com/openai/whisper/commit/c5d42560760a05584c1c79546a098287e5a771eb#diff-ad4e95c840033b439466680ea7a88aa513d47c4acb418364f1d3967ca817d440R277
+        if not num_languages:
+            if "large-v3" in model_size_or_path:
+                num_languages = 100
+            else:
+                num_languages = 99
+
+        self.num_languages = num_languages
+
+        self.feature_extractor = FeatureExtractor(
+            feature_size=feature_size,
+        )
         self.num_samples_per_token = self.feature_extractor.hop_length * 2
         self.frames_per_second = (
             self.feature_extractor.sampling_rate // self.feature_extractor.hop_length
@@ -334,6 +358,7 @@ class WhisperModel:
             self.model.is_multilingual,
             task=task,
             language=language,
+            num_languages=self.num_languages,
         )
 
         options = TranscriptionOptions(

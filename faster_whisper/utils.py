@@ -21,6 +21,7 @@ _MODELS = {
     "large-v1": "guillaumekln/faster-whisper-large-v1",
     "large-v2": "guillaumekln/faster-whisper-large-v2",
     "large": "guillaumekln/faster-whisper-large-v2",
+    "large-v3": "gradjitta/ct2-whisper-large-v3",
 }
 
 
@@ -50,7 +51,7 @@ def download_model(
     Args:
       size_or_id: Size of the model to download from https://huggingface.co/guillaumekln
         (tiny, tiny.en, base, base.en, small, small.en medium, medium.en, large-v1, large-v2,
-        large), or a CTranslate2-converted model ID from the Hugging Face Hub
+        large, large-v3), or a CTranslate2-converted model ID from the Hugging Face Hub
         (e.g. guillaumekln/faster-whisper-large-v2).
       output_dir: Directory where the model should be saved. If not set, the model is saved in
         the cache directory.
