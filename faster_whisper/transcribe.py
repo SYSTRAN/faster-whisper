@@ -1,8 +1,8 @@
 import itertools
+import json
 import logging
 import os
 import zlib
-import json
 
 from typing import BinaryIO, Iterable, List, NamedTuple, Optional, Tuple, Union
 
