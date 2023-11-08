@@ -146,15 +146,25 @@ class WhisperModel:
                 "openai/whisper-tiny" + ("" if self.model.is_multilingual else ".en")
             )
         
-        config_file = os.path.join(model_path, "config.json")
-        if os.path.isfile(config_file):
-            with open(config_file, "r") as config:
-                config = json.load(config)
-                self.feature_size = config.get("num_mel_bins", 80)
+        feature_extractor_file = os.path.join(model_path, "preprocessor_config.json")
+        if os.path.isfile(feature_extractor_file):
+            with open(feature_extractor_file, "r") as f:
+                config = json.load(f)
+            feat_kwargs = {
+                k: config[k]
+                for k in [
+                    "n_fft",
+                    "hop_length",
+                    "feature_size",
+                    "sampling_rate",
+                    "chunk_length",
+                ]
+                if k in config
+            }
+        else:
+            feat_kwargs = {}
 
-        self.feature_extractor = FeatureExtractor(
-            feature_size=self.feature_size,
-        )
+        self.feature_extractor = FeatureExtractor(**feat_kwargs)
         self.num_samples_per_token = self.feature_extractor.hop_length * 2
         self.frames_per_second = (
             self.feature_extractor.sampling_rate // self.feature_extractor.hop_length
