@@ -15,7 +15,6 @@ class Tokenizer:
         multilingual: bool,
         task: Optional[str] = None,
         language: Optional[str] = None,
-        num_languages: Optional[int] = 99,
     ):
         self.tokenizer = tokenizer
 
@@ -26,10 +25,10 @@ class Tokenizer:
                     % (task, ", ".join(_TASKS))
                 )
 
-            if language not in _LANGUAGE_CODES[:num_languages]:
+            if language not in _LANGUAGE_CODES:
                 raise ValueError(
                     "'%s' is not a valid language code (accepted language codes: %s)"
-                    % (language, ", ".join(_LANGUAGE_CODES[:num_languages]))
+                    % (language, ", ".join(_LANGUAGE_CODES))
                 )
 
             self.task = self.tokenizer.token_to_id("<|%s|>" % task)

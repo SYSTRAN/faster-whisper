@@ -2,6 +2,7 @@ import itertools
 import logging
 import os
 import zlib
+import json
 
 from typing import BinaryIO, Iterable, List, NamedTuple, Optional, Tuple, Union
 
@@ -87,8 +88,6 @@ class WhisperModel:
         num_workers: int = 1,
         download_root: Optional[str] = None,
         local_files_only: bool = False,
-        feature_size: Optional[int] = None,
-        num_languages: Optional[int] = None,
     ):
         """Initializes the Whisper model.
 
@@ -146,26 +145,15 @@ class WhisperModel:
             self.hf_tokenizer = tokenizers.Tokenizer.from_pretrained(
                 "openai/whisper-tiny" + ("" if self.model.is_multilingual else ".en")
             )
-        # large-v3 uses 128, others use 80
-        # if user explicitly sets n_mels, use that
-        if not feature_size:
-            if "large-v3" in model_size_or_path:
-                feature_size = 128
-            else:
-                feature_size = 80
-
-        # this is hacky - should reference directly from vocab
-        # https://github.com/openai/whisper/commit/c5d42560760a05584c1c79546a098287e5a771eb#diff-ad4e95c840033b439466680ea7a88aa513d47c4acb418364f1d3967ca817d440R277
-        if not num_languages:
-            if "large-v3" in model_size_or_path:
-                num_languages = 100
-            else:
-                num_languages = 99
-
-        self.num_languages = num_languages
+        
+        config_file = os.path.join(model_path, "config.json")
+        if os.path.isfile(config_file):
+            with open(config_file, "r") as config:
+                config = json.load(config)
+                self.feature_size = config.get("num_mel_bins", 80)
 
         self.feature_extractor = FeatureExtractor(
-            feature_size=feature_size,
+            feature_size=self.feature_size,
         )
         self.num_samples_per_token = self.feature_extractor.hop_length * 2
         self.frames_per_second = (
@@ -358,7 +346,6 @@ class WhisperModel:
             self.model.is_multilingual,
             task=task,
             language=language,
-            num_languages=self.num_languages,
         )
 
         options = TranscriptionOptions(
