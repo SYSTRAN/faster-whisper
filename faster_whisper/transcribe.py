@@ -145,7 +145,7 @@ class WhisperModel:
             self.hf_tokenizer = tokenizers.Tokenizer.from_pretrained(
                 "openai/whisper-tiny" + ("" if self.model.is_multilingual else ".en")
             )
-        
+
         feature_extractor_file = os.path.join(model_path, "preprocessor_config.json")
         if os.path.isfile(feature_extractor_file):
             with open(feature_extractor_file, "r") as f:
