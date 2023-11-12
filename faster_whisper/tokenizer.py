@@ -84,7 +84,10 @@ class Tokenizer:
         return sequence
 
     def encode(self, text: str) -> List[int]:
-        return self.tokenizer.encode(text, add_special_tokens=False).ids
+        result = self.tokenizer.encode(text, add_special_tokens=False)
+        if isinstance(result, list):  # large-v3
+            return result
+        return result.ids
 
     def decode(self, tokens: List[int]) -> str:
         text_tokens = [token for token in tokens if token < self.eot]
