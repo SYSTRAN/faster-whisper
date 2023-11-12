@@ -132,6 +132,7 @@ class WhisperModel:
             intra_threads=cpu_threads,
             inter_threads=num_workers,
         )
+        is_large_v3 = "large-v3" in model_size_or_path  # TODO: check by inspecting `self.model` instead?
 
         tokenizer_file = os.path.join(model_path, "tokenizer.json")
         if os.path.isfile(tokenizer_file):
@@ -141,7 +142,7 @@ class WhisperModel:
                 "openai/whisper-tiny" + ("" if self.model.is_multilingual else ".en")
             )
 
-        self.feature_extractor = FeatureExtractor()
+        self.feature_extractor = FeatureExtractor(feature_size=80 if not is_large_v3 else 128)
         self.num_samples_per_token = self.feature_extractor.hop_length * 2
         self.frames_per_second = (
             self.feature_extractor.sampling_rate // self.feature_extractor.hop_length
