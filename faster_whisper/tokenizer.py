@@ -108,7 +108,7 @@ class Tokenizer:
     def split_to_word_tokens(
         self, tokens: List[int]
     ) -> Tuple[List[str], List[List[int]]]:
-        if self.language_code in {"zh", "ja", "th", "lo", "my"}:
+        if self.language_code in {"zh", "ja", "th", "lo", "my", "yue"}:
             # These languages don't typically use spaces, so it is difficult to split words
             # without morpheme analysis. Here, we instead split words at any
             # position where the tokens are decoded as valid unicode points
@@ -274,4 +274,5 @@ _LANGUAGE_CODES = (
     "yi",
     "yo",
     "zh",
+    "yue",
 )
