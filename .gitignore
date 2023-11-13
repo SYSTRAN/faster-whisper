@@ -15,3 +15,6 @@ venv/
 .vscode/
 
 .DS_Store
+.env
+temp
+transcriptions.zip

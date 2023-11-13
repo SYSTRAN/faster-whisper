@@ -1,4 +1,5 @@
 from flask import Flask, request, render_template, send_file, jsonify
+from dotenv import load_dotenv
 import os
 import openai
 import re
@@ -99,11 +100,10 @@ def transcribe_audio():
                     timestamp_end = f"{(i + 1) * 3:02d}.830"
 
                     if i == 1:
-                        text_file.write(f"[00:00:{timestamp_start}]\n>> {line}\n")
+                        text_file.write(f">> {line}\n")
                     else:
-                        text_file.write(f"[00:00:{timestamp_start}]\n{line}\n")
+                        text_file.write(f"{line}\n")
 
-                    # Remove the timestamps from the .vtt file
                     vtt_file.write(f"{i}\n")
                     vtt_file.write(f"00:00:{timestamp_start} --> 00:00:{timestamp_end}\n")
                     vtt_file.write(re.sub(r'\[\d+\.\d+s -> \d+\.\d+s\] ', '', line) + "\n\n")
@@ -139,8 +139,11 @@ def transcribe_audio():
 @app.route('/generate_descriptions', methods=['POST'])
 def generate_descriptions():
     try:
-        # Initialize the OpenAI API key
-        openai.api_key = "OPENAI_API_KEY"
+        # Load environment variables from .env
+        load_dotenv()
+
+        # Set OpenAI API key
+        openai.api_key = os.getenv("OPENAI_API_KEY")
 
         temp_directory = 'temp'
         response_descriptions = []
