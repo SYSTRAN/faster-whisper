@@ -43,7 +43,7 @@ def decode_audio(
     raw_buffer = io.BytesIO()
     dtype = None
 
-    with av.open(input_file, metadata_errors="ignore") as container:
+    with av.open(input_file, mode="r", metadata_errors="ignore") as container:
         frames = container.decode(audio=0)
         frames = _ignore_invalid_frames(frames)
         frames = _group_frames(frames, 500000)
