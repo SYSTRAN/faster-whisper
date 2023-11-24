@@ -1,6 +1,12 @@
 import os
 
-from faster_whisper import download_model
+from faster_whisper import available_models, download_model
+
+
+def test_available_models():
+    models = available_models()
+    assert isinstance(models, list)
+    assert "tiny" in models
 
 
 def test_download_model(tmpdir):
@@ -15,3 +21,9 @@ def test_download_model(tmpdir):
     for filename in os.listdir(model_dir):
         path = os.path.join(model_dir, filename)
         assert not os.path.islink(path)
+
+
+def test_download_model_in_cache(tmpdir):
+    cache_dir = str(tmpdir.join("model"))
+    download_model("tiny", cache_dir=cache_dir)
+    assert os.path.isdir(cache_dir)
