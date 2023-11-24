@@ -167,7 +167,7 @@ class WhisperModel:
         config = {}
         if os.path.isfile(preprocessor_config_file):
             try:
-                with open(preprocessor_config_file, 'r', encoding='utf-8') as json_file:
+                with open(preprocessor_config_file, "r", encoding="utf-8") as json_file:
                     config = json.load(json_file)
                 valid_keys = signature(FeatureExtractor.__init__).parameters.keys()
                 config = {k: v for k, v in config.items() if k in valid_keys}
@@ -177,7 +177,6 @@ class WhisperModel:
                 )
 
         return config
-
 
     def transcribe(
         self,

@@ -274,5 +274,5 @@ _LANGUAGE_CODES = (
     "yi",
     "yo",
     "zh",
-    "yue"
+    "yue",
 )
