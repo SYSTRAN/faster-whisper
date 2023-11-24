@@ -1,1 +1,1 @@
-transformers[torch]>=4.23
+transformers[torch]>=4.35.0
