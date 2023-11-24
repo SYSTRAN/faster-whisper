@@ -10,17 +10,18 @@ import requests
 from tqdm.auto import tqdm
 
 _MODELS = {
-    "tiny.en": "guillaumekln/faster-whisper-tiny.en",
-    "tiny": "guillaumekln/faster-whisper-tiny",
-    "base.en": "guillaumekln/faster-whisper-base.en",
-    "base": "guillaumekln/faster-whisper-base",
-    "small.en": "guillaumekln/faster-whisper-small.en",
-    "small": "guillaumekln/faster-whisper-small",
-    "medium.en": "guillaumekln/faster-whisper-medium.en",
-    "medium": "guillaumekln/faster-whisper-medium",
-    "large-v1": "guillaumekln/faster-whisper-large-v1",
-    "large-v2": "guillaumekln/faster-whisper-large-v2",
-    "large": "guillaumekln/faster-whisper-large-v2",
+    "tiny.en": "Systran/faster-whisper-tiny.en",
+    "tiny": "Systran/faster-whisper-tiny",
+    "base.en": "Systran/faster-whisper-base.en",
+    "base": "Systran/faster-whisper-base",
+    "small.en": "Systran/faster-whisper-small.en",
+    "small": "Systran/faster-whisper-small",
+    "medium.en": "Systran/faster-whisper-medium.en",
+    "medium": "Systran/faster-whisper-medium",
+    "large-v1": "Systran/faster-whisper-large-v1",
+    "large-v2": "Systran/faster-whisper-large-v2",
+    "large-v3": "Systran/faster-whisper-large-v3",
+    "large": "Systran/faster-whisper-large-v3",
 }
 
 
@@ -50,8 +51,8 @@ def download_model(
     Args:
       size_or_id: Size of the model to download from https://huggingface.co/guillaumekln
         (tiny, tiny.en, base, base.en, small, small.en medium, medium.en, large-v1, large-v2,
-        large), or a CTranslate2-converted model ID from the Hugging Face Hub
-        (e.g. guillaumekln/faster-whisper-large-v2).
+        large-v3, large), or a CTranslate2-converted model ID from the Hugging Face Hub
+        (e.g. Systran/faster-whisper-large-v3).
       output_dir: Directory where the model should be saved. If not set, the model is saved in
         the cache directory.
       local_files_only:  If True, avoid downloading the file and return the path to the local
@@ -76,6 +77,7 @@ def download_model(
 
     allow_patterns = [
         "config.json",
+        "preprocessor_config.json",
         "model.bin",
         "tokenizer.json",
         "vocabulary.*",

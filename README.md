@@ -104,7 +104,7 @@ pip install --force-reinstall "faster-whisper @ https://github.com/guillaumekln/
 ```python
 from faster_whisper import WhisperModel
 
-model_size = "large-v2"
+model_size = "large-v3"
 
 # Run on GPU with FP16
 model = WhisperModel(model_size, device="cuda", compute_type="float16")
@@ -185,17 +185,17 @@ Here is a non exhaustive list of open-source projects using faster-whisper. Feel
 
 ## Model conversion
 
-When loading a model from its size such as `WhisperModel("large-v2")`, the correspondig CTranslate2 model is automatically downloaded from the [Hugging Face Hub](https://huggingface.co/guillaumekln).
+When loading a model from its size such as `WhisperModel("large-v3")`, the correspondig CTranslate2 model is automatically downloaded from the [Hugging Face Hub](https://huggingface.co/Systran).
 
 We also provide a script to convert any Whisper models compatible with the Transformers library. They could be the original OpenAI models or user fine-tuned models.
 
-For example the command below converts the [original "large-v2" Whisper model](https://huggingface.co/openai/whisper-large-v2) and saves the weights in FP16:
+For example the command below converts the [original "large-v3" Whisper model](https://huggingface.co/openai/whisper-large-v3) and saves the weights in FP16:
 
 ```bash
 pip install transformers[torch]>=4.23
 
-ct2-transformers-converter --model openai/whisper-large-v2 --output_dir whisper-large-v2-ct2 \
-    --copy_files tokenizer.json --quantization float16
+ct2-transformers-converter --model openai/whisper-large-v3 --output_dir whisper-large-v3-ct2
+--copy_files tokenizer.json preprocessor_config.json --quantization float16
 ```
 
 * The option `--model` accepts a model name on the Hub or a path to a model directory.
@@ -207,12 +207,12 @@ Models can also be converted from the code. See the [conversion API](https://ope
 
 1. Directly load the model from a local directory:
 ```python
-model = faster_whisper.WhisperModel("whisper-large-v2-ct2")
+model = faster_whisper.WhisperModel("whisper-large-v3-ct2")
 ```
 
 2. [Upload your model to the Hugging Face Hub](https://huggingface.co/docs/transformers/model_sharing#upload-with-the-web-interface) and load it from its name:
 ```python
-model = faster_whisper.WhisperModel("username/whisper-large-v2-ct2")
+model = faster_whisper.WhisperModel("username/whisper-large-v3-ct2")
 ```
 
 ## Comparing performance against other implementations
