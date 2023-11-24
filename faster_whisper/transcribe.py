@@ -194,6 +194,8 @@ class WhisperModel:
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         vad_filter: bool = False,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
+        default_language=None,
+        language_detect_min_prob = None,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
@@ -319,6 +321,8 @@ class WhisperModel:
                     language,
                     language_probability,
                 )
+                if default_language is not None and language_detect_min_prob is not None and language_probability < language_detect_min_prob:
+                    language = default_language
         else:
             if not self.model.is_multilingual and language != "en":
                 self.logger.warning(
