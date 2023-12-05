@@ -80,7 +80,7 @@ class TranscriptionInfo(NamedTuple):
 
 class WhisperModel:
     fallbacks_final_temperature = 0
-    
+
     def __init__(
         self,
         model_size_or_path: str,
