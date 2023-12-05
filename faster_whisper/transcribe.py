@@ -610,7 +610,8 @@ class WhisperModel:
 
             if (
                 not options.condition_on_previous_text
-                or WhisperModel.fallbacks_final_temperature > options.prompt_reset_on_temperature
+                or WhisperModel.fallbacks_final_temperature
+                > options.prompt_reset_on_temperature
             ):
                 if options.condition_on_previous_text:
                     self.logger.debug(
