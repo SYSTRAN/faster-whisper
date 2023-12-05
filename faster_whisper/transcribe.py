@@ -79,6 +79,7 @@ class TranscriptionInfo(NamedTuple):
 
 
 class WhisperModel:
+    fallbacks_final_temperature = 0
     def __init__(
         self,
         model_size_or_path: str,
@@ -421,6 +422,7 @@ class WhisperModel:
 
         last_speech_timestamp = 0.0
         while seek < content_frames:
+            WhisperModel.fallbacks_final_temperature = 0
             time_offset = seek * self.feature_extractor.time_per_frame
             segment = features[:, seek : seek + self.feature_extractor.nb_max_frames]
             segment_size = min(
@@ -607,12 +609,12 @@ class WhisperModel:
 
             if (
                 not options.condition_on_previous_text
-                or temperature > options.prompt_reset_on_temperature
+                or WhisperModel.fallbacks_final_temperature > options.prompt_reset_on_temperature
             ):
                 if options.condition_on_previous_text:
                     self.logger.debug(
                         "Reset prompt. prompt_reset_on_temperature threshold is met %f > %f",
-                        temperature,
+                        WhisperModel.fallbacks_final_temperature,
                         options.prompt_reset_on_temperature,
                     )
 
@@ -731,6 +733,8 @@ class WhisperModel:
             decode_result = max(
                 below_cr_threshold_results or all_results, key=lambda x: x[1]
             )
+            # to pass final temperature for prompt_reset_on_temperature
+            WhisperModel.fallbacks_final_temperature = temperature
 
         return decode_result
 
