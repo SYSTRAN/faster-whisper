@@ -1,5 +1,5 @@
 body {
-  background-color: #222;
+  background-color: #222222;
   color: #e6e6e6;
   font-family: Arial, sans-serif;
 }
@@ -18,7 +18,7 @@ h2 {
 button,
 label.custom-file-input-label {
   font-size: 1rem;
-  background-color: #c02d28;
+  background-color: #c02e29;
   color: #e6e6e6;
   padding: 10px 20px;
   border-radius: 20px;
@@ -57,7 +57,7 @@ input {
 }
 
 form {
-  background-color: black;
+  background-color: #383838;
   padding: 20px;
   width: 500px;
 }
