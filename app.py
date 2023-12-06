@@ -31,10 +31,19 @@ def transcribe_audio():
         return "No files provided."
 
     try:
-        # Initialize the WhisperModel outside the if block for better efficiency
-        model_size = "medium.en"
-        # Run on CPU with INT8
-        model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        # Check if GPU is available
+        use_gpu = False
+        try:
+            # Attempt to create a WhisperModel with GPU support
+            model_size = "medium.en"
+            model = WhisperModel(model_size, device="cuda", compute_type="float16")
+            use_gpu = True
+        except Exception as gpu_error:
+            print(f"GPU not available: {gpu_error}")
+
+        # If GPU is not available, use CPU with INT8
+        if not use_gpu:
+            model = WhisperModel(model_size, device="cpu", compute_type="int8")
 
         # Clear the 'temp' directory if it contains any files
         temp_directory = 'temp'
