@@ -733,7 +733,10 @@ class WhisperModel:
             )
             # to pass final temperature for prompt_reset_on_temperature
             decode_result = (
-                decode_result[0], decode_result[1], temperature, decode_result[3]
+                decode_result[0],
+                decode_result[1],
+                temperature,
+                decode_result[3],
             )
 
         return decode_result
