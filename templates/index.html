@@ -7,95 +7,81 @@
       type="text/css"
       href="{{ url_for('static', filename='style.css') }}"
     />
+    <script
+      type="text/javascript"
+      src="{{ url_for('static', filename='script.js') }}"
+    ></script>
   </head>
   <body>
-    <div class="center-content">
-      <h2>1 - Generate Transcripts</h2>
-      <form
-        action="/transcribe"
-        method="POST"
-        enctype="multipart/form-data"
-        id="transcription"
-      >
-      <h3>To begin, choose a local video file to generate transcripts:</h3>
-        <input
-          type="file"
-          id="fileInput"
-          name="audio_files"
-          multiple
-          accept=".mp3, .mp4"
-        />
-        <label for="fileInput" class="custom-file-input-label">
-          Choose File
-        </label>
-        <div id="fileNameDisplay" class="file-name-display"></div>
+    <div class="upperBoxes">
+      <div id="stepOne">
+        <h2>1 - Generate Transcripts</h2>
+        <form
+          action="/transcribe"
+          method="POST"
+          enctype="multipart/form-data"
+          id="transcription"
+        >
+          <h3 id="stepOneDescription" class="step-description">
+            To begin, choose a local video file to generate transcripts:
+          </h3>
+          <h3 id="fileHeader">File Name</h3>
+          <div id="nameDisplay" class="file-names-column"></div>
+          <div class="buttons-row">
+            <input
+              type="file"
+              id="fileInput"
+              name="audio_files"
+              multiple
+              accept=".mp3, .mp4"
+            />
+            <label
+              for="fileInput"
+              class="custom-file-input-label"
+              id="fileLabel"
+            >
+              Choose File
+            </label>
 
-        <h3>- or -</h3>
+            <h3 id="orText">- or -</h3>
 
-        <!-- Add new input for choosing a folder -->
-        <input
-          type="file"
-          id="folderInput"
-          name="audio_folder"
-          webkitdirectory
-          directory
-          multiple
-        />
-        <label for="folderInput" class="custom-file-input-label">
-          Choose Folder
-        </label>
-        <div id="folderNameDisplay" class="folder-name-display"></div>
-
-        <button type="submit">Generate & Download</button>
-      </form>
-      <h2>2 - Generate Descriptions</h2>
-      <form id="description" action="/generate_descriptions" method="POST">
-        <div>
-          <button type="submit">Generate</button>
-        </div>
-      </form>
+            <!-- Add new input for choosing a folder -->
+            <input
+              type="file"
+              id="folderInput"
+              name="audio_folder"
+              webkitdirectory
+              directory
+              multiple
+            />
+            <label
+              for="folderInput"
+              class="custom-file-input-label"
+              id="folderLabel"
+            >
+              Choose Folder
+            </label>
+            <button type="submit" id="downloadButton">Download</button>
+            <button type="button" id="resetButton">Reset</button>
+          </div>
+          <!-- Added download and reset buttons with IDs -->
+        </form>
+      </div>
+      <div id="stepTwo">
+        <h2>2 - Generate Descriptions</h2>
+        <form id="description" action="/generate_descriptions" method="POST">
+          <div>
+            <h3 class="waiting">Waiting on Step 1...</h3>
+            <button id="generateButton" type="submit" disabled>Generate</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="lowerBoxes">
+      <div id="stepThree">
+        <h2>3 - Append to Lesson Sheet</h2>
+        <form></form>
+      </div>
     </div>
   </body>
-  <script>
-    const fileInput = document.getElementById("fileInput");
-    const folderInput = document.getElementById("folderInput");
-    const fileNameDisplay = document.getElementById("fileNameDisplay");
-    const folderNameDisplay = document.getElementById("folderNameDisplay");
-
-    fileInput.addEventListener("change", function () {
-      const files = fileInput.files;
-      resetFolderInput(); // Clear folder selection
-      if (files.length > 0) {
-        const filteredFileNames = Array.from(files)
-          .map((file) => file.name)
-          .filter((name) => !name.endsWith(".DS_Store"));
-        fileNameDisplay.innerText = filteredFileNames.join(", ");
-      } else {
-        fileNameDisplay.innerText = "No file chosen";
-      }
-    });
-
-    folderInput.addEventListener("change", function () {
-      const folders = folderInput.files;
-      resetFileInput(); // Clear file selection
-      if (folders.length > 0) {
-        const filteredFolderNames = Array.from(folders)
-          .map((folder) => folder.name)
-          .filter((name) => !name.endsWith(".DS_Store"));
-        folderNameDisplay.innerText = filteredFolderNames.join(", ");
-      } else {
-        folderNameDisplay.innerText = "No folder chosen";
-      }
-    });
-
-    function resetFileInput() {
-      fileInput.value = null;
-      fileNameDisplay.innerText = "";
-    }
-
-    function resetFolderInput() {
-      folderInput.value = null;
-      folderNameDisplay.innerText = "";
-    }
-  </script>
 </html>

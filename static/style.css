@@ -1,32 +1,64 @@
+/* General Styles */
 body {
   background-color: #222222;
   color: #e6e6e6;
   font-family: Arial, sans-serif;
+  padding: 20px;
+  margin: 0;
 }
 
-.center-content {
-  width: 500px;
+.upperBoxes {
+  width: 880px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
   margin: 0 auto;
-  text-align: center;
+  padding: 0;
+}
+
+#stepOne,
+#stepTwo {
+  width: 420px; /* Use full width of the container */
+  box-sizing: border-box; /* Include padding and borders in the width */
 }
 
 h1,
-h2 {
+h2,
+h3 {
   color: #e6e6e6;
 }
 
+/* Form Styles */
+form {
+  background-color: #383838;
+  display: flex;
+  padding: 10px;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 8px;
+}
+
+/* Step Description and File Header Styles */
+.step-description,
+#fileHeader {
+  text-align: left;
+}
+
+/* Button Styles */
 button,
 label.custom-file-input-label {
   font-size: 1rem;
   background-color: #c02e29;
   color: #e6e6e6;
-  padding: 10px 20px;
+  padding: 10px;
   border-radius: 20px;
   cursor: pointer;
   border: none;
   display: inline-block;
   position: relative;
   z-index: 1;
+  width: 145px;
+  text-align: center;
 }
 
 button:hover,
@@ -34,16 +66,86 @@ label.custom-file-input-label:hover {
   background-color: #d0312b;
 }
 
+#generateButton {
+}
+
+button:disabled {
+  color: #6c6c6c;
+  background-color: #4a4a4a; /* Adjust the opacity for a visual indication of being disabled */
+  cursor: not-allowed; /* Change the cursor to indicate that the button is not clickable */
+}
+
+/* Specific Button Styles */
+#downloadButton,
+#resetButton,
+#fileHeader {
+  display: none;
+}
+
+#resetButton {
+  background-color: #6c6c6c;
+  color: #383838;
+}
+
+/* File Names Display Styles */
+.file-names-column {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 10px;
+}
+
+/* Loading Bar Styles */
+.loading-bar-background {
+  border-radius: 5px;
+  background-color: #ffffff;
+  height: 15px;
+  width: 200px;
+  display: none;
+}
+
+.loading-bar {
+  border-radius: 5px;
+  height: 20px;
+  display: none;
+}
+
+/* File Container Styles */
+.file-container {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center; /* Center vertically */
+  padding: 5px 0px;
+}
+
+/* File Name Styles */
+.file-name {
+  margin: 0;
+  padding: 0;
+}
+
+.waiting {
+  color: #6c6c6c;
+  margin: 0;
+  padding: 0;
+}
+
+/* File Name Display Styles */
 .file-name-display {
+  border: 2px solid green;
   color: #e6e6e6;
   padding: 10px;
   border: none;
   border-radius: 5px;
-  margin-right: 10px;
-  display: inline-block;
+  display: flex;
   z-index: 0;
+  align-items: start;
 }
 
+/* Input Styles */
 input[type="file"] {
   display: none;
 }
@@ -56,8 +158,15 @@ input {
   width: 50%;
 }
 
-form {
-  background-color: #383838;
-  padding: 20px;
-  width: 500px;
+/* Buttons Row Styles */
+.buttons-row {
+  width: 100%;
+  display: flex;
+  flex-wrap: nowrap;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between; /* Center horizontally */
+  align-content: space-between;
+  margin: 0;
+  padding: 0;
 }
