@@ -80,8 +80,15 @@ def transcribe_audio():
 
                 transcription_text = ""
 
+                total_duration = info.duration  # Total duration of the audio file
+
                 for segment in segments:
                     print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+
+                    # Calculate progress percentage based on segment.end compared to total duration
+                    progress_percentage = (segment.end / total_duration) * 100
+                    print(f"Transcription progress: {progress_percentage:.2f}%")
+
                     transcription_text += f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}\n"
 
                 transcription_results.append((audio_file.filename, transcription_text))
