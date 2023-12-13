@@ -1,18 +1,19 @@
 [![CI](https://github.com/guillaumekln/faster-whisper/workflows/CI/badge.svg)](https://github.com/guillaumekln/faster-whisper/actions?query=workflow%3ACI) [![PyPI version](https://badge.fury.io/py/faster-whisper.svg)](https://badge.fury.io/py/faster-whisper)
 
-# Faster Whisper transcription with CTranslate2
+# Mobius Faster Whisper transcription with CTranslate2
 
 **faster-whisper** is a reimplementation of OpenAI's Whisper model using [CTranslate2](https://github.com/OpenNMT/CTranslate2/), which is a fast inference engine for Transformer models.
 
 This implementation is up to 4 times faster than [openai/whisper](https://github.com/openai/whisper) for the same accuracy while using less memory. The efficiency can be further improved with 8-bit quantization on both CPU and GPU.
 
-Mobius faster-whisper builds on top of faster-whisper and support additional functionalities:
+Mobius faster-whisper builds on top of latest faster-whisper and support additional functionalities:
 
 - Handling multilingual videos.
 - Seed fixing for consistency across runs.
 - Use `log_prob_low_threshold` to skip ambiguous segments from transcription.
-- Merged some of the later commits of faster-whisper.
-- Added languages in the tokenizer for SDK output.
+- Better language prediction using multiple audio segments.
+- Batched inference for faster transcription: Aorund 100x real time speed.
+- Streaming (segment-level) or non-streaming options for Batched inference.
 
 ## Benchmark
 
