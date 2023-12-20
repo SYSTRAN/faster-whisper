@@ -76,6 +76,7 @@ class TranscriptionOptions(NamedTuple):
     multilingual: bool #New parameter
     output_language: str #New parameter
 
+
 class TranscriptionInfo(NamedTuple):
     language: str
     language_probability: float
@@ -89,6 +90,10 @@ class TranscriptionInfo(NamedTuple):
 class SingleSegment(TypedDict):
     """
     A single segment (up to multiple sentences) of a speech.
+
+    start (float): Start time in seconds.
+    end (float): End time in seconds.
+    text (str): transcription of the segment.
     """
 
     start: float
@@ -98,6 +103,10 @@ class SingleSegment(TypedDict):
 class StreamSegment(NamedTuple):
     """
     A single segment (up to multiple sentences) of a speech.
+    
+    start (float): Start time in seconds.
+    end (float): End time in seconds.
+    text (str): transcription of the segment.
     """
     start: float
     end: float
@@ -129,14 +138,12 @@ class BatchedInferencePipeline(Pipeline):
             device: Union[int, str, "torch.device"] = -1,
             framework = "pt",
             language : Optional[str] = None,
-            suppress_numerals: bool = False,
             **kwargs
     ):
         self.model = model
         self.tokenizer = tokenizer
         self.options = options
         self.preset_language = language
-        self.suppress_numerals = suppress_numerals
         self._batch_size = kwargs.pop("batch_size", None)
         self._num_workers = 1
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
@@ -192,8 +199,10 @@ class BatchedInferencePipeline(Pipeline):
     
     def get_language_and_tokenizer(self, audio, task=None, language=None):
 
+        language_probability = 1.0
         if self.tokenizer is None:
-            language = language or self.detect_language(audio)
+            if not language:
+                language, language_probability = self.detect_language(audio)
             task = task or "transcribe"
             self.tokenizer = Tokenizer(self.model.hf_tokenizer,
                                                                 self.model.model.is_multilingual, task=task,
@@ -206,38 +215,30 @@ class BatchedInferencePipeline(Pipeline):
                                                                     self.model.model.is_multilingual, task=task,
                                                                     language=language)
         
-        return language, task
+        return language, language_probability, task
     
+    def audio_split(self, audio, segments, sampling_rate):
+        for seg in segments:
+            f1 = int(seg['start'] * sampling_rate)
+            f2 = int(seg['end'] * sampling_rate)
+            yield {'inputs': audio[f1:f2]}
+
     def transcribe_stream(
-        self, audio: Union[str, np.ndarray], vad_segments, batch_size=None, num_workers=0, language=None, task=None, print_progress = False, combined_progress=False
+        self, audio: Union[str, np.ndarray], vad_segments, batch_size=None, num_workers=0, language=None, task=None, log_progress = False, combined_progress=False
     ) -> TranscriptionResult:
         if isinstance(audio, str):
             audio = decode_audio(audio)
 
-        def data(audio, segments):
-            for seg in segments:
-                f1 = int(seg['start'] * self.model.feature_extractor.sampling_rate)
-                f2 = int(seg['end'] * self.model.feature_extractor.sampling_rate)
-                yield {'inputs': audio[f1:f2]}
-
-        language, task = self.get_language_and_tokenizer(audio, task, language)
-    
-        if self.suppress_numerals:
-            previous_suppress_tokens = self.options.suppress_tokens
-            numeral_symbol_tokens = find_numeral_symbol_tokens(self.tokenizer)
-            print(f"Suppressing numeral and symbol tokens: {numeral_symbol_tokens}")
-            new_suppressed_tokens = numeral_symbol_tokens + self.options.suppress_tokens
-            new_suppressed_tokens = list(set(new_suppressed_tokens))
-            self.options = self.options._replace(suppress_tokens=new_suppressed_tokens)
-
-
+        language, language_probability, task = self.get_language_and_tokenizer(audio, task, language)
+ 
         batch_size = batch_size or self._batch_size
         total_segments = len(vad_segments)
-        for idx, out in enumerate(self.__call__(data(audio, vad_segments), batch_size=batch_size, num_workers=num_workers)):
-            if print_progress:
+        sampling_rate = self.model.feature_extractor.sampling_rate
+        for idx, out in enumerate(self.__call__(self.audio_split(audio, vad_segments, sampling_rate), batch_size=batch_size, num_workers=num_workers)):
+            if log_progress:
                 base_progress = ((idx + 1) / total_segments) * 100
                 percent_complete = base_progress / 2 if combined_progress else base_progress
-                print(f"Progress: {percent_complete:.2f}%...")
+                self.model.logger.info(f"Progress: {percent_complete:.2f}%...")
 
             text = out['text']
             if batch_size in [0, 1, None]:
@@ -247,48 +248,30 @@ class BatchedInferencePipeline(Pipeline):
                     text=text,
                     start=round(vad_segments[idx]['start'], 3),
                     end=round(vad_segments[idx]['end'], 3)
-            ), language
+            ), {'language': language, 'language_probability':language_probability}
 
         # revert the tokenizer if multilingual inference is enabled
         if self.preset_language is None:
             self.tokenizer = None
 
-        # revert suppressed tokens if suppress_numerals is enabled
-        if self.suppress_numerals:
-            self.options = self.options._replace(suppress_tokens=previous_suppress_tokens)
-
-
     def transcribe(
-        self, audio: Union[str, np.ndarray], vad_segments, batch_size=None, num_workers=0, language=None, task=None, print_progress = False, combined_progress=False
+        self, audio: Union[str, np.ndarray], vad_segments, batch_size=None, num_workers=0, language=None, task=None, log_progress = False, combined_progress=False
     ) -> TranscriptionResult:
         if isinstance(audio, str):
             audio = decode_audio(audio)
 
-        def data(audio, segments):
-            for seg in segments:
-                f1 = int(seg['start'] * self.model.feature_extractor.sampling_rate)
-                f2 = int(seg['end'] * self.model.feature_extractor.sampling_rate)
-                yield {'inputs': audio[f1:f2]}
-
-        language, task = self.get_language_and_tokenizer(audio, task, language)
-                
-        if self.suppress_numerals:
-            previous_suppress_tokens = self.options.suppress_tokens
-            numeral_symbol_tokens = find_numeral_symbol_tokens(self.tokenizer)
-            print(f"Suppressing numeral and symbol tokens: {numeral_symbol_tokens}")
-            new_suppressed_tokens = numeral_symbol_tokens + self.options.suppress_tokens
-            new_suppressed_tokens = list(set(new_suppressed_tokens))
-            self.options = self.options._replace(suppress_tokens=new_suppressed_tokens)
+        language, language_probability, task = self.get_language_and_tokenizer(audio, task, language)
 
         segments: List[SingleSegment] = [] 
 
         batch_size = batch_size or self._batch_size
         total_segments = len(vad_segments)
-        for idx, out in enumerate(self.__call__(data(audio, vad_segments), batch_size=batch_size, num_workers=num_workers)):
-            if print_progress:
+        sampling_rate = self.model.feature_extractor.sampling_rate
+        for idx, out in enumerate(self.__call__(self.data(audio, vad_segments, sampling_rate), batch_size=batch_size, num_workers=num_workers)):
+            if log_progress:
                 base_progress = ((idx + 1) / total_segments) * 100
                 percent_complete = base_progress / 2 if combined_progress else base_progress
-                print(f"Progress: {percent_complete:.2f}%...")
+                self.model.logger.info(f"Progress: {percent_complete:.2f}%...")
 
             text = out['text']
             if batch_size in [0, 1, None]:
@@ -304,11 +287,7 @@ class BatchedInferencePipeline(Pipeline):
         if self.preset_language is None:
             self.tokenizer = None
 
-        # revert suppressed tokens if suppress_numerals is enabled
-        if self.suppress_numerals:
-            self.options = self.options._replace(suppress_tokens=previous_suppress_tokens)
-
-        return {"segments": segments, "language": language} 
+        return {"segments": segments, "info": {'language': language, 'language_probability':language_probability}} 
     
     def detect_language(self, audio: np.ndarray):
         
@@ -317,8 +296,8 @@ class BatchedInferencePipeline(Pipeline):
         results = self.model.model.detect_language(encoder_output)
         language_token, language_probability = results[0][0]
         language = language_token[2:-2]
-        print(f"Detected language: {language} ({language_probability:.2f}) in first 30s of audio...")
-        return language
+        self.model.logger.info(f"Detected language: {language} ({language_probability:.2f}) in first 30s of audio...")
+        return language, language_probability
     
     def detect_language_multi_segment(self, audio: Union[str, BinaryIO, np.ndarray], params: dict):
         return self.model.detect_language_multi_segment(audio, params)
@@ -1298,7 +1277,7 @@ class WhisperModel:
         vad_filter_enabled = params['vad_filter']
         vad_params = dict(min_silence_duration_ms = params['vad_min_silence_duration']) #2500
 
-        if vad_filter_enabled and isinstance(vad_params, dict):
+        if vad_filter_enabled:
             vad_params = VadOptions(**vad_params)
 
         # decode audio if it is not decoded already
@@ -1441,10 +1420,8 @@ class WhisperModel:
             # calculate RMS amplitude and DC offset
             dc_offset = np.mean(audio)
             audio_minus_dc_offset = audio - dc_offset
-            rms = np.sqrt(np.mean(audio_minus_dc_offset**2))
 
-            # TODO: maybe we can use numpy for this
-            is_silent = all(abs(x) < 0.01 for x in audio) or rms < 0.01
+            is_silent = np.all(abs(x) < 0.01 for x in audio) or np.sqrt(np.mean(audio_minus_dc_offset**2)) < 0.01
 
             if is_silent:
                 return {'language_code': 'silence','language_confidence': 1.0} 
@@ -1491,7 +1468,7 @@ def load_model_batch(whisper_arch,
     if language is not None:
         tokenizer = Tokenizer(model.hf_tokenizer, model.model.is_multilingual, task=task, language=language)
     else:
-        print("No language specified, language will be first be detected for each audio file (increases inference time).")
+        model.logger.warning("No language specified, language will be first detected for each audio file (increases inference time).")
         tokenizer = None
 
     default_asr_options =  {
@@ -1516,7 +1493,6 @@ def load_model_batch(whisper_arch,
         "word_timestamps": False,
         "prepend_punctuations": "\"'“¿([{-",
         "append_punctuations": "\"'.。,，!！?？:：”)]}、",
-        "suppress_numerals": False,
         "log_prob_low_threshold": -2.0,
         "multilingual": False,
         "output_language": 'en',
@@ -1525,8 +1501,6 @@ def load_model_batch(whisper_arch,
     if asr_options is not None:
         default_asr_options.update(asr_options)
 
-    suppress_numerals = default_asr_options["suppress_numerals"]
-    del default_asr_options["suppress_numerals"]
 
     default_asr_options = TranscriptionOptions(**default_asr_options)
 
@@ -1535,7 +1509,6 @@ def load_model_batch(whisper_arch,
         options=default_asr_options,
         tokenizer=tokenizer,
         language=language,
-        suppress_numerals=suppress_numerals,
     )
 
 
@@ -1641,12 +1614,3 @@ def merge_punctuations(alignment: List[dict], prepended: str, appended: str) -> 
         else:
             i = j
         j += 1
-
-def find_numeral_symbol_tokens(tokenizer):
-    numeral_symbol_tokens = []
-    for i in range(tokenizer.eot):
-        token = tokenizer.decode([i]).removeprefix(" ")
-        has_numeral_symbol = any(c in "0123456789%$£" for c in token)
-        if has_numeral_symbol:
-            numeral_symbol_tokens.append(i)
-    return numeral_symbol_tokens
