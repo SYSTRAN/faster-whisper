@@ -1420,8 +1420,7 @@ class WhisperModel:
             # calculate RMS amplitude and DC offset
             dc_offset = np.mean(audio)
             audio_minus_dc_offset = audio - dc_offset
-
-            is_silent = np.all(abs(x) < 0.01 for x in audio) or np.sqrt(np.mean(audio_minus_dc_offset**2)) < 0.01
+            is_silent = np.all(abs(audio) < 0.01) or np.sqrt(np.mean(audio_minus_dc_offset**2)) < 0.01
 
             if is_silent:
                 return {'language_code': 'silence','language_confidence': 1.0} 
