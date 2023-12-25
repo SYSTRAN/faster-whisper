@@ -1,25 +1,33 @@
 import logging
 import os
+import re
 
-from typing import Optional
+from typing import List, Optional
 
 import huggingface_hub
 import requests
 
 from tqdm.auto import tqdm
 
-_MODELS = (
-    "tiny.en",
-    "tiny",
-    "base.en",
-    "base",
-    "small.en",
-    "small",
-    "medium.en",
-    "medium",
-    "large-v1",
-    "large-v2",
-)
+_MODELS = {
+    "tiny.en": "Systran/faster-whisper-tiny.en",
+    "tiny": "Systran/faster-whisper-tiny",
+    "base.en": "Systran/faster-whisper-base.en",
+    "base": "Systran/faster-whisper-base",
+    "small.en": "Systran/faster-whisper-small.en",
+    "small": "Systran/faster-whisper-small",
+    "medium.en": "Systran/faster-whisper-medium.en",
+    "medium": "Systran/faster-whisper-medium",
+    "large-v1": "Systran/faster-whisper-large-v1",
+    "large-v2": "Systran/faster-whisper-large-v2",
+    "large-v3": "Systran/faster-whisper-large-v3",
+    "large": "Systran/faster-whisper-large-v3",
+}
+
+
+def available_models() -> List[str]:
+    """Returns the names of available models."""
+    return list(_MODELS.keys())
 
 
 def get_assets_path():
@@ -33,18 +41,18 @@ def get_logger():
 
 
 def download_model(
-    size: str,
+    size_or_id: str,
     output_dir: Optional[str] = None,
     local_files_only: bool = False,
     cache_dir: Optional[str] = None,
 ):
     """Downloads a CTranslate2 Whisper model from the Hugging Face Hub.
 
-    The model is downloaded from https://huggingface.co/guillaumekln.
-
     Args:
-      size: Size of the model to download (tiny, tiny.en, base, base.en, small, small.en,
-        medium, medium.en, large-v1, or large-v2).
+      size_or_id: Size of the model to download from https://huggingface.co/guillaumekln
+        (tiny, tiny.en, base, base.en, small, small.en medium, medium.en, large-v1, large-v2,
+        large-v3, large), or a CTranslate2-converted model ID from the Hugging Face Hub
+        (e.g. Systran/faster-whisper-large-v3).
       output_dir: Directory where the model should be saved. If not set, the model is saved in
         the cache directory.
       local_files_only:  If True, avoid downloading the file and return the path to the local
@@ -57,15 +65,19 @@ def download_model(
     Raises:
       ValueError: if the model size is invalid.
     """
-    if size not in _MODELS:
-        raise ValueError(
-            "Invalid model size '%s', expected one of: %s" % (size, ", ".join(_MODELS))
-        )
-
-    repo_id = "guillaumekln/faster-whisper-%s" % size
+    if re.match(r".*/.*", size_or_id):
+        repo_id = size_or_id
+    else:
+        repo_id = _MODELS.get(size_or_id)
+        if repo_id is None:
+            raise ValueError(
+                "Invalid model size '%s', expected one of: %s"
+                % (size_or_id, ", ".join(_MODELS.keys()))
+            )
 
     allow_patterns = [
         "config.json",
+        "preprocessor_config.json",
         "model.bin",
         "tokenizer.json",
         "vocabulary.*",

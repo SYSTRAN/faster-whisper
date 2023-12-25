@@ -6,6 +6,7 @@ system dependencies. FFmpeg does not need to be installed on the system.
 However, the API is quite low-level so we need to manipulate audio frames directly.
 """
 
+import gc
 import io
 import itertools
 
@@ -42,7 +43,7 @@ def decode_audio(
     raw_buffer = io.BytesIO()
     dtype = None
 
-    with av.open(input_file, metadata_errors="ignore") as container:
+    with av.open(input_file, mode="r", metadata_errors="ignore") as container:
         frames = container.decode(audio=0)
         frames = _ignore_invalid_frames(frames)
         frames = _group_frames(frames, 500000)
@@ -52,6 +53,11 @@ def decode_audio(
             array = frame.to_ndarray()
             dtype = array.dtype
             raw_buffer.write(array)
+
+    # It appears that some objects related to the resampler are not freed
+    # unless the garbage collector is manually run.
+    del resampler
+    gc.collect()
 
     audio = np.frombuffer(raw_buffer.getbuffer(), dtype=dtype)
 

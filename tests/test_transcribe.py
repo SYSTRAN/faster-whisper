@@ -3,6 +3,11 @@ import os
 from faster_whisper import WhisperModel, decode_audio
 
 
+def test_supported_languages():
+    model = WhisperModel("tiny.en")
+    assert model.supported_languages == ["en"]
+
+
 def test_transcribe(jfk_path):
     model = WhisperModel("tiny")
     segments, info = model.transcribe(jfk_path, word_timestamps=True)
@@ -32,6 +37,24 @@ def test_transcribe(jfk_path):
     assert segment.text == "".join(word.word for word in segment.words)
     assert segment.start == segment.words[0].start
     assert segment.end == segment.words[-1].end
+
+
+def test_prefix_with_timestamps(jfk_path):
+    model = WhisperModel("tiny")
+    segments, _ = model.transcribe(jfk_path, prefix="And so my fellow Americans")
+    segments = list(segments)
+
+    assert len(segments) == 1
+
+    segment = segments[0]
+
+    assert segment.text == (
+        " And so my fellow Americans ask not what your country can do for you, "
+        "ask what you can do for your country."
+    )
+
+    assert segment.start == 0
+    assert 10 < segment.end < 11
 
 
 def test_vad(jfk_path):
