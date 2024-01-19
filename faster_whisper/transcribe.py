@@ -1,6 +1,7 @@
 import itertools
 import json
 import logging
+import multiprocessing
 import os
 import zlib
 
@@ -76,6 +77,51 @@ class TranscriptionInfo(NamedTuple):
     all_language_probs: Optional[List[Tuple[str, float]]]
     transcription_options: TranscriptionOptions
     vad_options: VadOptions
+
+
+# Performs the preprocessing on its own process to make use of all CPU cores
+def cpu_preprocessing(
+    logger,
+    feature_extractor,
+    audio: Union[str, BinaryIO, np.ndarray],
+    vad_filter: bool = False,
+    vad_parameters: Optional[Union[dict, VadOptions]] = None,
+) -> Tuple[np.ndarray, float, float, Optional[List[dict]]]:
+    sampling_rate = feature_extractor.sampling_rate
+    duration = audio.shape[0] / sampling_rate
+    duration_after_vad = duration
+
+    logger.info("Processing audio with duration %s", format_timestamp(duration))
+
+    if vad_filter:
+        speech_chunks = get_speech_timestamps(audio, vad_parameters)
+        audio = collect_chunks(audio, speech_chunks)
+        duration_after_vad = audio.shape[0] / sampling_rate
+
+        logger.info(
+            "VAD filter removed %s of audio",
+            format_timestamp(duration - duration_after_vad),
+        )
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "VAD filter kept the following audio segments: %s",
+                ", ".join(
+                    "[%s -> %s]"
+                    % (
+                        format_timestamp(chunk["start"] / sampling_rate),
+                        format_timestamp(chunk["end"] / sampling_rate),
+                    )
+                    for chunk in speech_chunks
+                ),
+            )
+
+    else:
+        speech_chunks = None
+
+    features = feature_extractor(audio)
+
+    return features, duration, duration_after_vad, speech_chunks
 
 
 class WhisperModel:
@@ -156,6 +202,7 @@ class WhisperModel:
         self.input_stride = 2
         self.time_precision = 0.02
         self.max_length = 448
+        self.cpu_pool = multiprocessing.Pool()
 
     @property
     def supported_languages(self) -> List[str]:
@@ -213,6 +260,7 @@ class WhisperModel:
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         vad_filter: bool = False,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
+        preprocess_on_multiple_cores: bool = False,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
@@ -264,6 +312,9 @@ class WhisperModel:
             https://github.com/snakers4/silero-vad.
           vad_parameters: Dictionary of Silero VAD parameters or VadOptions class (see available
             parameters and default values in the class `VadOptions`).
+          preprocess_on_multiple_cores: If preprocess_on_multiple_cores is True, multiple
+            CPU based workloads will run on different cores. This will slightly increse overhead
+            for single requests but improve performance for multiple simulatenous requests.
 
         Returns:
           A tuple with:
@@ -271,49 +322,38 @@ class WhisperModel:
             - a generator over transcribed segments
             - an instance of TranscriptionInfo
         """
-        sampling_rate = self.feature_extractor.sampling_rate
 
         if not isinstance(audio, np.ndarray):
-            audio = decode_audio(audio, sampling_rate=sampling_rate)
-
-        duration = audio.shape[0] / sampling_rate
-        duration_after_vad = duration
-
-        self.logger.info(
-            "Processing audio with duration %s", format_timestamp(duration)
-        )
+            audio = decode_audio(
+                audio, sampling_rate=self.feature_extractor.sampling_rate
+            )
 
         if vad_filter:
             if vad_parameters is None:
                 vad_parameters = VadOptions()
             elif isinstance(vad_parameters, dict):
                 vad_parameters = VadOptions(**vad_parameters)
-            speech_chunks = get_speech_timestamps(audio, vad_parameters)
-            audio = collect_chunks(audio, speech_chunks)
-            duration_after_vad = audio.shape[0] / sampling_rate
 
-            self.logger.info(
-                "VAD filter removed %s of audio",
-                format_timestamp(duration - duration_after_vad),
+        # Spawns a new process to run preprocessing on CPU
+        if preprocess_on_multiple_cores:
+            features, duration, duration_after_vad, speech_chunks = self.cpu_pool.apply(
+                cpu_preprocessing,
+                (
+                    self.logger,
+                    self.feature_extractor,
+                    audio,
+                    vad_filter,
+                    vad_parameters,
+                ),
             )
-
-            if self.logger.isEnabledFor(logging.DEBUG):
-                self.logger.debug(
-                    "VAD filter kept the following audio segments: %s",
-                    ", ".join(
-                        "[%s -> %s]"
-                        % (
-                            format_timestamp(chunk["start"] / sampling_rate),
-                            format_timestamp(chunk["end"] / sampling_rate),
-                        )
-                        for chunk in speech_chunks
-                    ),
-                )
-
         else:
-            speech_chunks = None
-
-        features = self.feature_extractor(audio)
+            features, duration, duration_after_vad, speech_chunks = cpu_preprocessing(
+                self.logger,
+                self.feature_extractor,
+                audio,
+                vad_filter,
+                vad_parameters,
+            )
 
         encoder_output = None
         all_language_probs = None
@@ -384,7 +424,9 @@ class WhisperModel:
         segments = self.generate_segments(features, tokenizer, options, encoder_output)
 
         if speech_chunks:
-            segments = restore_speech_timestamps(segments, speech_chunks, sampling_rate)
+            segments = restore_speech_timestamps(
+                segments, speech_chunks, self.feature_extractor.sampling_rate
+            )
 
         info = TranscriptionInfo(
             language=language,
