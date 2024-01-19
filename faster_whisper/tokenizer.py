@@ -1,7 +1,7 @@
 import string
 
 from functools import cached_property
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import tokenizers
 
@@ -14,7 +14,7 @@ class Tokenizer:
         tokenizer: tokenizers.Tokenizer,
         multilingual: bool,
         task: Optional[str] = None,
-        language: Optional[str] = None,
+        language: Union[str, List[str]] = None,
     ):
         self.tokenizer = tokenizer
 
@@ -25,15 +25,30 @@ class Tokenizer:
                     % (task, ", ".join(_TASKS))
                 )
 
-            if language not in _LANGUAGE_CODES:
-                raise ValueError(
-                    "'%s' is not a valid language code (accepted language codes: %s)"
-                    % (language, ", ".join(_LANGUAGE_CODES))
-                )
+            # checks if language is a list of languages
+            if isinstance(language, list):
+                for lang in language:
+                    if lang not in _LANGUAGE_CODES:
+                        raise ValueError(
+                            "'%s' is not a valid language code (accepted language codes: %s)"
+                            % (lang, ", ".join(_LANGUAGE_CODES))
+                        )
+                self.language = [
+                    self.tokenizer.token_to_id("<|%s|>" % lang) for lang in language
+                ]
+                self.language_code = language
+            else:
+                if language not in _LANGUAGE_CODES:
+                    raise ValueError(
+                        "'%s' is not a valid language code (accepted language codes: %s)"
+                        % (language, ", ".join(_LANGUAGE_CODES))
+                    )
+
+                self.task = self.tokenizer.token_to_id("<|%s|>" % task)
+                self.language = self.tokenizer.token_to_id("<|%s|>" % language)
+                self.language_code = language
 
             self.task = self.tokenizer.token_to_id("<|%s|>" % task)
-            self.language = self.tokenizer.token_to_id("<|%s|>" % language)
-            self.language_code = language
         else:
             self.task = None
             self.language = None
@@ -76,7 +91,11 @@ class Tokenizer:
         sequence = [self.sot]
 
         if self.language is not None:
-            sequence.append(self.language)
+            if isinstance(self.language, list):
+                for language in self.language:
+                    sequence.append(language)
+            else:
+                sequence.append(self.language)
 
         if self.task is not None:
             sequence.append(self.task)
@@ -108,7 +127,15 @@ class Tokenizer:
     def split_to_word_tokens(
         self, tokens: List[int]
     ) -> Tuple[List[str], List[List[int]]]:
-        if self.language_code in {"zh", "ja", "th", "lo", "my", "yue"}:
+        # checks if language is a list of languages
+        if isinstance(self.language_code, list):
+            for lang in self.language_code:
+                if lang in {"zh", "ja", "th", "lo", "my", "yue"}:
+                    # These languages don't typically use spaces, so it is difficult to split words
+                    # without morpheme analysis. Here, we instead split words at any
+                    # position where the tokens are decoded as valid unicode points
+                    return self.split_tokens_on_unicode(tokens)
+        elif self.language_code in {"zh", "ja", "th", "lo", "my", "yue"}:
             # These languages don't typically use spaces, so it is difficult to split words
             # without morpheme analysis. Here, we instead split words at any
             # position where the tokens are decoded as valid unicode points

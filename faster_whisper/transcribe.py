@@ -259,6 +259,7 @@ class WhisperModel:
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         vad_filter: bool = False,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
+        code_switching_threshold: Optional[float] = 1,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
@@ -375,11 +376,24 @@ class WhisperModel:
 
             language_probability = 1
 
+        tokenizer_language = language
+        if all_language_probs is not None:
+            code_switched_languages = []
+            for lang in all_language_probs:
+                if lang[1] > code_switching_threshold:
+                    code_switched_languages.append(lang)
+            if len(code_switched_languages) > 0:
+                # sort the code switched languages by probability
+                code_switched_languages.sort(key=lambda x: x[1], reverse=True)
+                tokenizer_language = [
+                    language for language, prob in code_switched_languages
+                ]
+
         tokenizer = Tokenizer(
             self.hf_tokenizer,
             self.model.is_multilingual,
             task=task,
-            language=language,
+            language=tokenizer_language,
         )
 
         options = TranscriptionOptions(
