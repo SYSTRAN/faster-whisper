@@ -312,8 +312,9 @@ class WhisperModel:
             https://github.com/snakers4/silero-vad.
           vad_parameters: Dictionary of Silero VAD parameters or VadOptions class (see available
             parameters and default values in the class `VadOptions`).
-          preprocess_on_multiple_cores: If preprocess_on_multiple_cores is True, multiple CPU based workloads will run on different cores. This will
-            slightly increse overhead for single requests but improve performance for multiple simulatenous requests.
+          preprocess_on_multiple_cores: If preprocess_on_multiple_cores is True, multiple
+            CPU based workloads will run on different cores. This will slightly increse overhead 
+            for single requests but improve performance for multiple simulatenous requests.
 
         Returns:
           A tuple with:
