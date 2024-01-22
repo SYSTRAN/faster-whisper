@@ -260,7 +260,7 @@ class WhisperModel:
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         vad_filter: bool = False,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
-        code_switching_threshold: Optional[float] = 1,
+        preprocess_on_multiple_cores: bool = False,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
@@ -312,6 +312,8 @@ class WhisperModel:
             https://github.com/snakers4/silero-vad.
           vad_parameters: Dictionary of Silero VAD parameters or VadOptions class (see available
             parameters and default values in the class `VadOptions`).
+          preprocess_on_multiple_cores: If preprocess_on_multiple_cores is True, multiple CPU based workloads will run on different cores. This will
+            slightly increse overhead for single requests but improve performance for multiple simulatenous requests.
 
         Returns:
           A tuple with:
@@ -332,16 +334,25 @@ class WhisperModel:
                 vad_parameters = VadOptions(**vad_parameters)
 
         # Spawns a new process to run preprocessing on CPU
-        features, duration, duration_after_vad, speech_chunks = self.cpu_pool.apply(
-            cpu_preprocessing,
-            (
+        if preprocess_on_multiple_cores:
+            features, duration, duration_after_vad, speech_chunks = self.cpu_pool.apply(
+                cpu_preprocessing,
+                (
+                    self.logger,
+                    self.feature_extractor,
+                    audio,
+                    vad_filter,
+                    vad_parameters,
+                ),
+            )
+        else:
+            features, duration, duration_after_vad, speech_chunks = cpu_preprocessing(
                 self.logger,
                 self.feature_extractor,
                 audio,
                 vad_filter,
                 vad_parameters,
-            ),
-        )
+            )
 
         encoder_output = None
         all_language_probs = None
