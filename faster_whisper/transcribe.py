@@ -202,6 +202,7 @@ class WhisperModel:
         self.input_stride = 2
         self.time_precision = 0.02
         self.max_length = 448
+        self.cpu_pool = multiprocessing.Pool()
 
     @property
     def supported_languages(self) -> List[str]:
@@ -331,17 +332,16 @@ class WhisperModel:
                 vad_parameters = VadOptions(**vad_parameters)
 
         # Spawns a new process to run preprocessing on CPU
-        with multiprocessing.Pool() as pool:
-            features, duration, duration_after_vad, speech_chunks = pool.apply(
-                cpu_preprocessing,
-                (
-                    self.logger,
-                    self.feature_extractor,
-                    audio,
-                    vad_filter,
-                    vad_parameters,
-                ),
-            )
+        features, duration, duration_after_vad, speech_chunks = self.cpu_pool.apply(
+            cpu_preprocessing,
+            (
+                self.logger,
+                self.feature_extractor,
+                audio,
+                vad_filter,
+                vad_parameters,
+            ),
+        )
 
         encoder_output = None
         all_language_probs = None
