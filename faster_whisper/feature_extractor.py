@@ -1,4 +1,6 @@
 import numpy as np
+import torch
+import torchaudio.compliance.kaldi as ta_kaldi
 
 
 # Adapted from https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/feature_extraction_whisper.py  # noqa: E501
@@ -142,25 +144,49 @@ class FeatureExtractor:
             data[f] = np.fft.fft(fft_signal, axis=0)[:num_fft_bins]
         return data.T
 
-    def __call__(self, waveform, padding=True):
+    def __call__(self, waveform, enable_ta = False, padding=True):
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results
-        whisper's original torch implementation with 1e-5 tolerance.
+        whisper's original torch implementation with 1e-5 tolerance. Additionally, faster 
+        feature extraction option using kaldi fbank features are available if torchaudio is
+        available.
         """
+        if enable_ta:
+            waveform = waveform.astype(np.float32)
+
         if padding:
             waveform = np.pad(waveform, [(0, self.n_samples)])
 
-        window = np.hanning(self.n_fft + 1)[:-1]
+        if enable_ta:
+            audio = torch.from_numpy(waveform).unsqueeze(0)
+            fbank = ta_kaldi.fbank(
+                    audio,
+                    sample_frequency=self.sampling_rate,
+                    window_type="hanning",
+                    num_mel_bins=self.n_mels,
+                )
+            log_spec = fbank.numpy().T.astype(np.float32) #ctranslate does not take 64
+        
+            #normalize
+            
+            #Audioset values as default mean and std for audio
+            mean_val = -4.2677393
+            std_val = 4.5689974
+            scaled_features = (log_spec - (mean_val)) / (std_val * 2)
+            log_spec = scaled_features
 
-        frames = self.fram_wave(waveform)
-        stft = self.stft(frames, window=window)
-        magnitudes = np.abs(stft[:, :-1]) ** 2
+        else:
+            window = np.hanning(self.n_fft + 1)[:-1]
 
-        filters = self.mel_filters
-        mel_spec = filters @ magnitudes
+            frames = self.fram_wave(waveform)
+            stft = self.stft(frames, window=window)
+            magnitudes = np.abs(stft[:, :-1]) ** 2
 
-        log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
-        log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
+            filters = self.mel_filters
+            mel_spec = filters @ magnitudes
+
+            log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
+            log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
+            log_spec = (log_spec + 4.0) / 4.0
 
         return log_spec
