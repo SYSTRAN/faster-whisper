@@ -171,7 +171,7 @@ class BatchedInferencePipeline(Pipeline):
 
     def preprocess(self, audio):
         audio = audio['inputs']
-        features = torch.tensor(self.model.feature_extractor(audio, padding=True)[:,:self.model.feature_extractor.nb_max_frames])
+        features = torch.tensor(self.model.feature_extractor(audio, enable_ta=True, padding=True)[:,:self.model.feature_extractor.nb_max_frames])
         return {'inputs': features}
 
     def _forward(self, model_inputs):
@@ -267,7 +267,7 @@ class BatchedInferencePipeline(Pipeline):
         batch_size = batch_size or self._batch_size
         total_segments = len(vad_segments)
         sampling_rate = self.model.feature_extractor.sampling_rate
-        for idx, out in enumerate(self.__call__(self.data(audio, vad_segments, sampling_rate), batch_size=batch_size, num_workers=num_workers)):
+        for idx, out in enumerate(self.__call__(self.audio_split(audio, vad_segments, sampling_rate), batch_size=batch_size, num_workers=num_workers)):
             if log_progress:
                 base_progress = ((idx + 1) / total_segments) * 100
                 percent_complete = base_progress / 2 if combined_progress else base_progress
@@ -437,6 +437,7 @@ class WhisperModel:
         without_timestamps: bool = False,
         max_initial_timestamp: float = 1.0,
         word_timestamps: bool = False,
+        enable_ta_fe = False, 
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         multilingual: bool = False,
@@ -488,6 +489,8 @@ class WhisperModel:
           max_initial_timestamp: The initial timestamp cannot be later than this.
           word_timestamps: Extract word-level timestamps using the cross-attention pattern
             and dynamic time warping, and include the timestamps for each word in each segment.
+          enable_ta_fe: Use torch audio based kaldi fbank features instead of torch based mel filterbank
+            for faster feature extraction.
           prepend_punctuations: If word_timestamps is True, merge these punctuation symbols
             with the next word
           append_punctuations: If word_timestamps is True, merge these punctuation symbols
@@ -552,7 +555,7 @@ class WhisperModel:
         else:
             speech_chunks = None
 
-        features = self.feature_extractor(audio)
+        features = self.feature_extractor(audio, enable_ta = enable_ta_fe)
 
         encoder_output = None
         all_language_probs = None
@@ -1290,6 +1293,7 @@ class WhisperModel:
         num_detection_segments = params['language_detection_segments']
         vad_filter_enabled = params['vad_filter']
         vad_params = dict(min_silence_duration_ms = params['vad_min_silence_duration']) #2500
+        enable_ta_fe = params.get('enable_ta_fe', False)
 
         if vad_filter_enabled:
             vad_params = VadOptions(**vad_params)
@@ -1335,7 +1339,7 @@ class WhisperModel:
         # TODO: need to check if it fails for long audios and if we need to split the audio
         
         # extract features from audio with padding (default)
-        features = self.feature_extractor(audio)
+        features = self.feature_extractor(audio, enable_ta = enable_ta_fe)
 
         # number of segments in the audio 
         num_segments = features.shape[-1] // nb_max_frames
