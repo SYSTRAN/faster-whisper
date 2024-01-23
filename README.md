@@ -6,7 +6,7 @@
 
 This implementation is up to 4 times faster than [openai/whisper](https://github.com/openai/whisper) for the same accuracy while using less memory. The efficiency can be further improved with 8-bit quantization on both CPU and GPU.
 
-Mobius faster-whisper builds on top of faster-whisper v0.10.0 and support additional functionalities:
+Mobius faster-whisper builds on top of faster-whisper v0.10.0 (latest stable version) and support additional functionalities:
 
 - Handling multilingual videos.
 - Seed fixing for consistency across runs.
@@ -14,6 +14,7 @@ Mobius faster-whisper builds on top of faster-whisper v0.10.0 and support additi
 - Better language prediction using multiple audio segments.
 - Batched inference for faster transcription: Around 100x real time speed.
 - Streaming (segment-level) or non-streaming options for Batched inference.
+- Option for faster feature extraction with torchaudio.
 
 ## Benchmark
 
