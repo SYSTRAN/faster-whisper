@@ -261,6 +261,7 @@ class WhisperModel:
         vad_filter: bool = False,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
         preprocess_on_multiple_cores: bool = False,
+        code_switching_threshold: float = 1.0,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
