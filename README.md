@@ -170,7 +170,7 @@ segments, info = model.transcribe("audio.mp3", beam_size=5,
     language="en", max_new_tokens=128, condition_on_previous_text=False)
 
 ```
-NOTE: emprically, `condition_on_previous_text=True` will degrade the performance of `faster-distil-whisper` for long audio.
+NOTE: emprically, `condition_on_previous_text=True` will degrade the performance of `faster-distil-whisper` for long audio. Degradation on the first chunk was observed with `initial_prompt` too.
 
 ### Word-level timestamps
 
