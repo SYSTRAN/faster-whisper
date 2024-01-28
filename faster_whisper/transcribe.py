@@ -267,8 +267,8 @@ class WhisperModel:
             https://github.com/snakers4/silero-vad.
           vad_parameters: Dictionary of Silero VAD parameters or VadOptions class (see available
             parameters and default values in the class `VadOptions`).
-          max_new_tokens: Maximum number of new tokens to generate. If not set, the maximum will be
-            set by the default max_length.
+          max_new_tokens: Maximum number of new tokens to generate per-chunk. If not set,
+            the maximum will be set by the default max_length.
           chunk_length: The length of audio segments. If it is not None, it will overwrite the
             default chunk_length of the FeatureExtractor.
 
