@@ -5,7 +5,17 @@ import os
 import zlib
 
 from inspect import signature
-from typing import BinaryIO, Iterable, List, NamedTuple, Optional, Tuple, Union
+from typing import (
+    Any,
+    BinaryIO,
+    Dict,
+    Iterable,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import ctranslate2
 import numpy as np
@@ -30,7 +40,7 @@ class Word(NamedTuple):
     probability: float
 
 
-class Segment(NamedTuple):
+class NamedTupleSegment(NamedTuple):
     id: int
     seek: int
     start: float
@@ -42,6 +52,26 @@ class Segment(NamedTuple):
     compression_ratio: float
     no_speech_prob: float
     words: Optional[List[Word]]
+
+
+class Segment(NamedTupleSegment):
+    def _asdict(self) -> Dict[str, Any]:
+        words: Optional[List[Dict[str, Any]]] = None
+        if self.words:
+            words = [word._asdict() for word in self.words]
+        return {
+            "id": self.id,
+            "seek": self.seek,
+            "start": self.start,
+            "end": self.end,
+            "text": self.text,
+            "tokens": self.tokens,
+            "temperature": self.temperature,
+            "avg_logprob": self.avg_logprob,
+            "compression_ratio": self.compression_ratio,
+            "no_speech_prob": self.no_speech_prob,
+            "words": words,
+        }
 
 
 class TranscriptionOptions(NamedTuple):
