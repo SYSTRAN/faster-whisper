@@ -170,7 +170,7 @@ segments, info = model.transcribe("audio.mp3", beam_size=5,
     language="en", max_new_tokens=128, condition_on_previous_text=False)
 
 ```
-NOTE: emprically, `condition_on_previous_text=True` will degrade the performance of `faster-distil-whisper` for long audio. Degradation on the first chunk was observed with `initial_prompt` too.
+NOTE: Empirically, `condition_on_previous_text=True` will degrade the performance of `faster-distil-whisper` for long audio. Degradation on the first chunk was observed with `initial_prompt` too.
 
 ### Word-level timestamps
 
@@ -233,7 +233,7 @@ Here is a non exhaustive list of open-source projects using faster-whisper. Feel
 
 ## Model conversion
 
-When loading a model from its size such as `WhisperModel("large-v3")`, the correspondig CTranslate2 model is automatically downloaded from the [Hugging Face Hub](https://huggingface.co/Systran).
+When loading a model from its size such as `WhisperModel("large-v3")`, the corresponding CTranslate2 model is automatically downloaded from the [Hugging Face Hub](https://huggingface.co/Systran).
 
 We also provide a script to convert any Whisper models compatible with the Transformers library. They could be the original OpenAI models or user fine-tuned models.
 
