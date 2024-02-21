@@ -1,6 +1,7 @@
 import os
 
 from faster_whisper import WhisperModel, decode_audio
+from faster_whisper.transcribe import Segment, Word
 
 
 def test_supported_languages():
@@ -97,3 +98,48 @@ def test_stereo_diarization(data_dir):
     segments, _ = model.transcribe(right)
     transcription = "".join(segment.text for segment in segments).strip()
     assert transcription == "The horizon seems extremely distant."
+
+
+def test_segment_as_dict():
+    segment = Segment(
+        id=1,
+        seek=398,
+        start=0.0,
+        end=3.04,
+        text=" Hello world.",
+        tokens=[50364, 2425, 1002, 13, 50516],
+        temperature=0.9,
+        avg_logprob=-1.1086603999137878,
+        compression_ratio=0.6,
+        no_speech_prob=0.10812531411647797,
+        words=[
+            Word(start=0.0, end=1.82, word=" Hello", probability=0.8265082836151123),
+            Word(start=1.82, end=3.04, word=" world.", probability=0.31053248047828674),
+        ],
+    )
+    assert segment._asdict() == {
+        "id": 1,
+        "seek": 398,
+        "start": 0.0,
+        "end": 3.04,
+        "text": " Hello world.",
+        "tokens": [50364, 2425, 1002, 13, 50516],
+        "temperature": 0.9,
+        "avg_logprob": -1.1086603999137878,
+        "compression_ratio": 0.6,
+        "no_speech_prob": 0.10812531411647797,
+        "words": [
+            {
+                "start": 0.0,
+                "end": 1.82,
+                "word": " Hello",
+                "probability": 0.8265082836151123,
+            },
+            {
+                "start": 1.82,
+                "end": 3.04,
+                "word": " world.",
+                "probability": 0.31053248047828674,
+            },
+        ],
+    }
