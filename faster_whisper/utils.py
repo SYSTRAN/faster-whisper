@@ -146,3 +146,10 @@ class disabled_tqdm(tqdm):
     def __init__(self, *args, **kwargs):
         kwargs["disable"] = True
         super().__init__(*args, **kwargs)
+
+
+def get_end(segments: List[dict]) -> Optional[float]:
+    return next(
+        (w["end"] for s in reversed(segments) for w in reversed(s["words"])),
+        segments[-1]["end"] if segments else None,
+    )
