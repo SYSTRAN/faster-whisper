@@ -90,6 +90,10 @@ def cpu_preprocessing(
     sampling_rate = feature_extractor.sampling_rate
     duration = audio.shape[0] / sampling_rate
     duration_after_vad = duration
+    if not isinstance(audio, np.ndarray):
+        audio = decode_audio(
+            audio, sampling_rate=sampling_rate
+        )
 
     logger.info("Processing audio with duration %s", format_timestamp(duration))
 
@@ -323,11 +327,6 @@ class WhisperModel:
             - a generator over transcribed segments
             - an instance of TranscriptionInfo
         """
-
-        if not isinstance(audio, np.ndarray):
-            audio = decode_audio(
-                audio, sampling_rate=self.feature_extractor.sampling_rate
-            )
 
         if vad_filter:
             if vad_parameters is None:
