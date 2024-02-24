@@ -206,7 +206,7 @@ class WhisperModel:
         self.input_stride = 2
         self.time_precision = 0.02
         self.max_length = 448
-        self.cpu_pool = multiprocessing.Pool()
+        self.cpu_pool = multiprocessing.Pool(20)
 
     @property
     def supported_languages(self) -> List[str]:
