@@ -160,7 +160,7 @@ segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
 ### Faster-distil-whisper
-For usage of `faster-ditil-whisper`, please refer to: https://github.com/guillaumekln/faster-whisper/issues/533
+For usage of `faster-distil-whisper`, please refer to: https://github.com/guillaumekln/faster-whisper/issues/533
 
 ```python
 model_size = "distil-large-v2"
