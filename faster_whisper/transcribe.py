@@ -661,14 +661,6 @@ class WhisperModel:
                 # skip silence before possible hallucinations
                 if options.hallucination_silence_threshold is not None:
                     threshold = options.hallucination_silence_threshold
-                    if not single_timestamp_ending:
-                        last_word_end = get_end(current_segments)
-                        if last_word_end is not None and last_word_end > time_offset:
-                            remaining_duration = window_end_time - last_word_end
-                            if remaining_duration > threshold:
-                                seek = round(last_word_end * self.frames_per_second)
-                            else:
-                                seek = previous_seek + segment_size
 
                     # if first segment might be a hallucination, skip leading silence
                     first_segment = next_words_segment(current_segments)
