@@ -905,6 +905,12 @@ class WhisperModel:
         hotwords:Optional[str] = None
     ) -> List[int]:
         prompt = []
+
+        if hotwords and not prefix:
+            hotwords_tokens = tokenizer.encode(" " + hotwords.strip())
+            if len(hotwords_tokens) >= self.max_length // 2:
+                hotwords_tokens = hotwords_tokens[: self.max_length // 2 - 1]
+            prompt.extend(hotwords_tokens)
         if previous_tokens:
             prompt.append(tokenizer.sot_prev)
             prompt.extend(previous_tokens[-(self.max_length // 2 - 1) :])
@@ -921,12 +927,6 @@ class WhisperModel:
             if not without_timestamps:
                 prompt.append(tokenizer.timestamp_begin)
             prompt.extend(prefix_tokens)
-
-        if hotwords and not prefix:
-            hotwords_tokens = tokenizer.encode(" " + hotwords.strip())
-            if len(hotwords_tokens) >= self.max_length // 2:
-                hotwords_tokens = hotwords_tokens[: self.max_length // 2 - 1]
-            prompt.extend(hotwords_tokens)
 
         return prompt
 
