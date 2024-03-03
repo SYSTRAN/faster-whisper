@@ -499,7 +499,7 @@ class WhisperModel:
                     "Processing segment at %s", format_timestamp(time_offset)
                 )
 
-            previous_tokens = all_tokens[prompt_reset_since:]
+            previous_tokens = all_tokens[prompt_reset_since:]            
             prompt = self.get_prompt(
                 tokenizer,
                 previous_tokens,
@@ -899,9 +899,11 @@ class WhisperModel:
         prefix: Optional[str] = None,
     ) -> List[int]:
         prompt = []
-
         if previous_tokens:
             prompt.append(tokenizer.sot_prev)
+            hotwords = "this video is about ComfyUI"
+            hotwords_token = tokenizer.encode(hotwords)
+            prompt.extend(hotwords_token)
             prompt.extend(previous_tokens[-(self.max_length // 2 - 1) :])
 
         prompt.extend(tokenizer.sot_sequence)
