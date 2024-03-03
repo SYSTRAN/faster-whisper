@@ -221,7 +221,7 @@ class WhisperModel:
         chunk_length: Optional[int] = None,
         clip_timestamps: Union[str, List[float]] = "0",
         hallucination_silence_threshold: Optional[float] = None,
-        hotwords : Optional[str] = None
+        hotwords: Optional[str] = None,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
@@ -402,7 +402,7 @@ class WhisperModel:
             max_new_tokens=max_new_tokens,
             clip_timestamps=clip_timestamps,
             hallucination_silence_threshold=hallucination_silence_threshold,
-            hotwords=hotwords
+            hotwords=hotwords,
         )
 
         segments = self.generate_segments(features, tokenizer, options, encoder_output)
@@ -503,13 +503,13 @@ class WhisperModel:
                     "Processing segment at %s", format_timestamp(time_offset)
                 )
 
-            previous_tokens = all_tokens[prompt_reset_since:]            
+            previous_tokens = all_tokens[prompt_reset_since:]
             prompt = self.get_prompt(
                 tokenizer,
                 previous_tokens,
                 without_timestamps=options.without_timestamps,
                 prefix=options.prefix if seek == 0 else None,
-                hotwords = options.hotwords
+                hotwords=options.hotwords,
             )
 
             if seek > 0 or encoder_output is None:
@@ -902,7 +902,7 @@ class WhisperModel:
         previous_tokens: List[int],
         without_timestamps: bool = False,
         prefix: Optional[str] = None,
-        hotwords:Optional[str] = None
+        hotwords: Optional[str] = None,
     ) -> List[int]:
         prompt = []
 
