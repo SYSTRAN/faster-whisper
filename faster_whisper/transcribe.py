@@ -69,6 +69,7 @@ class TranscriptionOptions(NamedTuple):
     max_new_tokens: Optional[int]
     clip_timestamps: Union[str, List[float]]
     hallucination_silence_threshold: Optional[float]
+    hotwords: Optional[str]
 
 
 class TranscriptionInfo(NamedTuple):
@@ -220,6 +221,7 @@ class WhisperModel:
         chunk_length: Optional[int] = None,
         clip_timestamps: Union[str, List[float]] = "0",
         hallucination_silence_threshold: Optional[float] = None,
+        hotwords : Optional[str] = None
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
@@ -281,7 +283,8 @@ class WhisperModel:
           hallucination_silence_threshold: Optional[float]
             When word_timestamps is True, skip silent periods longer than this threshold
              (in seconds) when a possible hallucination is detected
-
+          hotwords:Optional text
+            add hotwords if set prefix it invalid
         Returns:
           A tuple with:
 
@@ -399,6 +402,7 @@ class WhisperModel:
             max_new_tokens=max_new_tokens,
             clip_timestamps=clip_timestamps,
             hallucination_silence_threshold=hallucination_silence_threshold,
+            hotwords=hotwords
         )
 
         segments = self.generate_segments(features, tokenizer, options, encoder_output)
@@ -505,6 +509,7 @@ class WhisperModel:
                 previous_tokens,
                 without_timestamps=options.without_timestamps,
                 prefix=options.prefix if seek == 0 else None,
+                hotwords = options.hotwords
             )
 
             if seek > 0 or encoder_output is None:
@@ -897,13 +902,11 @@ class WhisperModel:
         previous_tokens: List[int],
         without_timestamps: bool = False,
         prefix: Optional[str] = None,
+        hotwords:Optional[str] = None
     ) -> List[int]:
         prompt = []
         if previous_tokens:
             prompt.append(tokenizer.sot_prev)
-            hotwords = "this video is about ComfyUI"
-            hotwords_token = tokenizer.encode(hotwords)
-            prompt.extend(hotwords_token)
             prompt.extend(previous_tokens[-(self.max_length // 2 - 1) :])
 
         prompt.extend(tokenizer.sot_sequence)
@@ -918,6 +921,12 @@ class WhisperModel:
             if not without_timestamps:
                 prompt.append(tokenizer.timestamp_begin)
             prompt.extend(prefix_tokens)
+
+        if hotwords and not prefix:
+            hotwords_tokens = tokenizer.encode(" " + hotwords.strip())
+            if len(hotwords_tokens) >= self.max_length // 2:
+                hotwords_tokens = hotwords_tokens[: self.max_length // 2 - 1]
+            prompt.extend(hotwords_tokens)
 
         return prompt
 
