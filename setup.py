@@ -37,7 +37,7 @@ setup(
     long_description=get_long_description(),
     long_description_content_type="text/markdown",
     author="Guillaume Klein",
-    url="https://github.com/guillaumekln/faster-whisper",
+    url="https://github.com/SYSTRAN/faster-whisper",
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
