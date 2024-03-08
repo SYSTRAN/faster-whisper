@@ -906,14 +906,15 @@ class WhisperModel:
     ) -> List[int]:
         prompt = []
 
-        if previous_tokens:
+        if previous_tokens or (hotwords and not prefix):
             prompt.append(tokenizer.sot_prev)
             if hotwords and not prefix:
                 hotwords_tokens = tokenizer.encode(" " + hotwords.strip())
                 if len(hotwords_tokens) >= self.max_length // 2:
                     hotwords_tokens = hotwords_tokens[: self.max_length // 2 - 1]
                 prompt.extend(hotwords_tokens)
-            prompt.extend(previous_tokens[-(self.max_length // 2 - 1) :])
+            if previous_tokens:
+                prompt.extend(previous_tokens[-(self.max_length // 2 - 1) :])
 
         prompt.extend(tokenizer.sot_sequence)
 
