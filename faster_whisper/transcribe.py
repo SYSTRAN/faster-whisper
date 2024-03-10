@@ -11,7 +11,7 @@ import ctranslate2
 import numpy as np
 import tokenizers
 
-from faster_whisper.audio import decode_audio
+from faster_whisper.audio import decode_audio, pad_or_trim
 from faster_whisper.feature_extractor import FeatureExtractor
 from faster_whisper.tokenizer import _LANGUAGE_CODES, Tokenizer
 from faster_whisper.utils import download_model, format_timestamp, get_end, get_logger
@@ -493,6 +493,7 @@ class WhisperModel:
             )
             segment = features[:, seek : seek + segment_size]
             segment_duration = segment_size * self.feature_extractor.time_per_frame
+            segment = pad_or_trim(segment, self.feature_extractor.nb_max_frames)
 
             if self.logger.isEnabledFor(logging.DEBUG):
                 self.logger.debug(
@@ -661,14 +662,6 @@ class WhisperModel:
                 # skip silence before possible hallucinations
                 if options.hallucination_silence_threshold is not None:
                     threshold = options.hallucination_silence_threshold
-                    if not single_timestamp_ending:
-                        last_word_end = get_end(current_segments)
-                        if last_word_end is not None and last_word_end > time_offset:
-                            remaining_duration = window_end_time - last_word_end
-                            if remaining_duration > threshold:
-                                seek = round(last_word_end * self.frames_per_second)
-                            else:
-                                seek = previous_seek + segment_size
 
                     # if first segment might be a hallucination, skip leading silence
                     first_segment = next_words_segment(current_segments)
