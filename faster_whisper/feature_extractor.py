@@ -23,6 +23,7 @@ class FeatureExtractor:
         self.mel_filters = self.get_mel_filters(
             sampling_rate, n_fft, n_mels=feature_size
         )
+        self.n_mels=feature_size
 
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
         # Initialize the weights

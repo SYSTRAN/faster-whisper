@@ -49,6 +49,18 @@ class Segment(NamedTuple):
     no_speech_prob: float
     words: Optional[List[Word]]
 
+class BatchedSegment(NamedTuple):
+    """
+    A single segment in batched transcription (up to multiple sentences) of a speech.
+    
+    start (float): Start time in seconds.
+    end (float): End time in seconds.
+    text (str): transcription of the segment.
+    """
+    start: float
+    end: float
+    text: str
+
 #Added additional parameters for multilingual videos and fixes below
 class TranscriptionOptions(NamedTuple):
     beam_size: int
@@ -85,41 +97,6 @@ class TranscriptionInfo(NamedTuple):
     all_language_probs: Optional[List[Tuple[str, float]]]
     transcription_options: TranscriptionOptions
     vad_options: VadOptions
-
-
-class SingleSegment(TypedDict):
-    """
-    A single segment (up to multiple sentences) of a speech.
-
-    start (float): Start time in seconds.
-    end (float): End time in seconds.
-    text (str): transcription of the segment.
-    """
-
-    start: float
-    end: float
-    text: str
-
-class StreamSegment(NamedTuple):
-    """
-    A single segment (up to multiple sentences) of a speech.
-    
-    start (float): Start time in seconds.
-    end (float): End time in seconds.
-    text (str): transcription of the segment.
-    """
-    start: float
-    end: float
-    text: str
-
-
-class TranscriptionResult(TypedDict):
-    """
-    A list of segments and word segments of a speech.
-    """
-    segments: List[SingleSegment]
-    language: str
-
 
 class BatchedInferencePipeline(Pipeline):
 
@@ -218,77 +195,61 @@ class BatchedInferencePipeline(Pipeline):
         return language, language_probability, task
     
     def audio_split(self, audio, segments, sampling_rate):
+        "Returns splitted audio chunks as iterator"
         for seg in segments:
             f1 = int(seg['start'] * sampling_rate)
             f2 = int(seg['end'] * sampling_rate)
             yield {'inputs': audio[f1:f2]}
 
-    def transcribe_stream(
-        self, audio: Union[str, np.ndarray], vad_segments, batch_size=None, num_workers=0, language=None, task=None, log_progress = False, combined_progress=False
-    ) -> TranscriptionResult:
+    def transcribe(
+        self, audio: Union[str, np.ndarray], vad_segments: List[dict], batch_size=16, num_workers=0, language=None, task=None, log_progress = False
+    ) ->Tuple[Iterable[BatchedSegment], dict]: 
+        """transcribe audio in chunks specified in vad_segments and return BatchedSegment generator with language info.
+
+        args:
+            audio: complete audio file as numpy array/path to the audio file for batched transcription.
+            vad_segments: list of dictionaries each containing "start" and "end" keys, specifying the start and end voiced regions of audio chunks.
+            batch_size: the maximum number of parallel requests to model for decoding.
+            num_workers: to enable true parallelism when running the model, same as the transcribe function argument in WhisperModel class.
+            language: The language spoken in the audio. It should be a language code such as "en" or "fr".
+            task: either "transcribe" or "translate".
+            log_progress: whether to show progress bar or not. 
+        """
+        sampling_rate = self.model.feature_extractor.sampling_rate
+
         if isinstance(audio, str):
             audio = decode_audio(audio)
+
+        #if no segment split is provided, consider a single vad segment from start to end. No benefit in this case.
+        if not vad_segments: 
+            end_time = len(audio)/sampling_rate
+            vad_segments = [{'start':0.0, 'end': end_time}]
 
         language, language_probability, task = self.get_language_and_tokenizer(audio, task, language)
  
         batch_size = batch_size or self._batch_size
         total_segments = len(vad_segments)
-        sampling_rate = self.model.feature_extractor.sampling_rate
         for idx, out in enumerate(self.__call__(self.audio_split(audio, vad_segments, sampling_rate), batch_size=batch_size, num_workers=num_workers)):
             if log_progress:
-                base_progress = ((idx + 1) / total_segments) * 100
-                percent_complete = base_progress / 2 if combined_progress else base_progress
+                percent_complete = ((idx + 1) / total_segments) * 100
                 self.model.logger.info(f"Progress: {percent_complete:.2f}%...")
 
             text = out['text']
             if batch_size in [0, 1, None]:
                 text = text[0]
 
-            yield StreamSegment(
+            segments = BatchedSegment(
                     text=text,
                     start=round(vad_segments[idx]['start'], 3),
                     end=round(vad_segments[idx]['end'], 3)
-            ), {'language': language, 'language_probability':language_probability}
+            )
+            info = {'language': language, 'language_probability':language_probability}
+            yield segments, info
 
         # revert the tokenizer if multilingual inference is enabled
         if self.preset_language is None:
             self.tokenizer = None
-
-    def transcribe(
-        self, audio: Union[str, np.ndarray], vad_segments, batch_size=None, num_workers=0, language=None, task=None, log_progress = False, combined_progress=False
-    ) -> TranscriptionResult:
-        if isinstance(audio, str):
-            audio = decode_audio(audio)
-
-        language, language_probability, task = self.get_language_and_tokenizer(audio, task, language)
-
-        segments: List[SingleSegment] = [] 
-
-        batch_size = batch_size or self._batch_size
-        total_segments = len(vad_segments)
-        sampling_rate = self.model.feature_extractor.sampling_rate
-        for idx, out in enumerate(self.__call__(self.audio_split(audio, vad_segments, sampling_rate), batch_size=batch_size, num_workers=num_workers)):
-            if log_progress:
-                base_progress = ((idx + 1) / total_segments) * 100
-                percent_complete = base_progress / 2 if combined_progress else base_progress
-                self.model.logger.info(f"Progress: {percent_complete:.2f}%...")
-
-            text = out['text']
-            if batch_size in [0, 1, None]:
-                text = text[0]
-
-            segments.append({
-                'text':text,
-                'start': round(vad_segments[idx]['start'], 3),
-                'end': round(vad_segments[idx]['end'], 3)
-            })
-
-        # revert the tokenizer if multilingual inference is enabled
-        if self.preset_language is None:
-            self.tokenizer = None
-
-        return {"segments": segments, "info": {'language': language, 'language_probability':language_probability}} 
-    
+        
     def detect_language(self, audio: np.ndarray):
         
         segment = torch.tensor(self.model.feature_extractor(audio, padding=True)[:,:self.model.feature_extractor.nb_max_frames])
@@ -444,7 +405,7 @@ class WhisperModel:
         output_language: Optional[str] = None,
         vad_filter: bool = False,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
-    ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
+    ) -> Tuple[Iterable[Segment], TranscriptionInfo]: 
         """Transcribes an input file.
 
         Arguments:
@@ -1449,6 +1410,32 @@ class WhisperModel:
         # Language is not detected for any segment and none of prev conditions met
         return {'language_code': 'silence','language_confidence': 1.0} 
 
+default_batched_asr_options =  {
+        "beam_size": 5,
+        "best_of": 5,
+        "patience": 1,
+        "length_penalty": 1,
+        "repetition_penalty": 1,
+        "no_repeat_ngram_size": 0, 
+        "temperatures": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+        "compression_ratio_threshold": 2.4,
+        "log_prob_threshold": -1.0,
+        "no_speech_threshold": 0.6,
+        "condition_on_previous_text": False,
+        "prompt_reset_on_temperature": 0.5,
+        "initial_prompt": None,
+        "prefix": None,
+        "suppress_blank": True,
+        "suppress_tokens": [-1],
+        "without_timestamps": True,# False for timings
+        "max_initial_timestamp": 0.0,
+        "word_timestamps": False,
+        "prepend_punctuations": "\"'“¿([{-",
+        "append_punctuations": "\"'.。,，!！?？:：”)]}、",
+        "log_prob_low_threshold": -2.0,
+        "multilingual": False,
+        "output_language": 'en',
+    }
 
 def load_model_batch(whisper_arch,
                device,
@@ -1488,42 +1475,15 @@ def load_model_batch(whisper_arch,
         model.logger.warning("No language specified, language will be first detected for each audio file (increases inference time).")
         tokenizer = None
 
-    default_asr_options =  {
-        "beam_size": 5,
-        "best_of": 5,
-        "patience": 1,
-        "length_penalty": 1,
-        "repetition_penalty": 1,
-        "no_repeat_ngram_size": 0, 
-        "temperatures": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-        "compression_ratio_threshold": 2.4,
-        "log_prob_threshold": -1.0,
-        "no_speech_threshold": 0.6,
-        "condition_on_previous_text": False,
-        "prompt_reset_on_temperature": 0.5,
-        "initial_prompt": None,
-        "prefix": None,
-        "suppress_blank": True,
-        "suppress_tokens": [-1],
-        "without_timestamps": True,# False for timings
-        "max_initial_timestamp": 0.0,
-        "word_timestamps": False,
-        "prepend_punctuations": "\"'“¿([{-",
-        "append_punctuations": "\"'.。,，!！?？:：”)]}、",
-        "log_prob_low_threshold": -2.0,
-        "multilingual": False,
-        "output_language": 'en',
-    }
-
     if asr_options is not None:
-        default_asr_options.update(asr_options)
+        default_batched_asr_options.update(asr_options)
 
 
-    default_asr_options = TranscriptionOptions(**default_asr_options)
+    batched_asr_options = TranscriptionOptions(**default_batched_asr_options)
 
     return BatchedInferencePipeline(
         model=model,
-        options=default_asr_options,
+        options=batched_asr_options,
         tokenizer=tokenizer,
         language=language,
     )
