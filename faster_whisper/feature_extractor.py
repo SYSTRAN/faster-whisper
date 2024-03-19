@@ -145,7 +145,7 @@ class FeatureExtractor:
             data[f] = np.fft.fft(fft_signal, axis=0)[:num_fft_bins]
         return data.T
 
-    def __call__(self, waveform, enable_ta = False, padding=True):
+    def __call__(self, waveform, enable_ta = False, padding=True, chunk_length=None):
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results
         whisper's original torch implementation with 1e-5 tolerance. Additionally, faster 
@@ -154,6 +154,10 @@ class FeatureExtractor:
         """
         if enable_ta:
             waveform = waveform.astype(np.float32)
+        
+        if chunk_length is not None:
+            self.n_samples = chunk_length * self.sampling_rate
+            self.nb_max_frames = self.n_samples // self.hop_length
 
         if padding:
             waveform = np.pad(waveform, [(0, self.n_samples)])

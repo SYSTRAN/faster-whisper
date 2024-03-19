@@ -22,6 +22,9 @@ _MODELS = {
     "large-v2": "Systran/faster-whisper-large-v2",
     "large-v3": "Systran/faster-whisper-large-v3",
     "large": "Systran/faster-whisper-large-v3",
+    "distil-large-v2": "Systran/faster-distil-whisper-large-v2",
+    "distil-medium.en": "Systran/faster-distil-whisper-medium.en",
+    "distil-small.en": "Systran/faster-distil-whisper-small.en",
 }
 
 
@@ -143,3 +146,10 @@ class disabled_tqdm(tqdm):
     def __init__(self, *args, **kwargs):
         kwargs["disable"] = True
         super().__init__(*args, **kwargs)
+
+
+def get_end(segments: List[dict]) -> Optional[float]:
+    return next(
+        (w["end"] for s in reversed(segments) for w in reversed(s["words"])),
+        segments[-1]["end"] if segments else None,
+    )
