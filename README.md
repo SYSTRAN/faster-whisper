@@ -162,7 +162,7 @@ segments = list(segments)  # The transcription will actually run here.
 ### Faster Distil-Whisper
 
 The Distil-Whisper checkpoints are compatible with the Faster-Whisper package. In particular, the latest [distil-large-v3](https://huggingface.co/distil-whisper/distil-large-v3)
-checkpoint is designed to give one-to-one equivalence with the Faster-Whisper transcription algorithm. The following code snippet 
+checkpoint is intrinsically designed to work with the Faster-Whisper transcription algorithm. The following code snippet 
 demonstrates how to run inference with distil-large-v3 on a specified audio file:
 
 ```python
