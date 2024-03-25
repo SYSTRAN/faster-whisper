@@ -6,3 +6,4 @@ onnxruntime>=1.14,<2
 transformers #4.36.0
 torch==2.0.1+cu11.8
 torchaudio==2.0.2+cu11.8
+jsons>=1.6.3
