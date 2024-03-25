@@ -234,7 +234,7 @@ class BatchedInferencePipeline(Pipeline):
     def transcribe(
         self, 
         audio: Union[str, np.ndarray], 
-        vad_segments: List[dict], 
+        vad_segments: Optional[List[dict]], 
         batch_size: int =16, 
         num_workers: int =0, 
         language: Optional[str]=None, 
@@ -273,7 +273,8 @@ class BatchedInferencePipeline(Pipeline):
         Arguments:
             audio: complete audio file as numpy array/path to the audio file for batched transcription.
             vad_segments: list of dictionaries each containing "start" and "end" keys, 
-                specifying the start and end voiced regions of audio chunks.
+                specifying the start and end voiced regions of audio chunks. 
+                If no vad_segments specified, it performs non-batched transcribe, causing speed degradation.
             batch_size: the maximum number of parallel requests to model for decoding.
             num_workers: to enable true parallelism when running the model, same as the transcribe function argument
                 in WhisperModel class.
