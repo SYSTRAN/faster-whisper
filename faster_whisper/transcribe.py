@@ -113,7 +113,7 @@ class BatchedInferencePipeline(Pipeline):
     def __init__(
             self,
             model,
-            options : NamedTuple,
+            options : Optional[NamedTuple]=None,
             tokenizer=None,
             device: Union[int, str, "torch.device"] = -1,
             framework = "pt",
