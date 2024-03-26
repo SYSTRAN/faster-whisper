@@ -159,18 +159,25 @@ for segment in segments:
 segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
-### Faster-distil-whisper
-For usage of `faster-distil-whisper`, please refer to: https://github.com/guillaumekln/faster-whisper/issues/533
+### Faster Distil-Whisper
+
+The Distil-Whisper checkpoints are compatible with the Faster-Whisper package. In particular, the latest [distil-large-v3](https://huggingface.co/distil-whisper/distil-large-v3)
+checkpoint is intrinsically designed to work with the Faster-Whisper transcription algorithm. The following code snippet 
+demonstrates how to run inference with distil-large-v3 on a specified audio file:
 
 ```python
-model_size = "distil-large-v2"
-# model_size = "distil-medium.en"
-model = WhisperModel(model_size, device="cuda", compute_type="float16")
-segments, info = model.transcribe("audio.mp3", beam_size=5, 
-    language="en", max_new_tokens=128, condition_on_previous_text=False)
+from faster_whisper import WhisperModel
 
+model_size = "distil-large-v3"
+
+model = WhisperModel(model_size, device="cuda", compute_type="float16")
+segments, info = model.transcribe("audio.mp3", beam_size=5, language="en", condition_on_previous_text=False)
+
+for segment in segments:
+    print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
 ```
-NOTE: Empirically, `condition_on_previous_text=True` will degrade the performance of `faster-distil-whisper` for long audio. Degradation on the first chunk was observed with `initial_prompt` too.
+
+For more information about the distil-large-v3 model, refer to the original [model card](https://huggingface.co/distil-whisper/distil-large-v3).
 
 ### Word-level timestamps
 
