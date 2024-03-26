@@ -4,6 +4,6 @@ huggingface_hub>=0.13
 tokenizers>=0.13,<0.16
 onnxruntime>=1.14,<2 
 transformers #4.36.0
-torch>=2.0.1+cu11.8
-torchaudio>=2.0.2+cu11.8
+torch>=2.1.1+cu121
+torchaudio>=2.1.2+cu121
 jsons>=1.6.3
