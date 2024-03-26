@@ -18,6 +18,8 @@ Mobius faster-whisper builds on top of faster-whisper v0.10.0 (latest stable ver
 
 ## Benchmark
 
+### Whisper
+
 For reference, here's the time and memory usage that are required to transcribe [**13 minutes**](https://www.youtube.com/watch?v=0u7tTptBo9I) of audio using different implementations:
 
 * [openai/whisper](https://github.com/openai/whisper)@[6dea21fd](https://github.com/openai/whisper/commit/6dea21fd7f7253bfe450f1e2512a0fe47ee2d258)
@@ -45,6 +47,33 @@ For reference, here's the time and memory usage that are required to transcribe 
 | faster-whisper | int8 | 5 | 2m04s | 995MB |
 
 *Executed with 8 threads on a Intel(R) Xeon(R) Gold 6226R.*
+
+
+### Distil-whisper
+
+| Implementation | Precision | Beam size | Time | Gigaspeech WER |
+| --- | --- | --- | --- | --- |
+| distil-whisper/distil-large-v2 | fp16 | 4 |- | 10.36 |
+| [faster-distil-large-v2](https://huggingface.co/Systran/faster-distil-whisper-large-v2) | fp16 | 5 | - | 10.28 |
+| distil-whisper/distil-medium.en | fp16 | 4 | - | 11.21 |
+| [faster-distil-medium.en](https://huggingface.co/Systran/faster-distil-whisper-medium.en) | fp16 | 5 | - | 11.21 |
+
+*Executed with CUDA 11.4 on a NVIDIA 3090.*
+
+<details>
+<summary>testing details (click to expand)</summary>
+
+For `distil-whisper/distil-large-v2`, the WER is tested with code sample from [link](https://huggingface.co/distil-whisper/distil-large-v2#evaluation). for `faster-distil-whisper`, the WER is tested with setting:
+```python
+from faster_whisper import WhisperModel
+
+model_size = "distil-large-v2"
+# model_size = "distil-medium.en"
+# Run on GPU with FP16
+model = WhisperModel(model_size, device="cuda", compute_type="float16")
+segments, info = model.transcribe("audio.mp3", beam_size=5, language="en")
+```
+</details>
 
 ## Requirements
 
@@ -111,6 +140,8 @@ pip install --force-reinstall "faster-whisper @ https://github.com/guillaumekln/
 
 ## Usage
 
+### Faster-whisper
+
 ```python
 from faster_whisper import WhisperModel
 
@@ -138,6 +169,18 @@ for segment in segments:
 segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
+### Faster-distil-whisper
+For usage of `faster-distil-whisper`, please refer to: https://github.com/guillaumekln/faster-whisper/issues/533
+
+```python
+model_size = "distil-large-v2"
+# model_size = "distil-medium.en"
+model = WhisperModel(model_size, device="cuda", compute_type="float16")
+segments, info = model.transcribe("audio.mp3", beam_size=5, 
+    language="en", max_new_tokens=128, condition_on_previous_text=False)
+
+```
+NOTE: Empirically, `condition_on_previous_text=True` will degrade the performance of `faster-distil-whisper` for long audio. Degradation on the first chunk was observed with `initial_prompt` too.
 
 ### Word-level timestamps
 
@@ -186,6 +229,8 @@ See more model and transcription options in the [`WhisperModel`](https://github.
 
 Here is a non exhaustive list of open-source projects using faster-whisper. Feel free to add your project to the list!
 
+
+* [WhisperX](https://github.com/m-bain/whisperX) is an award-winning Python library that offers speaker diarization and accurate word-level timestamps using wav2vec2 alignment
 * [whisper-ctranslate2](https://github.com/Softcatala/whisper-ctranslate2) is a command line client based on faster-whisper and compatible with the original client from openai/whisper.
 * [whisper-diarize](https://github.com/MahmoudAshraf97/whisper-diarization) is a speaker diarization tool that is based on faster-whisper and NVIDIA NeMo.
 * [whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win) Standalone CLI executables of faster-whisper for Windows, Linux & macOS. 
@@ -193,11 +238,13 @@ Here is a non exhaustive list of open-source projects using faster-whisper. Feel
 * [Open-Lyrics](https://github.com/zh-plus/Open-Lyrics) is a Python library that transcribes voice files using faster-whisper, and translates/polishes the resulting text into `.lrc` files in the desired language using OpenAI-GPT.
 * [wscribe](https://github.com/geekodour/wscribe) is a flexible transcript generation tool supporting faster-whisper, it can export word level transcript and the exported transcript then can be edited with [wscribe-editor](https://github.com/geekodour/wscribe-editor)
 * [aTrain](https://github.com/BANDAS-Center/aTrain) is a graphical user interface implementation of faster-whisper developed at the BANDAS-Center at the University of Graz for transcription and diarization in Windows ([Windows Store App](https://apps.microsoft.com/detail/atrain/9N15Q44SZNS2)) and Linux.
+* [Whisper-Streaming](https://github.com/ufal/whisper_streaming) implements real-time mode for offline Whisper-like speech-to-text models with faster-whisper as the most recommended back-end. It implements a streaming policy with self-adaptive latency based on the actual source complexity, and demonstrates the state of the art.
 * [WhisperLive](https://github.com/collabora/WhisperLive) is a nearly-live implementation of OpenAI's Whisper which uses faster-whisper as the backend to transcribe audio in real-time.
+* [Faster-Whisper-Transcriber](https://github.com/BBC-Esq/ctranslate2-faster-whisper-transcriber) is a simple but reliable voice transcriber that provides a user-friendly interface.
 
 ## Model conversion
 
-When loading a model from its size such as `WhisperModel("large-v3")`, the correspondig CTranslate2 model is automatically downloaded from the [Hugging Face Hub](https://huggingface.co/Systran).
+When loading a model from its size such as `WhisperModel("large-v3")`, the corresponding CTranslate2 model is automatically downloaded from the [Hugging Face Hub](https://huggingface.co/Systran).
 
 We also provide a script to convert any Whisper models compatible with the Transformers library. They could be the original OpenAI models or user fine-tuned models.
 
