@@ -305,7 +305,7 @@ class WhisperModel:
             "Processing audio with duration %s", format_timestamp(duration)
         )
 
-        if vad_filter:
+        if vad_filter and clip_timestamps == "0":
             if vad_parameters is None:
                 vad_parameters = VadOptions()
             elif isinstance(vad_parameters, dict):
