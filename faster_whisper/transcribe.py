@@ -388,8 +388,12 @@ class WhisperModel:
                     language = max(
                         detected_language_info,
                         key=lambda lang: len(detected_language_info[lang]),
+                        default='en',
                     )
-                    language_probability = max(detected_language_info[language])
+                    if detected_language_info:
+                        language_probability = max(detected_language_info[language])
+                    else:
+                        language_probability = 0
 
                 self.logger.info(
                     "Detected language '%s' with probability %.2f",
