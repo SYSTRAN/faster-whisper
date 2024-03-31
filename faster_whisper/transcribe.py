@@ -406,7 +406,7 @@ class WhisperModel:
                     "The current model is English-only but the language parameter is set to '%s'; "
                     "using 'en' instead." % language
                 )
-                language = "en"
+                language = 'en'
 
             language_probability = 1
 
