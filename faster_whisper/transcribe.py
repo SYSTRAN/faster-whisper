@@ -280,6 +280,7 @@ class WhisperModel:
           clip_timestamps: Union[str, List[float]]
             Comma-separated list start,end,start,end,... timestamps (in seconds) of clips to
              process. The last end timestamp defaults to the end of the file.
+             vad_filter will be ignored if clip_timestamps is used.
           hallucination_silence_threshold: Optional[float]
             When word_timestamps is True, skip silent periods longer than this threshold
              (in seconds) when a possible hallucination is detected
