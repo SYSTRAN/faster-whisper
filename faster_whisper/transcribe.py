@@ -356,7 +356,7 @@ class WhisperModel:
                     features.shape[-1] - self.feature_extractor.nb_max_frames
                 )
                 while (
-                    seek < content_frames
+                    seek <= content_frames
                     and seek
                     < self.feature_extractor.nb_max_frames * language_detection_segments
                 ):
