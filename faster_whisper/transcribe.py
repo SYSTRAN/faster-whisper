@@ -356,7 +356,7 @@ class WhisperModel:
                     features.shape[-1] - self.feature_extractor.nb_max_frames
                 )
                 while (
-                    seek < content_frames
+                    seek <= content_frames
                     and seek
                     < self.feature_extractor.nb_max_frames * language_detection_segments
                 ):
@@ -388,12 +388,8 @@ class WhisperModel:
                     language = max(
                         detected_language_info,
                         key=lambda lang: len(detected_language_info[lang]),
-                        default="en",
                     )
-                    if detected_language_info:
-                        language_probability = max(detected_language_info[language])
-                    else:
-                        language_probability = 0
+                    language_probability = max(detected_language_info[language])
 
                 self.logger.info(
                     "Detected language '%s' with probability %.2f",
