@@ -1,5 +1,6 @@
 import itertools
 import json, jsons
+import hashlib
 import logging
 import os
 import zlib
@@ -11,8 +12,9 @@ from typing import BinaryIO, Iterable, List, NamedTuple, Optional, Tuple, Union
 
 import ctranslate2
 import numpy as np
-import tokenizers
-
+import tokenizers, tqdm
+import urllib
+from pyannote.audio import Model
 from faster_whisper.audio import decode_audio, pad_or_trim
 from faster_whisper.feature_extractor import FeatureExtractor
 from faster_whisper.tokenizer import _LANGUAGE_CODES, Tokenizer
@@ -22,6 +24,8 @@ from faster_whisper.vad import (
     VadOptions,
     collect_chunks,
     get_speech_timestamps,
+    VoiceActivitySegmentation,
+    merge_chunks
 )
 
 import torch
@@ -126,7 +130,13 @@ class BatchedInferencePipeline(Pipeline):
         self.preset_language = language
         self._batch_size = kwargs.pop("batch_size", None)
         self._num_workers = 1
+        self.vad_onset = 0.500
+        self.vad_offset = 0.363
+        self.vad_model_url = "https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin"
         
+        #load vad model and perform VAD preprocessing if needed
+        self.vad_model = self.load_vad_model(vad_onset=self.vad_onset, vad_offset=self.vad_offset)
+        self.chunk_size = 30 #VAD merging size
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
         self.call_count = 0
         self.framework = framework
@@ -231,6 +241,50 @@ class BatchedInferencePipeline(Pipeline):
             f2 = int(seg['end'] * sampling_rate)
             yield {'inputs': audio[f1:f2]}
 
+    #The code below is adapted from whisper-x
+    def load_vad_model(self, vad_onset=0.500, vad_offset=0.363, use_auth_token=None):
+        model_dir = torch.hub._get_torch_home()
+        os.makedirs(model_dir, exist_ok = True)
+        model_fp = os.path.join(model_dir, "whisperx-vad-segmentation.bin")
+        if os.path.exists(model_fp) and not os.path.isfile(model_fp):
+            raise RuntimeError(f"{model_fp} exists and is not a regular file")
+            
+        if not os.path.isfile(model_fp):
+            with urllib.request.urlopen(self.vad_model_url) as source, open(model_fp, "wb") as output:
+                with tqdm(
+                    total=int(source.info().get("Content-Length")),
+                    ncols=80,
+                    unit="iB",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                ) as loop:
+                    while True:
+                        buffer = source.read(8192)
+                        if not buffer:
+                            break
+
+                        output.write(buffer)
+                        loop.update(len(buffer))
+
+        model_bytes = open(model_fp, "rb").read()
+        if hashlib.sha256(model_bytes).hexdigest() != self.vad_model_url.split('/')[-2]:
+            raise RuntimeError(
+                "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
+            )
+        
+        #or use silero VAD  
+        vad_model = Model.from_pretrained(model_fp, use_auth_token=use_auth_token)
+        hyperparameters =   {
+                            "onset": vad_onset, 
+                            "offset": vad_offset,
+                            "min_duration_on": 0.1,
+                            "min_duration_off": 0.1
+                            }
+        vad_pipeline = VoiceActivitySegmentation(segmentation=vad_model, device=self.device)
+        vad_pipeline.instantiate(hyperparameters)
+        return vad_pipeline
+
+
     def transcribe(
         self, 
         audio: Union[str, np.ndarray], 
@@ -274,7 +328,7 @@ class BatchedInferencePipeline(Pipeline):
             audio: complete audio file as numpy array/path to the audio file for batched transcription.
             vad_segments: list of dictionaries each containing "start" and "end" keys, 
                 specifying the start and end voiced regions of audio chunks. 
-                If no vad_segments specified, it performs non-batched transcribe, causing speed degradation.
+                If no vad_segments specified, it performs transcription only on first 30 seconds.
             batch_size: the maximum number of parallel requests to model for decoding.
             num_workers: to enable true parallelism when running the model, same as the transcribe function argument
                 in WhisperModel class.
@@ -367,8 +421,13 @@ class BatchedInferencePipeline(Pipeline):
 
         #if no segment split is provided, consider a single vad segment from start to end. No benefit in this case.
         if not vad_segments: 
-            end_time = len(audio)/sampling_rate
-            vad_segments = [{'start':0.0, 'end': end_time}]
+
+            vad_segments = self.vad_model({"waveform": torch.from_numpy(audio).unsqueeze(0), "sample_rate": 16000})
+            vad_segments = merge_chunks(    vad_segments,
+                                            self.chunk_size,
+                                            onset=self.vad_onset,
+                                            offset=self.vad_offset,
+                                        )
 
         language, language_probability, task = self.get_language_and_tokenizer(audio, task, language)
         batch_size = batch_size or self._batch_size
@@ -448,7 +507,7 @@ class BatchedInferencePipeline(Pipeline):
         self.model.logger.info(f"Detected language: {language} ({language_probability:.2f}) in first 30s of audio...")
         return language, language_probability
     
-    def detect_language_multi_segment(self, audio: Union[str, BinaryIO, np.ndarray], params: dict):
+    def detect_language_multi_segment(self, audio: Union[str, BinaryIO, np.ndarray], params: Optional[dict] = None ):
         return self.model.detect_language_multi_segment(audio, params)
 
 
@@ -1614,7 +1673,7 @@ class WhisperModel:
         text = decode_batch(tokens_batch)
         return text
 
-    def detect_language_multi_segment(self, audio: Union[str, BinaryIO, np.ndarray], params: dict):
+    def detect_language_multi_segment(self, audio: Union[str, BinaryIO, np.ndarray], params: Optional[dict]=None):
 
         """
         Language detection function - detect language based on N highly-confident segments of a language in the audio.
@@ -1622,15 +1681,24 @@ class WhisperModel:
         # The threshold is used to decide if the audio is silence or not.
         # The default value is 0.02 (2.0%) which means that if more than 2.0% of the audio is silent,
         # the audio is considered as silence.
-
-        if params['multilingual']:
+        if not params:
+            params = {"multilingual": False,
+                      "speech_percentage_threshold": 0.02,
+                      "language_detection_segments": 4,
+                      "vad_filter": True,
+                      "vad_min_silence_duration": 2500,
+                      "enable_ta_fe": False,
+                      "language_threshold": 0.7,
+                      }
+            
+        if params.get("multilingual", False):
             logging.warning('lang_id is not supported for multilingual audios, detecting a single major language.')
 
-        speech_percentage_threshold = params['speech_percentage_threshold']
-        language_threshold = params['language_threshold']
-        num_detection_segments = params['language_detection_segments']
-        vad_filter_enabled = params['vad_filter']
-        vad_params = dict(min_silence_duration_ms = params['vad_min_silence_duration']) #2500
+        speech_percentage_threshold = params.get('speech_percentage_threshold',0.02)
+        language_threshold = params.get('language_threshold', 0.7)
+        num_detection_segments = params.get('language_detection_segments', 4)
+        vad_filter_enabled = params.get('vad_filter', True)
+        vad_params = dict(min_silence_duration_ms = params.get('vad_min_silence_duration', 2500))
         enable_ta_fe = params.get('enable_ta_fe', False)
 
         if vad_filter_enabled:
