@@ -666,6 +666,7 @@ class WhisperModel:
           clip_timestamps: Union[str, List[float]]
             Comma-separated list start,end,start,end,... timestamps (in seconds) of clips to
              process. The last end timestamp defaults to the end of the file.
+             vad_filter will be ignored if clip_timestamps is used.
           hallucination_silence_threshold: Optional[float]
             When word_timestamps is True, skip silent periods longer than this threshold
              (in seconds) when a possible hallucination is detected
@@ -692,8 +693,7 @@ class WhisperModel:
             "Processing audio with duration %s", format_timestamp(duration)
         )
 
-        #setting vad chunks if enabled
-        if vad_filter:
+        if vad_filter and clip_timestamps == "0":
             if vad_parameters is None:
                 vad_parameters = VadOptions()
             elif isinstance(vad_parameters, dict):
@@ -752,7 +752,7 @@ class WhisperModel:
                     features.shape[-1] - self.feature_extractor.nb_max_frames
                 )
                 while (
-                    seek < content_frames
+                    seek <= content_frames
                     and seek
                     < self.feature_extractor.nb_max_frames * language_detection_segments
                 ):
