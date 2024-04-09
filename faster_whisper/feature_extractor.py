@@ -23,7 +23,7 @@ class FeatureExtractor:
         self.mel_filters = self.get_mel_filters(
             sampling_rate, n_fft, n_mels=feature_size
         )
-        self.n_mels=feature_size
+        self.n_mels = feature_size
 
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
         # Initialize the weights
@@ -145,16 +145,16 @@ class FeatureExtractor:
             data[f] = np.fft.fft(fft_signal, axis=0)[:num_fft_bins]
         return data.T
 
-    def __call__(self, waveform, enable_ta = False, padding=True, chunk_length=None):
+    def __call__(self, waveform, enable_ta=False, padding=True, chunk_length=None):
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results
-        whisper's original torch implementation with 1e-5 tolerance. Additionally, faster 
+        whisper's original torch implementation with 1e-5 tolerance. Additionally, faster
         feature extraction option using kaldi fbank features are available if torchaudio is
         available.
         """
         if enable_ta:
             waveform = waveform.astype(np.float32)
-        
+
         if chunk_length is not None:
             self.n_samples = chunk_length * self.sampling_rate
             self.nb_max_frames = self.n_samples // self.hop_length
@@ -165,16 +165,16 @@ class FeatureExtractor:
         if enable_ta:
             audio = torch.from_numpy(waveform).unsqueeze(0)
             fbank = ta_kaldi.fbank(
-                    audio,
-                    sample_frequency=self.sampling_rate,
-                    window_type="hanning",
-                    num_mel_bins=self.n_mels,
-                )
-            log_spec = fbank.numpy().T.astype(np.float32) #ctranslate does not take 64
-        
-            #normalize
-            
-            #Audioset values as default mean and std for audio
+                audio,
+                sample_frequency=self.sampling_rate,
+                window_type="hanning",
+                num_mel_bins=self.n_mels,
+            )
+            log_spec = fbank.numpy().T.astype(np.float32)  # ctranslate does not take 64
+
+            # normalize
+
+            # Audioset values as default mean and std for audio
             mean_val = -4.2677393
             std_val = 4.5689974
             scaled_features = (log_spec - (mean_val)) / (std_val * 2)

@@ -2,20 +2,20 @@ import bisect
 import functools
 import os
 import warnings
+
 from collections.abc import Callable
 from typing import List, NamedTuple, Optional
+
 import numpy as np
-
-
-from faster_whisper.utils import get_assets_path
-
-
+import pandas as pd
 import torch
+
 from pyannote.audio.core.io import AudioFile
 from pyannote.audio.pipelines import VoiceActivityDetection
 from pyannote.audio.pipelines.utils import PipelineModel
 from pyannote.core import Annotation, Segment, SlidingWindowFeature
 
+from faster_whisper.utils import get_assets_path
 
 
 # The code below is adapted from https://github.com/snakers4/silero-vad.
@@ -299,9 +299,17 @@ class SileroVADModel:
         return out, state
 
 
-#The code below is adapted from whisper-x
+# The code below is adapted from whisper-x
+
+class SegmentX:
+    def __init__(self, start, end, speaker=None):
+        self.start = start
+        self.end = end
+        self.speaker = speaker
+
+
 class VoiceActivitySegmentation(VoiceActivityDetection):
-    """Pipeline wrapper class for performing Voice Activity Segmentation based on the detection from the VAD model."""
+    """Pipeline wrapper class for Voice Activity Segmentation based on VAD scores."""
 
     def __init__(
         self,
@@ -319,7 +327,7 @@ class VoiceActivitySegmentation(VoiceActivityDetection):
             device (torch.device | None): Device to perform the segmentation.
             fscore (bool): Flag indicating whether to compute F-score during inference.
             use_auth_token (str | None): Optional authentication token for model access.
-            inference_kwargs (dict): Optional additional arguments from VoiceActivityDetection pipeline.
+            inference_kwargs (dict):  Additional arguments from VoiceActivityDetection pipeline.
         """
         super().__init__(
             segmentation=segmentation,
@@ -334,7 +342,7 @@ class VoiceActivitySegmentation(VoiceActivityDetection):
 
         Args:
             file (AudioFile): Processed file.
-            hook (callable, optional): Hook called after each major step of the pipeline with the following signature: hook("step_name", step_artefact, file=file)
+            hook (callable): Hook called with signature: hook("step_name", step_artefact, file=file)
 
         Returns:
             segmentations (Annotation): Voice activity segmentation.
@@ -357,7 +365,7 @@ class VoiceActivitySegmentation(VoiceActivityDetection):
 
 
 class BinarizeVadScores:
-    """Binarize detection scores using hysteresis thresholding, with min-cut operation to ensure no segments are longer than max_duration.
+    """Binarize detection scores using hysteresis thresholding.
 
     Reference:
         Gregory Gelly and Jean-Luc Gauvain. "Minimum Word Error Training of
@@ -396,7 +404,7 @@ class BinarizeVadScores:
                 Extend active regions by moving their end time by that many seconds.
                 Defaults to 0s.
             max_duration (float):
-                The maximum length of an active segment, divides segment at timestamp with lowest score.
+                The maximum length of an active segment.
         """
         super().__init__()
 
@@ -500,3 +508,83 @@ class BinarizeVadScores:
                     del active[segment, track]
 
         return active
+
+
+def merge_vad(
+    vad_arr, pad_onset=0.0, pad_offset=0.0, min_duration_off=0.0, min_duration_on=0.0
+):
+    active = Annotation()
+    for k, vad_t in enumerate(vad_arr):
+        region = Segment(vad_t[0] - pad_onset, vad_t[1] + pad_offset)
+        active[region, k] = 1
+
+    if pad_offset > 0.0 or pad_onset > 0.0 or min_duration_off > 0.0:
+        active = active.support(collar=min_duration_off)
+
+    # remove tracks shorter than min_duration_on
+    if min_duration_on > 0:
+        for segment, track in list(active.itertracks()):
+            if segment.duration < min_duration_on:
+                del active[segment, track]
+
+    active = active.for_json()
+    active_segs = pd.DataFrame([x["segment"] for x in active["content"]])
+    return active_segs
+
+
+def merge_chunks(
+    segments,
+    chunk_size,
+    onset: float = 0.5,
+    offset: Optional[float] = None,
+):
+    """
+    Merge operation described in paper
+    """
+    curr_end = 0
+    merged_segments = []
+    seg_idxs = []
+    speaker_idxs = []
+
+    assert chunk_size > 0
+    binarize = BinarizeVadScores(max_duration=chunk_size, onset=onset, offset=offset)
+    segments = binarize(segments)
+    segments_list = []
+    for speech_turn in segments.get_timeline():
+        segments_list.append(
+            SegmentX(
+                max(0.0, speech_turn.start - 0.1), speech_turn.end + 0.1, "UNKNOWN"
+            )
+        )  # 100ms padding to account for edge errors
+
+    if len(segments_list) == 0:
+        print("No active speech found in audio")
+        return []
+    # assert segments_list, "segments_list is empty."
+    # Make sur the starting point is the start of the segment.
+    curr_start = segments_list[0].start
+
+    for seg in segments_list:
+        if seg.end - curr_start > chunk_size and curr_end - curr_start > 0:
+            merged_segments.append(
+                {
+                    "start": curr_start,
+                    "end": curr_end,
+                    "segments": seg_idxs,
+                }
+            )
+            curr_start = seg.start
+            seg_idxs = []
+            speaker_idxs = []
+        curr_end = seg.end
+        seg_idxs.append((seg.start, seg.end))
+        speaker_idxs.append(seg.speaker)
+    # add final
+    merged_segments.append(
+        {
+            "start": curr_start,
+            "end": curr_end,
+            "segments": seg_idxs,
+        }
+    )
+    return merged_segments

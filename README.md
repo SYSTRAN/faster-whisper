@@ -6,16 +6,6 @@
 
 This implementation is up to 4 times faster than [openai/whisper](https://github.com/openai/whisper) for the same accuracy while using less memory. The efficiency can be further improved with 8-bit quantization on both CPU and GPU.
 
-Mobius faster-whisper builds on top of faster-whisper v0.10.0 (latest stable version) and support additional functionalities:
-
-- Handling multilingual videos.
-- Seed fixing for consistency across runs.
-- Use `log_prob_low_threshold` to skip ambiguous segments from transcription.
-- Better language prediction using multiple audio segments.
-- Batched inference for faster transcription: Around 100x real time speed.
-- Streaming (segment-level) or non-streaming options for Batched inference.
-- Option for faster feature extraction with torchaudio.
-
 ## Benchmark
 
 ### Whisper
@@ -169,6 +159,34 @@ for segment in segments:
 segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
+
+### multi-segment language detection
+
+To directly use the model for improved language detection, following code snippet can be used:
+
+```python
+from faster_whisper import WhisperModel
+model = WhisperModel("medium", device="cuda", compute_type="float16")
+language_info = model.detect_language_multi_segment("audio.mp3")
+```
+
+### Batched faster-whisper
+
+The batched version of faster-whisper is inspired by [whisper-x](https://github.com/m-bain/whisperX) licensed under the BSD-4 Clause license and kaldi-based feature extraction. It improves the speed upto 10x compared to openAI implementation. It works by transcribing semantically meaningful audio chunks as batches leading to faster inference.
+
+The following code snippet illustrates how to run inference with batched version on a specified audio file. Please also refer to the test scripts of batched faster whisper.
+
+```python
+from faster_whisper import BatchedInferencePipeline
+
+model = WhisperModel("medium", device="cuda", compute_type="float16")
+batched_model = BatchedInferencePipeline(model=model)
+result = batched_model.transcribe("audio.mp3", batch_size=16)
+
+for segment, info in result:
+    print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+```
+
 ### Faster Distil-Whisper
 
 The Distil-Whisper checkpoints are compatible with the Faster-Whisper package. In particular, the latest [distil-large-v3](https://huggingface.co/distil-whisper/distil-large-v3)
