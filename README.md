@@ -78,7 +78,7 @@ GPU execution requires the following NVIDIA libraries to be installed:
 * [cuBLAS for CUDA 12](https://developer.nvidia.com/cublas)
 * [cuDNN 8 for CUDA 12](https://developer.nvidia.com/cudnn)
 
-**Note**: Latest versions of `ctranslate2` support CUDA 12 only. For CUDA 11, the current workaround is downgrading to the `3.24.0` version of `ctranslate2` (This can be done with `pip install --force-reinsall ctranslate2==3.24.0` or specifying the version in a `requirements.txt`). For more information, see: https://github.com/SYSTRAN/faster-whisper/pull/694, https://github.com/SYSTRAN/faster-whisper/issues/783, https://github.com/SYSTRAN/faster-whisper/issues/717#issuecomment-1963488371
+**Note**: Latest versions of `ctranslate2` support CUDA 12 only. For CUDA 11, the current workaround is downgrading to the `3.24.0` version of `ctranslate2` (This can be done with `pip install --force-reinsall ctranslate2==3.24.0` or specifying the version in a `requirements.txt`).
 
 There are multiple ways to install the NVIDIA libraries mentioned above. The recommended way is described in the official NVIDIA documentation, but we also suggest other installation methods below. 
 
@@ -102,7 +102,7 @@ pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
 export LD_LIBRARY_PATH=`python3 -c 'import os; import nvidia.cublas.lib; import nvidia.cudnn.lib; print(os.path.dirname(nvidia.cublas.lib.__file__) + ":" + os.path.dirname(nvidia.cudnn.lib.__file__))'`
 ```
 
-**Note**: Version 9+ of `nvidia-cudnn-cu12` appears to cause issues due to the bump up to cuDNN v9. See more information on Python package versions here: https://github.com/SYSTRAN/faster-whisper/pull/785#issuecomment-2046302167
+**Note**: Version 9+ of `nvidia-cudnn-cu12` appears to cause issues due its reliance on cuDNN 9 (Faster-Whisper does not currently support cuDNN 9). Ensure your version of the Python package is for cuDNN 8.
 
 #### Download the libraries from Purfview's repository (Windows & Linux)
 
