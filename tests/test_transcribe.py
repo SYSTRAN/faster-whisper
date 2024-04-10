@@ -115,7 +115,6 @@ def test_stereo_diarization(data_dir):
     assert transcription == "The horizon seems extremely distant."
 
 
-# 1: get youtube link or audio of difficult audio
 def test_multisegment_lang_id(physcisworks_path):
     model = WhisperModel("tiny")
     language_info = model.detect_language_multi_segment(physcisworks_path)
