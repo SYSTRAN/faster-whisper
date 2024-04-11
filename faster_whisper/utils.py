@@ -25,6 +25,7 @@ _MODELS = {
     "distil-large-v2": "Systran/faster-distil-whisper-large-v2",
     "distil-medium.en": "Systran/faster-distil-whisper-medium.en",
     "distil-small.en": "Systran/faster-distil-whisper-small.en",
+    "distil-large-v3": "Systran/faster-distil-whisper-large-v3",
 }
 
 
@@ -52,7 +53,7 @@ def download_model(
     """Downloads a CTranslate2 Whisper model from the Hugging Face Hub.
 
     Args:
-      size_or_id: Size of the model to download from https://huggingface.co/guillaumekln
+      size_or_id: Size of the model to download from https://huggingface.co/Systran
         (tiny, tiny.en, base, base.en, small, small.en medium, medium.en, large-v1, large-v2,
         large-v3, large), or a CTranslate2-converted model ID from the Hugging Face Hub
         (e.g. Systran/faster-whisper-large-v3).
@@ -146,3 +147,10 @@ class disabled_tqdm(tqdm):
     def __init__(self, *args, **kwargs):
         kwargs["disable"] = True
         super().__init__(*args, **kwargs)
+
+
+def get_end(segments: List[dict]) -> Optional[float]:
+    return next(
+        (w["end"] for s in reversed(segments) for w in reversed(s["words"])),
+        segments[-1]["end"] if segments else None,
+    )
