@@ -11,3 +11,8 @@ def data_dir():
 @pytest.fixture
 def jfk_path(data_dir):
     return os.path.join(data_dir, "jfk.flac")
+
+
+@pytest.fixture
+def physcisworks_path(data_dir):
+    return os.path.join(data_dir, "physicsworks.wav")

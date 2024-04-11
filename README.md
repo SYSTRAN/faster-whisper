@@ -1,20 +1,10 @@
-[![CI](https://github.com/guillaumekln/faster-whisper/workflows/CI/badge.svg)](https://github.com/guillaumekln/faster-whisper/actions?query=workflow%3ACI) [![PyPI version](https://badge.fury.io/py/faster-whisper.svg)](https://badge.fury.io/py/faster-whisper)
+[![CI](https://github.com/SYSTRAN/faster-whisper/workflows/CI/badge.svg)](https://github.com/SYSTRAN/faster-whisper/actions?query=workflow%3ACI) [![PyPI version](https://badge.fury.io/py/faster-whisper.svg)](https://badge.fury.io/py/faster-whisper)
 
 # Mobius Faster Whisper transcription with CTranslate2
 
 **faster-whisper** is a reimplementation of OpenAI's Whisper model using [CTranslate2](https://github.com/OpenNMT/CTranslate2/), which is a fast inference engine for Transformer models.
 
 This implementation is up to 4 times faster than [openai/whisper](https://github.com/openai/whisper) for the same accuracy while using less memory. The efficiency can be further improved with 8-bit quantization on both CPU and GPU.
-
-Mobius faster-whisper builds on top of faster-whisper v0.10.0 (latest stable version) and support additional functionalities:
-
-- Handling multilingual videos.
-- Seed fixing for consistency across runs.
-- Use `log_prob_low_threshold` to skip ambiguous segments from transcription.
-- Better language prediction using multiple audio segments.
-- Batched inference for faster transcription: Around 100x real time speed.
-- Streaming (segment-level) or non-streaming options for Batched inference.
-- Option for faster feature extraction with torchaudio.
 
 ## Benchmark
 
@@ -24,7 +14,7 @@ For reference, here's the time and memory usage that are required to transcribe 
 
 * [openai/whisper](https://github.com/openai/whisper)@[6dea21fd](https://github.com/openai/whisper/commit/6dea21fd7f7253bfe450f1e2512a0fe47ee2d258)
 * [whisper.cpp](https://github.com/ggerganov/whisper.cpp)@[3b010f9](https://github.com/ggerganov/whisper.cpp/commit/3b010f9bed9a6068609e9faf52383aea792b0362)
-* [faster-whisper](https://github.com/guillaumekln/faster-whisper)@[cce6b53e](https://github.com/guillaumekln/faster-whisper/commit/cce6b53e4554f71172dad188c45f10fb100f6e3e)
+* [faster-whisper](https://github.com/SYSTRAN/faster-whisper)@[cce6b53e](https://github.com/SYSTRAN/faster-whisper/commit/cce6b53e4554f71172dad188c45f10fb100f6e3e)
 
 ### Large-v2 model on GPU
 
@@ -127,13 +117,13 @@ pip install faster-whisper
 ### Install the master branch
 
 ```bash
-pip install --force-reinstall "faster-whisper @ https://github.com/guillaumekln/faster-whisper/archive/refs/heads/master.tar.gz"
+pip install --force-reinstall "faster-whisper @ https://github.com/SYSTRAN/faster-whisper/archive/refs/heads/master.tar.gz"
 ```
 
 ### Install a specific commit
 
 ```bash
-pip install --force-reinstall "faster-whisper @ https://github.com/guillaumekln/faster-whisper/archive/a4f1cc8f11433e454c3934442b5e1a4ed5e865c3.tar.gz"
+pip install --force-reinstall "faster-whisper @ https://github.com/SYSTRAN/faster-whisper/archive/a4f1cc8f11433e454c3934442b5e1a4ed5e865c3.tar.gz"
 ```
 
 </details>
@@ -169,18 +159,53 @@ for segment in segments:
 segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
-### Faster-distil-whisper
-For usage of `faster-distil-whisper`, please refer to: https://github.com/guillaumekln/faster-whisper/issues/533
+
+### multi-segment language detection
+
+To directly use the model for improved language detection, following code snippet can be used:
 
 ```python
-model_size = "distil-large-v2"
-# model_size = "distil-medium.en"
-model = WhisperModel(model_size, device="cuda", compute_type="float16")
-segments, info = model.transcribe("audio.mp3", beam_size=5, 
-    language="en", max_new_tokens=128, condition_on_previous_text=False)
-
+from faster_whisper import WhisperModel
+model = WhisperModel("medium", device="cuda", compute_type="float16")
+language_info = model.detect_language_multi_segment("audio.mp3")
 ```
-NOTE: Empirically, `condition_on_previous_text=True` will degrade the performance of `faster-distil-whisper` for long audio. Degradation on the first chunk was observed with `initial_prompt` too.
+
+### Batched faster-whisper
+
+The batched version of faster-whisper is inspired by [whisper-x](https://github.com/m-bain/whisperX) licensed under the BSD-4 Clause license and kaldi-based feature extraction. It improves the speed upto 10x compared to openAI implementation. It works by transcribing semantically meaningful audio chunks as batches leading to faster inference.
+
+The following code snippet illustrates how to run inference with batched version on a specified audio file. Please also refer to the test scripts of batched faster whisper.
+
+```python
+from faster_whisper import BatchedInferencePipeline
+
+model = WhisperModel("medium", device="cuda", compute_type="float16")
+batched_model = BatchedInferencePipeline(model=model)
+result = batched_model.transcribe("audio.mp3", batch_size=16)
+
+for segment, info in result:
+    print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+```
+
+### Faster Distil-Whisper
+
+The Distil-Whisper checkpoints are compatible with the Faster-Whisper package. In particular, the latest [distil-large-v3](https://huggingface.co/distil-whisper/distil-large-v3)
+checkpoint is intrinsically designed to work with the Faster-Whisper transcription algorithm. The following code snippet 
+demonstrates how to run inference with distil-large-v3 on a specified audio file:
+
+```python
+from faster_whisper import WhisperModel
+
+model_size = "distil-large-v3"
+
+model = WhisperModel(model_size, device="cuda", compute_type="float16")
+segments, info = model.transcribe("audio.mp3", beam_size=5, language="en", condition_on_previous_text=False)
+
+for segment in segments:
+    print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+```
+
+For more information about the distil-large-v3 model, refer to the original [model card](https://huggingface.co/distil-whisper/distil-large-v3).
 
 ### Word-level timestamps
 
@@ -200,7 +225,7 @@ The library integrates the [Silero VAD](https://github.com/snakers4/silero-vad) 
 segments, _ = model.transcribe("audio.mp3", vad_filter=True)
 ```
 
-The default behavior is conservative and only removes silence longer than 2 seconds. See the available VAD parameters and default values in the [source code](https://github.com/guillaumekln/faster-whisper/blob/master/faster_whisper/vad.py). They can be customized with the dictionary argument `vad_parameters`:
+The default behavior is conservative and only removes silence longer than 2 seconds. See the available VAD parameters and default values in the [source code](https://github.com/SYSTRAN/faster-whisper/blob/master/faster_whisper/vad.py). They can be customized with the dictionary argument `vad_parameters`:
 
 ```python
 segments, _ = model.transcribe(
@@ -223,7 +248,7 @@ logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
 
 ### Going further
 
-See more model and transcription options in the [`WhisperModel`](https://github.com/guillaumekln/faster-whisper/blob/master/faster_whisper/transcribe.py) class implementation.
+See more model and transcription options in the [`WhisperModel`](https://github.com/SYSTRAN/faster-whisper/blob/master/faster_whisper/transcribe.py) class implementation.
 
 ## Community integrations
 

@@ -1,6 +1,6 @@
 import os
 
-from faster_whisper import WhisperModel, decode_audio
+from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 
 
 def test_supported_languages():
@@ -37,6 +37,22 @@ def test_transcribe(jfk_path):
     assert segment.text == "".join(word.word for word in segment.words)
     assert segment.start == segment.words[0].start
     assert segment.end == segment.words[-1].end
+
+
+def test_batched_transcribe(physcisworks_path):
+    model = WhisperModel("tiny")
+    batched_model = BatchedInferencePipeline(model=model)
+    result = batched_model.transcribe(physcisworks_path, batch_size=16)
+    segments = []
+    for segment, info in result:
+        assert info.language == "en"
+        assert info.language_probability > 0.7
+        segments.append(
+            {"start": segment.start, "end": segment.end, "text": segment.text}
+        )
+    assert len(segments) == 8  # number of near 30sec segments
+
+    segment = segments[0]
 
 
 def test_prefix_with_timestamps(jfk_path):
@@ -97,3 +113,10 @@ def test_stereo_diarization(data_dir):
     segments, _ = model.transcribe(right)
     transcription = "".join(segment.text for segment in segments).strip()
     assert transcription == "The horizon seems extremely distant."
+
+
+def test_multisegment_lang_id(physcisworks_path):
+    model = WhisperModel("tiny")
+    language_info = model.detect_language_multi_segment(physcisworks_path)
+    assert language_info["language_code"] == "en"
+    assert language_info["language_confidence"] > 0.8
