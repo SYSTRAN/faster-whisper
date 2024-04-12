@@ -497,7 +497,7 @@ class BatchedInferencePipeline(Pipeline):
                     offset=self.vad_offset,
                 )
             else:
-                raise RuntimeError("no vad_model found. Set 'use_vad_model' to True while loading the model")
+                raise RuntimeError("No vad segments found. Set 'use_vad_model' to True while loading the model")
 
         language, language_probability, task = self.get_language_and_tokenizer(
             audio, task, language
