@@ -125,6 +125,7 @@ class BatchedInferencePipeline(Pipeline):
     def __init__(
         self,
         model,
+        use_vad_model: bool = True, 
         options: Optional[NamedTuple] = None,
         tokenizer=None,
         device: Union[int, str, "torch.device"] = -1,
@@ -138,6 +139,7 @@ class BatchedInferencePipeline(Pipeline):
         self.preset_language = language
         self._batch_size = kwargs.pop("batch_size", None)
         self._num_workers = 1
+        self.use_vad_model = use_vad_model
         self.vad_onset = 0.500
         self.vad_offset = 0.363
         self.vad_model_url = "https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin"
@@ -161,10 +163,11 @@ class BatchedInferencePipeline(Pipeline):
         else:
             self.device = device
 
-        # load vad model and perform VAD preprocessing if needed
-        self.vad_model = self.load_vad_model(
-            vad_onset=self.vad_onset, vad_offset=self.vad_offset
-        )
+        if self.use_vad_model:
+            # load vad model and perform VAD preprocessing if needed
+            self.vad_model = self.load_vad_model(
+                vad_onset=self.vad_onset, vad_offset=self.vad_offset
+            )
         self.chunk_size = 30  # VAD merging size
 
         super(Pipeline, self).__init__()
@@ -483,15 +486,18 @@ class BatchedInferencePipeline(Pipeline):
 
         # if no segment split is provided, use vad_model and generate segments
         if not vad_segments:
-            vad_segments = self.vad_model(
-                {"waveform": torch.from_numpy(audio).unsqueeze(0), "sample_rate": 16000}
-            )
-            vad_segments = merge_chunks(
-                vad_segments,
-                self.chunk_size,
-                onset=self.vad_onset,
-                offset=self.vad_offset,
-            )
+            if self.use_vad_model:
+                vad_segments = self.vad_model(
+                    {"waveform": torch.from_numpy(audio).unsqueeze(0), "sample_rate": 16000}
+                )
+                vad_segments = merge_chunks(
+                    vad_segments,
+                    self.chunk_size,
+                    onset=self.vad_onset,
+                    offset=self.vad_offset,
+                )
+            else:
+                raise RuntimeError("No vad segments found. Set 'use_vad_model' to True while loading the model")
 
         language, language_probability, task = self.get_language_and_tokenizer(
             audio, task, language
