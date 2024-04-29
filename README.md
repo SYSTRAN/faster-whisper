@@ -172,7 +172,8 @@ language_info = model.detect_language_multi_segment("audio.mp3")
 
 ### Batched faster-whisper
 
-The batched version of faster-whisper is inspired by [whisper-x](https://github.com/m-bain/whisperX) licensed under the BSD-4 Clause license and kaldi-based feature extraction. It improves the speed upto 10x compared to openAI implementation. It works by transcribing semantically meaningful audio chunks as batches leading to faster inference.
+The batched version of faster-whisper is inspired by [whisper-x](https://github.com/m-bain/whisperX) licensed under the BSD-4 Clause license. This product includes software developed by Max Bain. We modify this implementation and also added kaldi-based feature extraction. It improves the speed upto 10-12x compared to openAI implementation. It works by transcribing semantically meaningful audio chunks as batches leading to faster inference. 
+
 
 The following code snippet illustrates how to run inference with batched version on a specified audio file. Please also refer to the test scripts of batched faster whisper.
 

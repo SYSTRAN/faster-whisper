@@ -50,7 +50,7 @@ def test_batched_transcribe(physcisworks_path):
         segments.append(
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
-    assert len(segments) == 8  # number of near 30sec segments
+    assert len(segments) == 8  # number of near 30 sec segments
 
     segment = segments[0]
 

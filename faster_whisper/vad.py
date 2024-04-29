@@ -300,7 +300,6 @@ class SileroVADModel:
 
 
 # The code below is adapted from whisper-x
-
 class SegmentX:
     def __init__(self, start, end, speaker=None):
         self.start = start
