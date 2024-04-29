@@ -133,7 +133,7 @@ class BatchedInferencePipeline(Pipeline):
         options: Optional[NamedTuple] = None,
         tokenizer=None,
         device: Union[int, str, "torch.device"] = -1,
-        vad_device: str = "cuda",
+        vad_device: Union[int, str, "torch.device"] = "cuda",
         framework="pt",
         language: Optional[str] = None,
         **kwargs,
@@ -160,24 +160,13 @@ class BatchedInferencePipeline(Pipeline):
         self.call_count = 0
         self.framework = framework
         if self.framework == "pt":
-            if isinstance(device, torch.device):
-                self.device = device
-            elif isinstance(device, str):
-                self.device = torch.device(device)
-            elif device < 0:
-                self.device = torch.device("cpu")
-            else:
-                self.device = torch.device(f"cuda:{device}")
+            self.device= self.get_device(device)
         else:
             self.device = device
 
         if self.use_vad_model:
             # Separate vad_device from pipeline self.device
-            self.vad_device = vad_device
-
-            #redirect any other strings to cpu execution
-            if self.vad_device!= "cuda":
-                self.vad_device = "cpu"
+            self.vad_device = self.get_device(vad_device)
 
             # load vad model and perform VAD preprocessing if needed
             self.vad_model = self.load_vad_model(
@@ -187,11 +176,22 @@ class BatchedInferencePipeline(Pipeline):
 
         super(Pipeline, self).__init__()
 
+
     def _sanitize_parameters(self, **kwargs):
         preprocess_kwargs = {}
         if "tokenizer" in kwargs:
             preprocess_kwargs["maybe_arg"] = kwargs["maybe_arg"]
         return preprocess_kwargs, {}, {}
+
+    def get_device(self, device):
+        if isinstance(device, torch.device):
+            return device
+        elif isinstance(device, str):
+            return torch.device(device)
+        elif device < 0:
+            return torch.device("cpu")
+        else:
+            return torch.device(f"cuda:{device}")
 
     def preprocess(self, audio, enable_ta_fe=True):
         audio = audio["inputs"]
