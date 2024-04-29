@@ -33,7 +33,6 @@ from faster_whisper.vad import (
     collect_chunks,
     get_speech_timestamps,
     merge_chunks,
-    vad_url_dir,
 )
 
 
@@ -134,6 +133,7 @@ class BatchedInferencePipeline(Pipeline):
         options: Optional[NamedTuple] = None,
         tokenizer=None,
         device: Union[int, str, "torch.device"] = -1,
+        vad_device: str = "cuda",
         framework="pt",
         language: Optional[str] = None,
         **kwargs,
@@ -147,7 +147,11 @@ class BatchedInferencePipeline(Pipeline):
         self.use_vad_model = use_vad_model
         self.vad_onset = 0.500
         self.vad_offset = 0.363
-        self.vad_model_url = os.path.join(vad_url_dir, "pytorch_model.bin") 
+        self.vad_model_url =  (
+                            "https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation"
+                            "/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin"
+                        ) 
+        
         (
             self._preprocess_params,
             self._forward_params,
@@ -168,6 +172,13 @@ class BatchedInferencePipeline(Pipeline):
             self.device = device
 
         if self.use_vad_model:
+            # Separate vad_device from pipeline self.device
+            self.vad_device = vad_device
+
+            #redirect any other strings to cpu execution
+            if self.vad_device!= "cuda":
+                self.vad_device = "cpu"
+
             # load vad model and perform VAD preprocessing if needed
             self.vad_model = self.load_vad_model(
                 vad_onset=self.vad_onset, vad_offset=self.vad_offset
@@ -348,11 +359,9 @@ class BatchedInferencePipeline(Pipeline):
             "min_duration_on": 0.1,
             "min_duration_off": 0.1,
         }
-        # Separate vad_device from pipeline self.device
-        vad_device = "cuda" if torch.cuda.is_available() else "cpu"
 
         vad_pipeline = VoiceActivitySegmentation(
-            segmentation=vad_model, device=torch.device(vad_device)
+            segmentation=vad_model, device=torch.device(self.vad_device)
         )
         vad_pipeline.instantiate(hyperparameters)
         return vad_pipeline

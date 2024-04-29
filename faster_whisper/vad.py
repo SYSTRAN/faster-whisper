@@ -300,11 +300,6 @@ class SileroVADModel:
 
 
 # The code below is adapted from whisper-x
-vad_url = "https://whisperx.s3.eu-west-2.amazonaws.com"
-vad_dir = os.path.join(vad_url, "model_weights/segmentation")
-vad_hash = "0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea"
-vad_url_dir = os.path.join(vad_dir, vad_hash)
-
 class SegmentX:
     def __init__(self, start, end, speaker=None):
         self.start = start
