@@ -301,8 +301,8 @@ class WhisperModel:
           hallucination_silence_threshold: Optional[float]
             When word_timestamps is True, skip silent periods longer than this threshold
              (in seconds) when a possible hallucination is detected
-          hotwords:Optional text
-            add hotwords if set prefix it invalid
+          hotwords:
+            Hotwords/hint phrases to provide the model with. Has no effect if prefix is not None.
           language_detection_threshold: If the maximum probability of the language tokens is higher
            than this value, the language is detected.
           language_detection_segments: Number of segments to consider for the language detection.
