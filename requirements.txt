@@ -1,4 +1,4 @@
-av==11.*
+av>=11.0,<13
 ctranslate2>=4.0,<5
 huggingface_hub>=0.13
 tokenizers>=0.13,<1
