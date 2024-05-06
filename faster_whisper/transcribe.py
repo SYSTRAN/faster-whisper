@@ -294,15 +294,15 @@ class WhisperModel:
             the maximum will be set by the default max_length.
           chunk_length: The length of audio segments. If it is not None, it will overwrite the
             default chunk_length of the FeatureExtractor.
-          clip_timestamps: Union[str, List[float]]
+          clip_timestamps:
             Comma-separated list start,end,start,end,... timestamps (in seconds) of clips to
              process. The last end timestamp defaults to the end of the file.
              vad_filter will be ignored if clip_timestamps is used.
-          hallucination_silence_threshold: Optional[float]
+          hallucination_silence_threshold:
             When word_timestamps is True, skip silent periods longer than this threshold
              (in seconds) when a possible hallucination is detected
-          hotwords:Optional text
-            add hotwords if set prefix it invalid
+          hotwords:
+            Hotwords/hint phrases to provide the model with. Has no effect if prefix is not None.
           language_detection_threshold: If the maximum probability of the language tokens is higher
            than this value, the language is detected.
           language_detection_segments: Number of segments to consider for the language detection.
