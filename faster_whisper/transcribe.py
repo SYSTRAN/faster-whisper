@@ -158,9 +158,19 @@ class WhisperModel:
         elif os.path.isfile(tokenizer_file):
             self.hf_tokenizer = tokenizers.Tokenizer.from_file(tokenizer_file)
         else:
-            self.hf_tokenizer = tokenizers.Tokenizer.from_pretrained(
-                "openai/whisper-tiny" + ("" if self.model.is_multilingual else ".en")
-            )
+            is_large_v3 = False
+            tokenizer_config_file = os.path.join(model_path, "tokenizer_config.json")
+            if os.path.isfile(tokenizer_config_file):
+                with open(tokenizer_config_file ,"r") as f:
+                    tokenizer_config = json.load(f)
+                if tokenizer_config["added_tokens_decoder"]["50359"]["content"] == "<|translate|>":
+                    is_large_v3 = True
+            if is_large_v3:
+                self.hf_tokenizer = tokenizers.Tokenizer.from_pretrained("openai/whisper-large-v3")
+            else:
+                self.hf_tokenizer = tokenizers.Tokenizer.from_pretrained(
+                    "openai/whisper-tiny" + ("" if self.model.is_multilingual else ".en")
+                )
         self.feat_kwargs = self._get_feature_kwargs(model_path, preprocessor_bytes)
         self.feature_extractor = FeatureExtractor(**self.feat_kwargs)
         self.num_samples_per_token = self.feature_extractor.hop_length * 2
