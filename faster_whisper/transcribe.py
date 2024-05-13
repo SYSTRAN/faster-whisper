@@ -161,7 +161,7 @@ class WhisperModel:
             is_large_v3 = False
             tokenizer_config_file = os.path.join(model_path, "tokenizer_config.json")
             if os.path.isfile(tokenizer_config_file):
-                with open(tokenizer_config_file ,"r") as f:
+                with open(tokenizer_config_file, "r") as f:
                     tokenizer_config = json.load(f)
                 if tokenizer_config["added_tokens_decoder"]["50359"]["content"] == "<|translate|>":
                     is_large_v3 = True
