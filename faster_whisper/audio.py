@@ -46,7 +46,6 @@ def decode_audio(
     with av.open(input_file, mode="r", metadata_errors="ignore") as container:
         frames = container.decode(audio=0)
         frames = _ignore_invalid_frames(frames)
-        frames = _group_frames(frames, 500000)
         frames = _resample_frames(frames, resampler)
 
         for frame in frames:
@@ -82,21 +81,6 @@ def _ignore_invalid_frames(frames):
             break
         except av.error.InvalidDataError:
             continue
-
-
-def _group_frames(frames, num_samples=None):
-    fifo = av.audio.fifo.AudioFifo()
-
-    for frame in frames:
-        frame.pts = None  # Ignore timestamp check.
-        fifo.write(frame)
-
-        if num_samples is not None and fifo.samples >= num_samples:
-            yield fifo.read()
-
-    if fifo.samples > 0:
-        yield fifo.read()
-
 
 def _resample_frames(frames, resampler):
     # Add None to flush the resampler.
