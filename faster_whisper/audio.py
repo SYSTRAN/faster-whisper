@@ -82,6 +82,7 @@ def _ignore_invalid_frames(frames):
         except av.error.InvalidDataError:
             continue
 
+
 def _resample_frames(frames, resampler):
     # Add None to flush the resampler.
     for frame in itertools.chain(frames, [None]):
