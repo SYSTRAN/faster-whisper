@@ -490,14 +490,16 @@ class WhisperModel:
         content_duration = float(content_frames * self.feature_extractor.time_per_frame)
 
         if isinstance(options.clip_timestamps, str):
-            TranscriptionOptions.clip_timestamps = [
-                float(ts)
-                for ts in (
-                    options.clip_timestamps.split(",")
-                    if options.clip_timestamps
-                    else []
-                )
-            ]
+            options = options._replace(
+                clip_timestamps=[
+                    float(ts)
+                    for ts in (
+                        options.clip_timestamps.split(",")
+                        if options.clip_timestamps
+                        else []
+                    )
+                ]
+            )
         seek_points: List[int] = [
             round(ts * self.frames_per_second) for ts in options.clip_timestamps
         ]
