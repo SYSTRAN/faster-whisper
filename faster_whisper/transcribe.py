@@ -100,6 +100,7 @@ class TranscriptionOptions(NamedTuple):
     max_new_tokens: Optional[int]
     clip_timestamps: Union[str, List[float]]
     hallucination_silence_threshold: Optional[float]
+    hotwords: Optional[str]
 
 
 class TranscriptionInfo(NamedTuple):
@@ -609,6 +610,8 @@ class WhisperModel:
         num_workers: int = 1,
         download_root: Optional[str] = None,
         local_files_only: bool = False,
+        files: dict = None,
+        **model_kwargs,
     ):
         """Initializes the Whisper model.
 
@@ -635,10 +638,18 @@ class WhisperModel:
             are saved in the standard Hugging Face cache directory.
           local_files_only:  If True, avoid downloading the file and return the path to the
             local cached file if it exists.
+          files: Load model files from the memory. This argument is a dictionary mapping file names
+            to file contents as file-like or bytes objects. If this is set, model_path acts as an
+            identifier for this model.
         """
         self.logger = get_logger()
 
-        if os.path.isdir(model_size_or_path):
+        tokenizer_bytes, preprocessor_bytes = None, None
+        if files:
+            model_path = model_size_or_path
+            tokenizer_bytes = files.pop("tokenizer.json", None)
+            preprocessor_bytes = files.pop("preprocessor_config.json", None)
+        elif os.path.isdir(model_size_or_path):
             model_path = model_size_or_path
         else:
             model_path = download_model(
@@ -656,17 +667,20 @@ class WhisperModel:
             compute_type=compute_type,
             intra_threads=cpu_threads,
             inter_threads=num_workers,
+            files=files,
+            **model_kwargs,
         )
 
         tokenizer_file = os.path.join(model_path, "tokenizer.json")
-        if os.path.isfile(tokenizer_file):
+        if tokenizer_bytes:
+            self.hf_tokenizer = tokenizers.Tokenizer.from_buffer(tokenizer_bytes)
+        elif os.path.isfile(tokenizer_file):
             self.hf_tokenizer = tokenizers.Tokenizer.from_file(tokenizer_file)
         else:
             self.hf_tokenizer = tokenizers.Tokenizer.from_pretrained(
                 "openai/whisper-tiny" + ("" if self.model.is_multilingual else ".en")
             )
-
-        self.feat_kwargs = self._get_feature_kwargs(model_path)
+        self.feat_kwargs = self._get_feature_kwargs(model_path, preprocessor_bytes)
         self.feature_extractor = FeatureExtractor(**self.feat_kwargs)
         self.num_samples_per_token = self.feature_extractor.hop_length * 2
         self.frames_per_second = (
@@ -684,19 +698,21 @@ class WhisperModel:
         """The languages supported by the model."""
         return list(_LANGUAGE_CODES) if self.model.is_multilingual else ["en"]
 
-    def _get_feature_kwargs(self, model_path) -> dict:
-        preprocessor_config_file = os.path.join(model_path, "preprocessor_config.json")
+    def _get_feature_kwargs(self, model_path, preprocessor_bytes=None) -> dict:
         config = {}
-        if os.path.isfile(preprocessor_config_file):
-            try:
-                with open(preprocessor_config_file, "r", encoding="utf-8") as json_file:
-                    config = json.load(json_file)
-                valid_keys = signature(FeatureExtractor.__init__).parameters.keys()
-                config = {k: v for k, v in config.items() if k in valid_keys}
-            except json.JSONDecodeError as e:
-                self.logger.warning(
-                    "Could not load preprocessor_config.json: %s", str(e)
-                )
+        try:
+            config_path = os.path.join(model_path, "preprocessor_config.json")
+            if preprocessor_bytes:
+                config = json.loads(preprocessor_bytes)
+            elif os.path.isfile(config_path):
+                with open(config_path, "r", encoding="utf-8") as file:
+                    config = json.load(file)
+            else:
+                return config
+            valid_keys = signature(FeatureExtractor.__init__).parameters.keys()
+            return {k: v for k, v in config.items() if k in valid_keys}
+        except json.JSONDecodeError as e:
+            self.logger.warning("Could not load preprocessor config: %s", e)
 
         return config
 
@@ -743,6 +759,7 @@ class WhisperModel:
         chunk_length: Optional[int] = None,
         clip_timestamps: Union[str, List[float]] = "0",
         hallucination_silence_threshold: Optional[float] = None,
+        hotwords: Optional[str] = None,
         language_detection_threshold: Optional[float] = None,
         language_detection_segments: int = 1,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
@@ -811,17 +828,18 @@ class WhisperModel:
             the maximum will be set by the default max_length.
           chunk_length: The length of audio segments. If it is not None, it will overwrite the
             default chunk_length of the FeatureExtractor.
-          clip_timestamps: Union[str, List[float]]
+          clip_timestamps:
             Comma-separated list start,end,start,end,... timestamps (in seconds) of clips to
              process. The last end timestamp defaults to the end of the file.
              vad_filter will be ignored if clip_timestamps is used.
-          hallucination_silence_threshold: Optional[float]
+          hallucination_silence_threshold:
             When word_timestamps is True, skip silent periods longer than this threshold
              (in seconds) when a possible hallucination is detected
+          hotwords:
+            Hotwords/hint phrases to provide the model with. Has no effect if prefix is not None.
           language_detection_threshold: If the maximum probability of the language tokens is higher
            than this value, the language is detected.
           language_detection_segments: Number of segments to consider for the language detection.
-
         Returns:
           A tuple with:
 
@@ -989,6 +1007,7 @@ class WhisperModel:
             max_new_tokens=max_new_tokens,
             clip_timestamps=clip_timestamps,
             hallucination_silence_threshold=hallucination_silence_threshold,
+            hotwords=hotwords,
         )
 
         segments = self.generate_segments(features, tokenizer, options, encoder_output)
@@ -1019,14 +1038,16 @@ class WhisperModel:
         content_duration = float(content_frames * self.feature_extractor.time_per_frame)
 
         if isinstance(options.clip_timestamps, str):
-            TranscriptionOptions.clip_timestamps = [
-                float(ts)
-                for ts in (
-                    options.clip_timestamps.split(",")
-                    if options.clip_timestamps
-                    else []
-                )
-            ]
+            options = options._replace(
+                clip_timestamps=[
+                    float(ts)
+                    for ts in (
+                        options.clip_timestamps.split(",")
+                        if options.clip_timestamps
+                        else []
+                    )
+                ]
+            )
         seek_points: List[int] = [
             round(ts * self.frames_per_second) for ts in options.clip_timestamps
         ]
@@ -1120,6 +1141,7 @@ class WhisperModel:
                 previous_tokens,
                 without_timestamps=options.without_timestamps,
                 prefix=options.prefix if seek == 0 else None,
+                hotwords=options.hotwords,
             )
 
             if seek > 0 or encoder_output is None:
@@ -1516,12 +1538,19 @@ class WhisperModel:
         previous_tokens: List[int],
         without_timestamps: bool = False,
         prefix: Optional[str] = None,
+        hotwords: Optional[str] = None,
     ) -> List[int]:
         prompt = []
 
-        if previous_tokens:
+        if previous_tokens or (hotwords and not prefix):
             prompt.append(tokenizer.sot_prev)
-            prompt.extend(previous_tokens[-(self.max_length // 2 - 1) :])
+            if hotwords and not prefix:
+                hotwords_tokens = tokenizer.encode(" " + hotwords.strip())
+                if len(hotwords_tokens) >= self.max_length // 2:
+                    hotwords_tokens = hotwords_tokens[: self.max_length // 2 - 1]
+                prompt.extend(hotwords_tokens)
+            if previous_tokens:
+                prompt.extend(previous_tokens[-(self.max_length // 2 - 1) :])
 
         prompt.extend(tokenizer.sot_sequence)
 
