@@ -245,6 +245,7 @@ Here is a non exhaustive list of open-source projects using faster-whisper. Feel
 * [Whisper-Streaming](https://github.com/ufal/whisper_streaming) implements real-time mode for offline Whisper-like speech-to-text models with faster-whisper as the most recommended back-end. It implements a streaming policy with self-adaptive latency based on the actual source complexity, and demonstrates the state of the art.
 * [WhisperLive](https://github.com/collabora/WhisperLive) is a nearly-live implementation of OpenAI's Whisper which uses faster-whisper as the backend to transcribe audio in real-time.
 * [Faster-Whisper-Transcriber](https://github.com/BBC-Esq/ctranslate2-faster-whisper-transcriber) is a simple but reliable voice transcriber that provides a user-friendly interface.
+* [Wisp](https://github.com/InaKrapp/whisper-locally-running) combines faster-whisper and a simple audio recorder with an intutive, multi-language graphical user interface. 
 
 ## Model conversion
 
