@@ -113,10 +113,15 @@ class TranscriptionInfo(NamedTuple):
     vad_options: VadOptions
 
 
+# The code below is copied from whisper-x (https://github.com/m-bain/whisperX)
+# and adapted for faster_whisper
 class BatchedInferencePipeline(Pipeline):
 
     """
     Huggingface Pipeline wrapper for WhisperModel.
+    Copyright (c) 2022, Max Bain
+    All rights reserved.
+    Modified by Mobius Labs GmbH
     """
 
     # TODO:
@@ -126,10 +131,11 @@ class BatchedInferencePipeline(Pipeline):
     def __init__(
         self,
         model,
-        use_vad_model: bool = True, 
+        use_vad_model: bool = True,
         options: Optional[NamedTuple] = None,
         tokenizer=None,
         device: Union[int, str, "torch.device"] = -1,
+        vad_device: Union[int, str, "torch.device"] = "cuda",
         framework="pt",
         language: Optional[str] = None,
         **kwargs,
@@ -143,8 +149,10 @@ class BatchedInferencePipeline(Pipeline):
         self.use_vad_model = use_vad_model
         self.vad_onset = 0.500
         self.vad_offset = 0.363
-        self.vad_model_url = "https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin"
-
+        self.vad_model_url = (
+            "https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation"
+            "/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin"
+        )
         (
             self._preprocess_params,
             self._forward_params,
@@ -153,18 +161,14 @@ class BatchedInferencePipeline(Pipeline):
         self.call_count = 0
         self.framework = framework
         if self.framework == "pt":
-            if isinstance(device, torch.device):
-                self.device = device
-            elif isinstance(device, str):
-                self.device = torch.device(device)
-            elif device < 0:
-                self.device = torch.device("cpu")
-            else:
-                self.device = torch.device(f"cuda:{device}")
+            self.device = self.get_device(device)
         else:
             self.device = device
 
         if self.use_vad_model:
+            # Separate vad_device from pipeline self.device
+            self.vad_device = self.get_device(vad_device)
+
             # load vad model and perform VAD preprocessing if needed
             self.vad_model = self.load_vad_model(
                 vad_onset=self.vad_onset, vad_offset=self.vad_offset
@@ -178,6 +182,16 @@ class BatchedInferencePipeline(Pipeline):
         if "tokenizer" in kwargs:
             preprocess_kwargs["maybe_arg"] = kwargs["maybe_arg"]
         return preprocess_kwargs, {}, {}
+
+    def get_device(self, device):
+        if isinstance(device, torch.device):
+            return device
+        elif isinstance(device, str):
+            return torch.device(device)
+        elif device < 0:
+            return torch.device("cpu")
+        else:
+            return torch.device(f"cuda:{device}")
 
     def preprocess(self, audio, enable_ta_fe=True):
         audio = audio["inputs"]
@@ -347,7 +361,7 @@ class BatchedInferencePipeline(Pipeline):
         }
 
         vad_pipeline = VoiceActivitySegmentation(
-            segmentation=vad_model, device=self.device
+            segmentation=vad_model, device=torch.device(self.vad_device)
         )
         vad_pipeline.instantiate(hyperparameters)
         return vad_pipeline
@@ -388,6 +402,7 @@ class BatchedInferencePipeline(Pipeline):
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         max_new_tokens: Optional[int] = None,
         clip_timestamps: Union[str, List[float]] = "0",
+        hotwords: Optional[str] = None,
     ) -> Tuple[Iterable[BatchedSegment], TranscriptionInfo]:
         """transcribe audio in chunks in batched fashion and return with language info.
 
@@ -435,9 +450,11 @@ class BatchedInferencePipeline(Pipeline):
                 with the previous word
             max_new_tokens: Maximum number of new tokens to generate per-chunk. If not set,
                 the maximum will be set by the default max_length.
-            clip_timestamps: Union[str, List[float]]
+            clip_timestamps:
                 Comma-separated list start,end,start,end,... timestamps (in seconds) of clips to
                 process. The last end timestamp defaults to the end of the file.
+            hotwords:
+                Hotwords/hint phrases to the model. Has no effect if prefix is not None.
 
         Static params: (Fixed for batched version)
             without_timestamps: Only sample text tokens, set as True.
@@ -489,7 +506,10 @@ class BatchedInferencePipeline(Pipeline):
         if not vad_segments:
             if self.use_vad_model:
                 vad_segments = self.vad_model(
-                    {"waveform": torch.from_numpy(audio).unsqueeze(0), "sample_rate": 16000}
+                    {
+                        "waveform": torch.from_numpy(audio).unsqueeze(0),
+                        "sample_rate": 16000,
+                    }
                 )
                 vad_segments = merge_chunks(
                     vad_segments,
@@ -498,7 +518,9 @@ class BatchedInferencePipeline(Pipeline):
                     offset=self.vad_offset,
                 )
             else:
-                raise RuntimeError("No vad segments found. Set 'use_vad_model' to True while loading the model")
+                raise RuntimeError(
+                    "No vad segments found. Set 'use_vad_model' to True while loading the model"
+                )
 
         language, language_probability, task = self.get_language_and_tokenizer(
             audio, task, language
@@ -529,6 +551,7 @@ class BatchedInferencePipeline(Pipeline):
             append_punctuations=append_punctuations,
             max_new_tokens=max_new_tokens,
             clip_timestamps=clip_timestamps,
+            hotwords=hotwords,
             hallucination_silence_threshold=None,
             condition_on_previous_text=False,
             prompt_reset_on_temperature=0.5,
@@ -1805,7 +1828,7 @@ class WhisperModel:
         self, audio: Union[str, BinaryIO, np.ndarray], params: Optional[dict] = None
     ):
         """
-            Detect language based on N highly-confident segments of a language.
+        Detect language based on N highly-confident segments of a language.
         """
         # The threshold is used to decide if the audio is silence or not.
         # The default is 0.02 (2.0%) i.e, if more than 2.0% of the audio is silent,

@@ -169,7 +169,7 @@ segments = list(segments)  # The transcription will actually run here.
 
 ### multi-segment language detection
 
-To directly use the model for improved language detection, following code snippet can be used:
+To directly use the model for improved language detection, the following code snippet can be used:
 
 ```python
 from faster_whisper import WhisperModel
@@ -179,9 +179,9 @@ language_info = model.detect_language_multi_segment("audio.mp3")
 
 ### Batched faster-whisper
 
-The batched version of faster-whisper is inspired by [whisper-x](https://github.com/m-bain/whisperX) licensed under the BSD-4 Clause license and kaldi-based feature extraction. It improves the speed upto 10x compared to openAI implementation. It works by transcribing semantically meaningful audio chunks as batches leading to faster inference.
+The batched version of faster-whisper is inspired by [whisper-x](https://github.com/m-bain/whisperX) licensed under the BSD-4 Clause license and torchaudio feature extraction using kaldi. It improves the speed upto 10x compared to openAI implementation and 3-4x compared to the sequential faster_whisper. It works by transcribing semantically meaningful audio chunks as batches leading to faster inference.
 
-The following code snippet illustrates how to run inference with batched version on a specified audio file. Please also refer to the test scripts of batched faster whisper.
+The following code snippet illustrates how to run inference with batched version on an example audio file. Please also refer to the test scripts of batched faster whisper.
 
 ```python
 from faster_whisper import BatchedInferencePipeline
