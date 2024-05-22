@@ -16,7 +16,7 @@ import jsons
 import numpy as np
 import tokenizers
 import torch
-import tqdm
+from tqdm import tqdm
 
 from pyannote.audio import Model
 from transformers import Pipeline
@@ -112,9 +112,9 @@ class TranscriptionInfo(NamedTuple):
     transcription_options: TranscriptionOptions
     vad_options: VadOptions
 
-
 # The code below is copied from whisper-x (https://github.com/m-bain/whisperX)
 # and adapted for faster_whisper
+
 class BatchedInferencePipeline(Pipeline):
 
     """
@@ -149,10 +149,10 @@ class BatchedInferencePipeline(Pipeline):
         self.use_vad_model = use_vad_model
         self.vad_onset = 0.500
         self.vad_offset = 0.363
-        self.vad_model_url = (
-            "https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation"
-            "/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin"
-        )
+        self.vad_model_url =  (
+                            "https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation"
+                            "/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin"
+                        )
         (
             self._preprocess_params,
             self._forward_params,
@@ -176,6 +176,7 @@ class BatchedInferencePipeline(Pipeline):
         self.chunk_size = 30  # VAD merging size
 
         super(Pipeline, self).__init__()
+
 
     def _sanitize_parameters(self, **kwargs):
         preprocess_kwargs = {}
@@ -1767,19 +1768,18 @@ class WhisperModel:
             )
         ]
 
-    def encode_batch(self, features: np.ndarray) -> ctranslate2.StorageView:
+    def encode_batch(self, features: torch.Tensor) -> ctranslate2.StorageView:
         # When the model is running on multiple GPUs, the encoder output should be moved
         # to the CPU since we don't know which GPU will handle the next job.
         to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
-        # unsqueeze if batch size = 1
-        if len(features.shape) == 2:
-            features = np.expand_dims(features, 0)
+        if features.device.type != "cpu":  # for GPU pipeline iterator
+            features = features.cpu().numpy()
         features = get_ctranslate2_storage(features)
         return self.model.encode(features, to_cpu=to_cpu)
 
     def generate_segment_batched(
         self,
-        features: np.ndarray,
+        features: torch.Tensor,
         tokenizer: Tokenizer,
         options: dict,
         encoder_output=None,
