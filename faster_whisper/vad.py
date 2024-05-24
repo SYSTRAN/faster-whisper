@@ -314,7 +314,7 @@ class VoiceActivitySegmentation(VoiceActivityDetection):
     def __init__(
         self,
         segmentation: PipelineModel = "pyannote/segmentation",
-        device: Optional[Union[str, torch.device]]= None,
+        device: Optional[Union[str, torch.device]] = None,
         fscore: bool = False,
         use_auth_token: Optional[str] = None,
         **inference_kwargs,
@@ -442,7 +442,8 @@ class BinarizeVadScores:
             curr_scores = [k_scores[0]]
             curr_timestamps = [start]
             t = start
-            for t, y in zip(timestamps[1:], k_scores[1:]): #optionally add `strict=False` for python 3.10 or later
+            # optionally add `strict=False` for python 3.10 or later
+            for t, y in zip(timestamps[1:], k_scores[1:]):
                 # currently active
                 if is_active:
                     curr_duration = t - start
