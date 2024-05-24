@@ -2062,6 +2062,7 @@ default_batched_asr_options = {
     "log_prob_low_threshold": -2.0,
     "multilingual": False,
     "output_language": "en",
+    "hotwords": None,
 }
 
 
