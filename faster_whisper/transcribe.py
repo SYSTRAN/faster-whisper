@@ -185,14 +185,18 @@ class BatchedInferencePipeline(Pipeline):
         return preprocess_kwargs, {}, {}
 
     def get_device(self, device):
+        """
+        Returns a torch.device object given a device of the form Union[int, str, "torch.device"].
+        The function also makes vad_device same as self.model.device by default ("auto").
+        
+        """
         if isinstance(device, torch.device):
             return device
         elif isinstance(device, str):
-            if device == "auto":
-                if device == self.model.device:
-                    device = "cuda" if torch.cuda.is_available() else "cpu"
-                else:
-                    device = self.model.device
+            if device == "auto" and self.model.device == "auto":
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            elif device == "auto":
+                device = self.model.device
             return torch.device(device)
         elif device < 0:
             return torch.device("cpu")
