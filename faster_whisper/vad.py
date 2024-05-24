@@ -299,7 +299,8 @@ class SileroVADModel:
         return out, state
 
 
-# The code below is adapted from whisper-x
+# The code below is copied from whisper-x (https://github.com/m-bain/whisperX)
+# and adapted for faster_whisper.
 class SegmentX:
     def __init__(self, start, end, speaker=None):
         self.start = start

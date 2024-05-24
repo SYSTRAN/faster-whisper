@@ -75,27 +75,34 @@ Unlike openai-whisper, FFmpeg does **not** need to be installed on the system. T
 
 GPU execution requires the following NVIDIA libraries to be installed:
 
-* [cuBLAS for CUDA 11](https://developer.nvidia.com/cublas)
-* [cuDNN 8 for CUDA 11](https://developer.nvidia.com/cudnn)
+* [cuBLAS for CUDA 12](https://developer.nvidia.com/cublas)
+* [cuDNN 8 for CUDA 12](https://developer.nvidia.com/cudnn)
 
-There are multiple ways to install these libraries. The recommended way is described in the official NVIDIA documentation, but we also suggest other installation methods below.
+**Note**: Latest versions of `ctranslate2` support CUDA 12 only. For CUDA 11, the current workaround is downgrading to the `3.24.0` version of `ctranslate2` (This can be done with `pip install --force-reinstall ctranslate2==3.24.0` or specifying the version in a `requirements.txt`).
+
+There are multiple ways to install the NVIDIA libraries mentioned above. The recommended way is described in the official NVIDIA documentation, but we also suggest other installation methods below. 
 
 <details>
 <summary>Other installation methods (click to expand)</summary>
 
+
+**Note:** For all these methods below, keep in mind the above note regarding CUDA versions. Depending on your setup, you may need to install the _CUDA 11_ versions of libraries that correspond to the CUDA 12 libraries listed in the instructions below.
+
 #### Use Docker
 
-The libraries are installed in this official NVIDIA Docker image: `nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04`.
+The libraries (cuBLAS, cuDNN) are installed in these official NVIDIA CUDA Docker images: `nvidia/cuda:12.0.0-runtime-ubuntu20.04` or `nvidia/cuda:12.0.0-runtime-ubuntu22.04`.
 
 #### Install with `pip` (Linux only)
 
 On Linux these libraries can be installed with `pip`. Note that `LD_LIBRARY_PATH` must be set before launching Python.
 
 ```bash
-pip install nvidia-cublas-cu11 nvidia-cudnn-cu11
+pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
 
 export LD_LIBRARY_PATH=`python3 -c 'import os; import nvidia.cublas.lib; import nvidia.cudnn.lib; print(os.path.dirname(nvidia.cublas.lib.__file__) + ":" + os.path.dirname(nvidia.cudnn.lib.__file__))'`
 ```
+
+**Note**: Version 9+ of `nvidia-cudnn-cu12` appears to cause issues due its reliance on cuDNN 9 (Faster-Whisper does not currently support cuDNN 9). Ensure your version of the Python package is for cuDNN 8.
 
 #### Download the libraries from Purfview's repository (Windows & Linux)
 
@@ -162,7 +169,7 @@ segments = list(segments)  # The transcription will actually run here.
 
 ### multi-segment language detection
 
-To directly use the model for improved language detection, following code snippet can be used:
+To directly use the model for improved language detection, the following code snippet can be used:
 
 ```python
 from faster_whisper import WhisperModel
@@ -172,10 +179,10 @@ language_info = model.detect_language_multi_segment("audio.mp3")
 
 ### Batched faster-whisper
 
-The batched version of faster-whisper is inspired by [whisper-x](https://github.com/m-bain/whisperX) licensed under the BSD-4 Clause license. This product includes software developed by Max Bain. We modify this implementation and also added kaldi-based feature extraction. It improves the speed upto 10-12x compared to openAI implementation. It works by transcribing semantically meaningful audio chunks as batches leading to faster inference. 
 
+The batched version of faster-whisper is inspired by [whisper-x](https://github.com/m-bain/whisperX) licensed under the BSD-4 Clause license. This product includes software developed by Max Bain. We modify this implementation and also added kaldi-based feature extraction. It improves the speed upto 10-12x compared to openAI implementation and 3-4x compared to the sequential faster_whisper version. It works by transcribing semantically meaningful audio chunks as batches leading to faster inference. 
 
-The following code snippet illustrates how to run inference with batched version on a specified audio file. Please also refer to the test scripts of batched faster whisper.
+The following code snippet illustrates how to run inference with batched version on an example audio file. Please also refer to the test scripts of batched faster whisper.
 
 ```python
 from faster_whisper import BatchedInferencePipeline
