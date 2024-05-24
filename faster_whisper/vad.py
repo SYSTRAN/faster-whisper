@@ -4,7 +4,7 @@ import os
 import warnings
 
 from collections.abc import Callable
-from typing import List, NamedTuple, Optional
+from typing import List, NamedTuple, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -314,9 +314,9 @@ class VoiceActivitySegmentation(VoiceActivityDetection):
     def __init__(
         self,
         segmentation: PipelineModel = "pyannote/segmentation",
-        device: torch.device | None = None,
+        device: Optional[Union[str, torch.device]] = None,
         fscore: bool = False,
-        use_auth_token: str | None = None,
+        use_auth_token: Optional[str] = None,
         **inference_kwargs,
     ):
         """Initialize the pipeline with the model name and the optional device.
@@ -324,9 +324,9 @@ class VoiceActivitySegmentation(VoiceActivityDetection):
         Args:
             dict parameters of VoiceActivityDetection class from pyannote:
             segmentation (PipelineModel): Loaded model name.
-            device (torch.device | None): Device to perform the segmentation.
+            device (torch.device or None): Device to perform the segmentation.
             fscore (bool): Flag indicating whether to compute F-score during inference.
-            use_auth_token (str | None): Optional authentication token for model access.
+            use_auth_token (str or None): Optional authentication token for model access.
             inference_kwargs (dict):  Additional arguments from VoiceActivityDetection pipeline.
         """
         super().__init__(
@@ -337,7 +337,7 @@ class VoiceActivitySegmentation(VoiceActivityDetection):
             **inference_kwargs,
         )
 
-    def apply(self, file: AudioFile, hook: Callable | None = None) -> Annotation:
+    def apply(self, file: AudioFile, hook: Optional[Callable] = None) -> Annotation:
         """Apply voice activity detection on the audio file.
 
         Args:
@@ -379,7 +379,7 @@ class BinarizeVadScores:
     def __init__(
         self,
         onset: float = 0.5,
-        offset: float | None = None,
+        offset: Optional[float] = None,
         min_duration_on: float = 0.0,
         min_duration_off: float = 0.0,
         pad_onset: float = 0.0,
@@ -442,7 +442,8 @@ class BinarizeVadScores:
             curr_scores = [k_scores[0]]
             curr_timestamps = [start]
             t = start
-            for t, y in zip(timestamps[1:], k_scores[1:], strict=False):
+            # optionally add `strict=False` for python 3.10 or later
+            for t, y in zip(timestamps[1:], k_scores[1:]):
                 # currently active
                 if is_active:
                     curr_duration = t - start

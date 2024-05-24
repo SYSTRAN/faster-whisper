@@ -16,9 +16,9 @@ import jsons
 import numpy as np
 import tokenizers
 import torch
-from tqdm import tqdm
 
 from pyannote.audio import Model
+from tqdm import tqdm
 from transformers import Pipeline
 from transformers.pipelines.pt_utils import PipelineIterator
 
@@ -112,8 +112,10 @@ class TranscriptionInfo(NamedTuple):
     transcription_options: TranscriptionOptions
     vad_options: VadOptions
 
+
 # The code below is copied from whisper-x (https://github.com/m-bain/whisperX)
 # and adapted for faster_whisper
+
 
 class BatchedInferencePipeline(Pipeline):
 
@@ -149,10 +151,10 @@ class BatchedInferencePipeline(Pipeline):
         self.use_vad_model = use_vad_model
         self.vad_onset = 0.500
         self.vad_offset = 0.363
-        self.vad_model_url =  (
-                            "https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation"
-                            "/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin"
-                        )
+        self.vad_model_url = (
+            "https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation"
+            "/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin"
+        )
         (
             self._preprocess_params,
             self._forward_params,
@@ -176,7 +178,6 @@ class BatchedInferencePipeline(Pipeline):
         self.chunk_size = 30  # VAD merging size
 
         super(Pipeline, self).__init__()
-
 
     def _sanitize_parameters(self, **kwargs):
         preprocess_kwargs = {}
@@ -2062,6 +2063,7 @@ default_batched_asr_options = {
     "log_prob_low_threshold": -2.0,
     "multilingual": False,
     "output_language": "en",
+    "hotwords": None,
 }
 
 
