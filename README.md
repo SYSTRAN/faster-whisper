@@ -210,7 +210,7 @@ The default behavior is conservative and only removes silence longer than 2 seco
 segments, _ = model.transcribe(
     "audio.mp3",
     vad_filter=True,
-    vad_parameters=dict(min_silence_duration_ms=500),
+    vad_parameters=dict(min_speech_duration_ms=500),
 )
 ```
 

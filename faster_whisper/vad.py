@@ -32,9 +32,9 @@ class VadOptions(NamedTuple):
     """
 
     threshold: float = 0.5
-    min_speech_duration_ms: int = 250
+    min_speech_duration_ms: int = 2000
     max_speech_duration_s: float = float("inf")
-    min_silence_duration_ms: int = 2000
+    min_silence_duration_ms: int = 100
     window_size_samples: int = 1024
     speech_pad_ms: int = 400
 
