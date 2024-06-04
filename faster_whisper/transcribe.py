@@ -370,16 +370,27 @@ class WhisperModel:
                     or language_detection_segments < 1
                 ):
                     language_detection_segments = 1
-                seek = 0
-                detected_language_info = {}
+                start_timestamp = (
+                    float(clip_timestamps.split(",")[0])
+                    if isinstance(clip_timestamps, str)
+                    else clip_timestamps[0]
+                )
                 content_frames = (
                     features.shape[-1] - self.feature_extractor.nb_max_frames
                 )
-                while (
-                    seek <= content_frames
-                    and seek
-                    < self.feature_extractor.nb_max_frames * language_detection_segments
-                ):
+                seek = (
+                    int(start_timestamp * self.frames_per_second)
+                    if start_timestamp * self.frames_per_second < content_frames
+                    else 0
+                )
+                end_frames = min(
+                    seek
+                    + self.feature_extractor.nb_max_frames
+                    * language_detection_segments,
+                    content_frames,
+                )
+                detected_language_info = {}
+                while seek < end_frames:
                     segment = features[
                         :, seek : seek + self.feature_extractor.nb_max_frames
                     ]
