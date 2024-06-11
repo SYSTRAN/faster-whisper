@@ -163,7 +163,7 @@ class FeatureExtractor:
             waveform = np.pad(waveform, [(0, self.n_samples)])
 
         if enable_ta:
-            audio = torch.from_numpy(waveform).unsqueeze(0)
+            audio = torch.from_numpy(waveform).unsqueeze(0).float()
             fbank = ta_kaldi.fbank(
                 audio,
                 sample_frequency=self.sampling_rate,
@@ -177,7 +177,7 @@ class FeatureExtractor:
             # Audioset values as default mean and std for audio
             mean_val = -4.2677393
             std_val = 4.5689974
-            scaled_features = (log_spec - (mean_val)) / (std_val * 2)
+            scaled_features = (log_spec - mean_val) / (std_val * 2)
             log_spec = scaled_features
 
         else:

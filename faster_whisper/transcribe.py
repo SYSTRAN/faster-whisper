@@ -1,10 +1,8 @@
-import hashlib
 import itertools
 import json
 import logging
 import os
 import random
-import urllib
 import zlib
 
 from collections import Counter, defaultdict
@@ -18,14 +16,19 @@ import tokenizers
 import torch
 
 from pyannote.audio import Model
-from tqdm import tqdm
 from transformers import Pipeline
 from transformers.pipelines.pt_utils import PipelineIterator
 
 from faster_whisper.audio import decode_audio, pad_or_trim
 from faster_whisper.feature_extractor import FeatureExtractor
 from faster_whisper.tokenizer import _LANGUAGE_CODES, Tokenizer
-from faster_whisper.utils import download_model, format_timestamp, get_end, get_logger
+from faster_whisper.utils import (
+    download_model,
+    format_timestamp,
+    get_assets_path,
+    get_end,
+    get_logger,
+)
 from faster_whisper.vad import (
     SpeechTimestampsMap,
     VadOptions,
@@ -80,7 +83,7 @@ class TranscriptionOptions(NamedTuple):
     repetition_penalty: float
     no_repeat_ngram_size: int
     log_prob_threshold: Optional[float]
-    log_prob_low_threshold: Optional[float]  # New parameter
+    log_prob_low_threshold: Optional[float]
     no_speech_threshold: Optional[float]
     compression_ratio_threshold: Optional[float]
     condition_on_previous_text: bool
@@ -95,8 +98,8 @@ class TranscriptionOptions(NamedTuple):
     word_timestamps: bool
     prepend_punctuations: str
     append_punctuations: str
-    multilingual: bool  # New parameter
-    output_language: str  # New parameter
+    multilingual: bool
+    output_language: Optional[str]
     max_new_tokens: Optional[int]
     clip_timestamps: Union[str, List[float]]
     hallucination_silence_threshold: Optional[float]
@@ -115,7 +118,6 @@ class TranscriptionInfo(NamedTuple):
 
 # The code below is copied from whisper-x (https://github.com/m-bain/whisperX)
 # and adapted for faster_whisper
-
 
 class BatchedInferencePipeline(Pipeline):
 
@@ -137,6 +139,7 @@ class BatchedInferencePipeline(Pipeline):
         options: Optional[NamedTuple] = None,
         tokenizer=None,
         device: Union[int, str, "torch.device"] = -1,
+        chunk_size: int = 30,
         vad_device: Union[int, str, "torch.device"] = "auto",
         framework="pt",
         language: Optional[str] = None,
@@ -151,10 +154,11 @@ class BatchedInferencePipeline(Pipeline):
         self.use_vad_model = use_vad_model
         self.vad_onset = 0.500
         self.vad_offset = 0.363
-        self.vad_model_url = (
-            "https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation"
-            "/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin"
-        )
+        self.vad_model_path = os.path.join(get_assets_path(), "pyannote_vad_model.bin")
+        # (
+        #    "https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation"
+        #    "/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin"
+        # )
         (
             self._preprocess_params,
             self._forward_params,
@@ -174,7 +178,7 @@ class BatchedInferencePipeline(Pipeline):
             self.vad_model = self.load_vad_model(
                 vad_onset=self.vad_onset, vad_offset=self.vad_offset
             )
-        self.chunk_size = 30  # VAD merging size
+        self.chunk_size = chunk_size  # VAD merging size
 
         super(Pipeline, self).__init__()
 
@@ -333,41 +337,8 @@ class BatchedInferencePipeline(Pipeline):
             f2 = int(seg["end"] * sampling_rate)
             yield {"inputs": audio[f1:f2]}
 
-    # The code below is adapted from whisper-x
-    def load_vad_model(self, vad_onset=0.500, vad_offset=0.363, use_auth_token=None):
-        model_dir = torch.hub._get_torch_home()
-        os.makedirs(model_dir, exist_ok=True)
-        model_fp = os.path.join(model_dir, "whisperx-vad-segmentation.bin")
-        if os.path.exists(model_fp) and not os.path.isfile(model_fp):
-            raise RuntimeError(f"{model_fp} exists and is not a regular file")
-
-        if not os.path.isfile(model_fp):
-            with urllib.request.urlopen(self.vad_model_url) as source, open(
-                model_fp, "wb"
-            ) as output:
-                with tqdm(
-                    total=int(source.info().get("Content-Length")),
-                    ncols=80,
-                    unit="iB",
-                    unit_scale=True,
-                    unit_divisor=1024,
-                ) as loop:
-                    while True:
-                        buffer = source.read(8192)
-                        if not buffer:
-                            break
-
-                        output.write(buffer)
-                        loop.update(len(buffer))
-
-        model_bytes = open(model_fp, "rb").read()
-        if hashlib.sha256(model_bytes).hexdigest() != self.vad_model_url.split("/")[-2]:
-            raise RuntimeError(
-                "Model SHA256 checksum does not not match. Please retry loading the model."
-            )
-
-        # or use silero VAD
-        vad_model = Model.from_pretrained(model_fp, use_auth_token=use_auth_token)
+    def load_vad_model(self, vad_onset=0.500, vad_offset=0.363):
+        vad_model = Model.from_pretrained(self.vad_model_path)
         hyperparameters = {
             "onset": vad_onset,
             "offset": vad_offset,
@@ -406,7 +377,7 @@ class BatchedInferencePipeline(Pipeline):
         ],
         compression_ratio_threshold: Optional[float] = 2.4,
         log_prob_threshold: Optional[float] = -1.0,
-        log_prob_low_threshold: Optional[float] = -2.0,
+        log_prob_low_threshold: Optional[float] = None,
         no_speech_threshold: Optional[float] = 0.6,
         initial_prompt: Optional[Union[str, Iterable[int]]] = None,
         prefix: Optional[str] = None,
@@ -447,7 +418,7 @@ class BatchedInferencePipeline(Pipeline):
             log_prob_threshold: If the average log probability over sampled tokens is
                 below this value, treat as failed.
             log_prob_low_threshold: This parameter alone is sufficient to skip an output text,
-            wheras log_prob_threshold also looks for appropriate no_speech_threshold value.
+            whereas log_prob_threshold also looks for appropriate no_speech_threshold value.
             This value should be less than log_prob_threshold.
             no_speech_threshold: If the no_speech probability is higher than this value AND
                 the average log probability over sampled tokens is below `log_prob_threshold`,
@@ -776,7 +747,7 @@ class WhisperModel:
         ],
         compression_ratio_threshold: Optional[float] = 2.4,
         log_prob_threshold: Optional[float] = -1.0,
-        log_prob_low_threshold: Optional[float] = -2.0,
+        log_prob_low_threshold: Optional[float] = None,
         no_speech_threshold: Optional[float] = 0.6,
         condition_on_previous_text: bool = True,
         prompt_reset_on_temperature: float = 0.5,
@@ -1204,10 +1175,6 @@ class WhisperModel:
                     # don't skip if the logprob is high enough, despite the no_speech_prob
                     should_skip = False
 
-                # Skip if the logprob is very low (below the threshold value),
-                # despite no_speech_prob being low (ex: Too ambiguous outputs)
-                if avg_logprob < options.log_prob_low_threshold:
-                    should_skip = True
                 if should_skip:
                     self.logger.debug(
                         "No speech threshold is met (%f > %f)",
@@ -1215,9 +1182,20 @@ class WhisperModel:
                         options.no_speech_threshold,
                     )
 
-                    # fast-forward to the next segment boundary
-                    seek += segment_size
-                    continue
+                # Skip if the logprob is very low (below the threshold value),
+                # despite no_speech_prob being low (ex: Too ambiguous outputs)
+                if options.log_prob_low_threshold:
+                    if avg_logprob < options.log_prob_low_threshold:
+                        should_skip = True
+                        self.logger.debug(
+                            "log prob low threshold is met (%f > %f)",
+                            avg_logprob,
+                            options.log_prob_low_threshold,
+                        )
+
+                        # fast-forward to the next segment boundary
+                        seek += segment_size
+                        continue
 
             tokens = result.sequences_ids[0]
 
@@ -1796,7 +1774,6 @@ class WhisperModel:
         features: torch.Tensor,
         tokenizer: Tokenizer,
         options: dict,
-        encoder_output=None,
     ):
         batch_size = features.shape[0]
         all_tokens = []
@@ -2073,7 +2050,7 @@ default_batched_asr_options = {
     "word_timestamps": False,
     "prepend_punctuations": "\"'“¿([{-",
     "append_punctuations": "\"'.。,，!！?？:：”)]}、",
-    "log_prob_low_threshold": -2.0,
+    "log_prob_low_threshold": None,
     "multilingual": False,
     "output_language": "en",
     "hotwords": None,
