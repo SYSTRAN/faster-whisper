@@ -515,7 +515,7 @@ def merge_chunks(
     chunk_size,
     onset: float = 0.5,
     offset: Optional[float] = None,
-    edge_padding: float = 0.1
+    edge_padding: float = 0.1,
 ):
     """
     Merge operation described in whisper-x paper
@@ -532,7 +532,9 @@ def merge_chunks(
     for speech_turn in segments.get_timeline():
         segments_list.append(
             SegmentX(
-                max(0.0, speech_turn.start - edge_padding), speech_turn.end + edge_padding, "UNKNOWN"
+                max(0.0, speech_turn.start - edge_padding),
+                speech_turn.end + edge_padding,
+                "UNKNOWN",
             )
         )  # 100ms edge padding to account for edge errors
 
@@ -544,14 +546,13 @@ def merge_chunks(
     curr_start = segments_list[0].start
 
     for idx, seg in enumerate(segments_list):
-
-        #if any segment start timing is less than previous segment end timing, 
+        # if any segment start timing is less than previous segment end timing,
         # reset the edge padding. Similarly for end timing.
-        if idx >0:
-            if seg.start < segments_list[idx-1].end:
-                seg.start =  seg.start + edge_padding
-        if idx < len(segments_list)-1:
-            if seg.end > segments_list[idx+1].start:
+        if idx > 0:
+            if seg.start < segments_list[idx - 1].end:
+                seg.start = seg.start + edge_padding
+        if idx < len(segments_list) - 1:
+            if seg.end > segments_list[idx + 1].start:
                 seg.end = seg.end - edge_padding
 
         if seg.end - curr_start > chunk_size and curr_end - curr_start > 0:

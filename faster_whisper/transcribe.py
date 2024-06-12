@@ -19,7 +19,7 @@ from pyannote.audio import Model
 from transformers import Pipeline
 from transformers.pipelines.pt_utils import PipelineIterator
 
-from faster_whisper.audio import decode_audio, pad_or_trim
+from faster_whisper.audio import TIME_PRECISION, decode_audio, pad_or_trim
 from faster_whisper.feature_extractor import FeatureExtractor
 from faster_whisper.tokenizer import _LANGUAGE_CODES, Tokenizer
 from faster_whisper.utils import (
@@ -62,16 +62,21 @@ class Segment(NamedTuple):
 
 class BatchedSegment(NamedTuple):
     """
-    A single segment in batched transcription (up to multiple sentences) of a speech.
+    A single segment in batched transcription of a speech.
 
     start (float): Start time in seconds.
     end (float): End time in seconds.
     text (str): transcription of the segment.
+    avg_logprob (float): average log probability of the segment.
+    no_speech_prob (float): no speech probability of the segment.
     """
 
     start: float
     end: float
     text: str
+    words: Optional[List[Word]]
+    no_speech_prob: float
+    avg_logprob: float
 
 
 # Added additional parameters for multilingual videos and fixes below
@@ -119,6 +124,7 @@ class TranscriptionInfo(NamedTuple):
 # The code below is copied from whisper-x (https://github.com/m-bain/whisperX)
 # and adapted for faster_whisper
 
+
 class BatchedInferencePipeline(Pipeline):
 
     """
@@ -155,10 +161,7 @@ class BatchedInferencePipeline(Pipeline):
         self.vad_onset = 0.500
         self.vad_offset = 0.363
         self.vad_model_path = os.path.join(get_assets_path(), "pyannote_vad_model.bin")
-        # (
-        #    "https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation"
-        #    "/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin"
-        # )
+
         (
             self._preprocess_params,
             self._forward_params,
@@ -212,20 +215,35 @@ class BatchedInferencePipeline(Pipeline):
         else:
             return torch.device(f"cuda:{device}")
 
-    def preprocess(self, audio, enable_ta_fe=True):
-        audio = audio["inputs"]
+    def preprocess(self, inputs, enable_ta_fe=True):
+        audio = inputs["inputs"]
         features = torch.tensor(
             self.model.feature_extractor(audio, enable_ta=enable_ta_fe, padding=True)[
                 :, : self.model.feature_extractor.nb_max_frames
             ]
         )
-        return {"inputs": features}
+        inputs["inputs"] = features
+        return inputs
 
     def _forward(self, model_inputs, **forward_params):
-        outputs = self.model.generate_segment_batched(
+        (
+            encoder_output,
+            sot_seqs,
+            text_tokens,
+            output,
+        ) = self.model.generate_segment_batched(
             model_inputs["inputs"], self.tokenizer, forward_params
         )
-        return {"text": outputs}
+
+        if forward_params["word_timestamps"]:
+            word_timings = self.align_words(
+                encoder_output, text_tokens, sot_seqs, model_inputs["seg_metadata"]
+            )
+
+            for _response, _word_timings in zip(output, word_timings):
+                _response["word_timestamps"] = _word_timings
+
+        return {"output": output}
 
     def __call__(
         self, inputs, options, enable_ta_fe, num_workers=None, batch_size=None, **kwargs
@@ -246,6 +264,7 @@ class BatchedInferencePipeline(Pipeline):
             forward_params,
             postprocess_params,
         ) = self._sanitize_parameters(**kwargs)
+
         # Fuse __init__ params and __call__ params without modifying the __init__ ones.
         preprocess_params = {
             **self._preprocess_params,
@@ -288,7 +307,10 @@ class BatchedInferencePipeline(Pipeline):
         postprocess_params=None,
     ):
         def stack(items):
-            return {"inputs": torch.stack([x["inputs"] for x in items])}
+            return {
+                "inputs": torch.stack([x["inputs"] for x in items]),
+                "seg_metadata": [x["seg_metadata"] for x in items],
+            }
 
         if "TOKENIZERS_PARALLELISM" not in os.environ:
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -332,10 +354,16 @@ class BatchedInferencePipeline(Pipeline):
 
     def audio_split(self, audio, segments, sampling_rate):
         "Returns splitted audio chunks as iterator"
+
         for seg in segments:
             f1 = int(seg["start"] * sampling_rate)
             f2 = int(seg["end"] * sampling_rate)
-            yield {"inputs": audio[f1:f2]}
+            seg_metadata = {
+                "start_time": seg["start"],
+                "end_time": seg["end"],
+                "stitched_seg": seg["segments"],
+            }
+            yield {"inputs": audio[f1:f2], "seg_metadata": seg_metadata}
 
     def load_vad_model(self, vad_onset=0.500, vad_offset=0.363):
         vad_model = Model.from_pretrained(self.vad_model_path)
@@ -351,6 +379,141 @@ class BatchedInferencePipeline(Pipeline):
         )
         vad_pipeline.instantiate(hyperparameters)
         return vad_pipeline
+
+    def align_words(self, features, text_tokens, sot_seqs, seg_metadata):
+        # Split text into word tokens using the tokenizer
+        word_tokens = []
+        for tokens in text_tokens:
+            word_tokens.append(self.tokenizer.split_to_word_tokens(tokens))
+
+        # Group indices by start sequence
+        start_seq_wise_req = {}
+        for _idx, _sot_seq in enumerate(sot_seqs):
+            if _sot_seq not in start_seq_wise_req:
+                start_seq_wise_req[_sot_seq] = []
+            start_seq_wise_req[_sot_seq].append(_idx)
+
+        # Initialize token alignments for each segment metadata
+        token_alignments = [[] for _ in seg_metadata]
+        duration_list = [
+            int(
+                (seg_meta["end_time"] - seg_meta["start_time"])
+                / self.model.feature_extractor.time_per_frame
+            )
+            for seg_meta in seg_metadata
+        ]
+
+        # Perform alignment for each group of indices with the same start sequence
+        start_seq = list(start_seq_wise_req.items())[0]
+
+        res = self.model.model.align(
+            features,
+            start_sequence=list(start_seq[0]),
+            text_tokens=text_tokens,
+            num_frames=duration_list,
+            median_filter_width=7,
+        )
+        for start_seq, req_idx in start_seq_wise_req.items():
+            for _res, _req_idx in zip(res, req_idx):
+                token_alignments[_req_idx] = _res
+
+        # Process each segment's metadata to align word timings
+        word_timings = []
+        for _idx, _seg_metadata in enumerate(seg_metadata):
+            _word_timings = self.model.assign_word_timings(
+                token_alignments[_idx].alignments,
+                token_alignments[_idx].text_token_probs,
+                word_tokens[_idx][0],
+                word_tokens[_idx][1],
+            )
+
+            stitched_seg = _seg_metadata["stitched_seg"]
+            current_seg_idx = 0
+            current_offset = stitched_seg[0][0]
+
+            for w in _word_timings:
+                w["start"] += current_offset
+                w["end"] += current_offset
+
+                if (
+                    current_seg_idx < len(stitched_seg)
+                    and (w["start"]) <= stitched_seg[current_seg_idx][1]
+                    and (w["end"]) >= stitched_seg[current_seg_idx][1]
+                ):
+                    w["end"] = stitched_seg[current_seg_idx][1]  # replace by seg end
+
+                while (
+                    current_seg_idx < len(stitched_seg)
+                    and (w["start"]) >= stitched_seg[current_seg_idx][1]
+                ):
+                    current_seg_idx += 1
+
+            word_timings.append(_word_timings)
+
+        return word_timings
+
+    def combine_words(self, metadata, response):
+        combined_segments = []
+
+        for meta, res in zip(metadata, response):
+            word_timestamps = res["word_timestamps"]
+            segment_texts = []
+            segment_index = 0
+            current_segment = meta["segments"][segment_index]
+            current_text = []
+            current_word_timestamps = []
+            current_start = current_segment[0]
+
+            for idx, word_info in enumerate(word_timestamps):
+                word_start, word_end, word_text = (
+                    word_info["start"],
+                    word_info["end"],
+                    word_info["word"],
+                )
+
+                # Move to the next segment if the word is outside the current segment
+                while (
+                    word_start >= current_segment[1]
+                    and segment_index < len(meta["segments"]) - 1
+                ):
+                    # Save the completed segment
+                    if current_text:
+                        segment_texts.append(
+                            {
+                                "start": current_start,
+                                "end": current_segment[1],
+                                "text": "".join(current_text),
+                                "word_timestamps": current_word_timestamps,
+                                "avg_logprob": res["avg_logprob"],
+                                "no_speech_prob": res["no_speech_prob"],
+                            }
+                        )
+                    segment_index += 1
+                    current_segment = meta["segments"][segment_index]
+                    current_start = current_segment[0]
+                    current_text = []
+                    current_word_timestamps = []
+
+                # Add word to the current segment text
+                if word_start >= current_segment[0] and word_end <= current_segment[1]:
+                    current_text.append(word_text)
+                    current_word_timestamps.append(word_info)
+
+            # Save the final segment
+            if current_text:
+                segment_texts.append(
+                    {
+                        "start": current_start,
+                        "end": current_segment[1],
+                        "text": "".join(current_text),
+                        "word_timestamps": current_word_timestamps,
+                        "avg_logprob": res["avg_logprob"],
+                        "no_speech_prob": res["no_speech_prob"],
+                    }
+                )
+
+            combined_segments.extend(segment_texts)
+        return combined_segments
 
     def transcribe(
         self,
@@ -389,6 +552,7 @@ class BatchedInferencePipeline(Pipeline):
         max_new_tokens: Optional[int] = None,
         clip_timestamps: Union[str, List[float]] = "0",
         hotwords: Optional[str] = None,
+        word_timestamps: bool = False,
     ) -> Tuple[Iterable[BatchedSegment], TranscriptionInfo]:
         """transcribe audio in chunks in batched fashion and return with language info.
 
@@ -441,13 +605,13 @@ class BatchedInferencePipeline(Pipeline):
                 process. The last end timestamp defaults to the end of the file.
             hotwords:
                 Hotwords/hint phrases to the model. Has no effect if prefix is not None.
+            word_timestamps: Extract word-level timestamps using the cross-attention pattern
+                and dynamic time warping, and include the timestamps for each word in each segment.
+                Set as False.
 
         Static params: (Fixed for batched version)
             without_timestamps: Only sample text tokens, set as True.
             max_initial_timestamp: The initial timestamp cannot be later than this, set at 0.0.
-            word_timestamps: Extract word-level timestamps using the cross-attention pattern
-                and dynamic time warping, and include the timestamps for each word in each segment.
-                Set as False.
             multilingual: If True, perform transcription on multilingual videos. Set as False.
             output_language: Valid only if multilingual is set to True.
                 Specifies the string representing the output language. One of
@@ -487,6 +651,7 @@ class BatchedInferencePipeline(Pipeline):
 
         if isinstance(audio, str):
             audio = decode_audio(audio)
+        duration = audio.shape[0] / sampling_rate
 
         # if no segment split is provided, use vad_model and generate segments
         if not vad_segments:
@@ -538,14 +703,14 @@ class BatchedInferencePipeline(Pipeline):
             max_new_tokens=max_new_tokens,
             clip_timestamps=clip_timestamps,
             hotwords=hotwords,
+            word_timestamps=word_timestamps,
             hallucination_silence_threshold=None,
             condition_on_previous_text=False,
             prompt_reset_on_temperature=0.5,
             multilingual=False,
-            word_timestamps=False,
             output_language=None,
             without_timestamps=True,
-            max_initial_timestamp=0.0,
+            max_initial_timestamp=0.0,            
         )
 
         for idx, out in enumerate(
@@ -557,31 +722,46 @@ class BatchedInferencePipeline(Pipeline):
                 options=batched_options,
             )
         ):
-            # inputs, *args, num_workers=None, batch_size=None, **kwargs
             if log_progress:
                 percent_complete = ((idx + 1) / total_segments) * 100
                 self.model.logger.info(f"Progress: {percent_complete:.2f}%...")
 
-            text = out["text"]
-            if batch_size in [0, 1, None]:
-                text = text[0]
-
-            segments = BatchedSegment(
-                text=text,
-                start=round(vad_segments[idx]["start"], 3),
-                end=round(vad_segments[idx]["end"], 3),
-            )
+            response = out["output"]
 
             info = TranscriptionInfo(
                 language=language,
                 language_probability=language_probability,
-                duration=0.0,
-                duration_after_vad=0.0,
+                duration=duration,
+                duration_after_vad=None,
                 transcription_options=batched_options,
                 vad_options=None,
                 all_language_probs=None,
             )
-            yield segments, info
+
+            if not batched_options.word_timestamps:
+                segments = BatchedSegment(
+                    text=response["text"],
+                    start=round(vad_segments[idx]["start"], 3),
+                    end=round(vad_segments[idx]["end"], 3),
+                    words=None,
+                    avg_logprob=response["avg_logprob"],
+                    no_speech_prob=response["no_speech_prob"],
+                )
+                yield segments, info
+
+            else:
+                response = self.combine_words([vad_segments[idx]], [response])
+                segments = []
+                for res in response:
+                    segments = BatchedSegment(
+                        text=res["text"],
+                        start=round(res["start"], 3),
+                        end=round(res["end"], 3),
+                        words=res["word_timestamps"],
+                        avg_logprob=res["avg_logprob"],
+                        no_speech_prob=res["no_speech_prob"],
+                    )
+                    yield segments, info
 
         # revert the tokenizer if multilingual inference is enabled
         if self.preset_language is None:
@@ -1769,6 +1949,33 @@ class WhisperModel:
         features = get_ctranslate2_storage(features)
         return self.model.encode(features, to_cpu=to_cpu)
 
+    def assign_word_timings(self, alignments, text_token_probs, words, word_tokens):
+        text_indices = np.array([pair[0] for pair in alignments])
+        time_indices = np.array([pair[1] for pair in alignments])
+
+        if len(word_tokens) <= 1:
+            return []
+
+        word_boundaries = np.pad(np.cumsum([len(t) for t in word_tokens[:-1]]), (1, 0))
+        if len(word_boundaries) <= 1:
+            return []
+
+        jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
+        jump_times = time_indices[jumps] * TIME_PRECISION
+        start_times = jump_times[word_boundaries[:-1]]
+        end_times = jump_times[word_boundaries[1:]]
+        word_probs = [
+            np.mean(text_token_probs[i:j])
+            for i, j in zip(word_boundaries[:-1], word_boundaries[1:])
+        ]
+
+        return [
+            dict(
+                word=word, start=round(start, 2), end=round(end, 2), prob=round(prob, 2)
+            )
+            for word, start, end, prob in zip(words, start_times, end_times, word_probs)
+        ]
+
     def generate_segment_batched(
         self,
         features: torch.Tensor,
@@ -1802,6 +2009,8 @@ class WhisperModel:
             max_length=self.max_length,
             suppress_blank=options["suppress_blank"],
             suppress_tokens=options["suppress_tokens"],
+            return_scores=True,
+            return_no_speech_prob=True,
         )
 
         tokens_batch = [x.sequences_ids[0] for x in result]
@@ -1813,7 +2022,22 @@ class WhisperModel:
             return tokenizer.tokenizer.decode_batch(res)
 
         text = decode_batch(tokens_batch)
-        return text
+        output = []
+        for idx, res in enumerate(result):
+            output.append({"text": text[idx].strip()})
+            
+            # return scores
+            seq_len = len(res.sequences_ids[0])
+            cum_logprob = res.scores[0] * (seq_len ** options["length_penalty"])
+            output[-1]["avg_logprob"] = cum_logprob / (seq_len + 1)
+
+            # return no speech prob
+            output[-1]["no_speech_prob"] = res.no_speech_prob
+
+        text_tokens = [x.sequences_ids[0] + [tokenizer.eot] for x in result]
+        sot_seqs = [tuple(_[-4:]) for _ in [prompt] * batch_size]
+
+        return encoder_output, sot_seqs, text_tokens, output
 
     def detect_language_multi_segment(
         self, audio: Union[str, BinaryIO, np.ndarray], params: Optional[dict] = None
