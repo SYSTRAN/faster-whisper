@@ -222,7 +222,7 @@ class BatchedInferencePipeline(Pipeline):
                 :, : self.model.feature_extractor.nb_max_frames
             ]
         )
-        inputs["inputs"] = features
+        inputs["features"] = features
         return inputs
 
     def _forward(self, model_inputs, **forward_params):
@@ -232,7 +232,7 @@ class BatchedInferencePipeline(Pipeline):
             text_tokens,
             output,
         ) = self.model.generate_segment_batched(
-            model_inputs["inputs"], self.tokenizer, forward_params
+            model_inputs["features"], self.tokenizer, forward_params
         )
 
         if forward_params["word_timestamps"]:
@@ -308,8 +308,9 @@ class BatchedInferencePipeline(Pipeline):
     ):
         def stack(items):
             return {
-                "inputs": torch.stack([x["inputs"] for x in items]),
+                "inputs": [x["inputs"] for x in items],
                 "seg_metadata": [x["seg_metadata"] for x in items],
+                "features": torch.stack([x["features"] for x in items]),
             }
 
         if "TOKENIZERS_PARALLELISM" not in os.environ:
