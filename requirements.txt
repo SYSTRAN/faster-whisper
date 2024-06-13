@@ -5,7 +5,6 @@ tokenizers>=0.13,<1
 onnxruntime>=1.14,<2 
 transformers
 pyannote-audio>=3.1.1
-pandas
 torch>=2.1.1 
 torchaudio>=2.1.2
 jsons>=1.6.3

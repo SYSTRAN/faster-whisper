@@ -50,9 +50,20 @@ def test_batched_transcribe(physcisworks_path):
         segments.append(
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
-    assert len(segments) == 8  # number of near 30 sec segments
+    # number of near 30 sec segments
+    assert len(segments) == 8
 
-    segment = segments[0]
+    result = batched_model.transcribe(
+        physcisworks_path, batch_size=16, word_timestamps=True
+    )
+    segments = []
+    for segment, info in result:
+        assert segment.words is not None
+        segments.append(
+            {"start": segment.start, "end": segment.end, "text": segment.text}
+        )
+    # more number of segments owing to vad based alignment instead of 30 sec segments
+    assert len(segments) > 8
 
 
 def test_prefix_with_timestamps(jfk_path):
