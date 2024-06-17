@@ -19,7 +19,7 @@ from pyannote.audio import Model
 from transformers import Pipeline
 from transformers.pipelines.pt_utils import PipelineIterator
 
-from faster_whisper.audio import TIME_PRECISION, decode_audio, pad_or_trim
+from faster_whisper.audio import decode_audio, pad_or_trim
 from faster_whisper.feature_extractor import FeatureExtractor
 from faster_whisper.tokenizer import _LANGUAGE_CODES, Tokenizer
 from faster_whisper.utils import (
@@ -133,10 +133,6 @@ class BatchedInferencePipeline(Pipeline):
     All rights reserved.
     Modified by Mobius Labs GmbH
     """
-
-    # TODO:
-    # - add support for timestamp mode
-    # - add support for custom inference kwargs
 
     def __init__(
         self,
@@ -450,7 +446,6 @@ class BatchedInferencePipeline(Pipeline):
                     current_seg_idx += 1
 
             word_timings.append(_word_timings)
-
         return word_timings
 
     def combine_words(self, metadata, response):
@@ -551,7 +546,6 @@ class BatchedInferencePipeline(Pipeline):
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         max_new_tokens: Optional[int] = None,
-        clip_timestamps: Union[str, List[float]] = "0",
         hotwords: Optional[str] = None,
         word_timestamps: bool = False,
     ) -> Tuple[Iterable[BatchedSegment], TranscriptionInfo]:
@@ -559,9 +553,12 @@ class BatchedInferencePipeline(Pipeline):
 
         Arguments:
             audio: audio file as numpy array/path for batched transcription.
-            vad_segments: Optionally provide list of dictionaries each containing "start" and
-                "end" keys, specifying the start and end voiced regions of audio chunks.
-                If no vad_segments specified, it uses vad model automatically segment them.
+            vad_segments: Optionally provide list of dictionaries each containing "start", "end",
+                and "segments" keys.
+                "start" and "end" keys specify the start and end of the voiced region within
+                30 sec boundary. An additional key "segments" contains all the start
+                and end of voiced regions within that 30sec boundary as a list of tuples.
+                If no vad_segments specified, it uses internal vad model automatically segment them.
             batch_size: the maximum number of parallel requests to model for decoding.
             num_workers: to enable true parallelism when running the model,
                 same as the transcribe function argument in WhisperModel class.
@@ -601,9 +598,6 @@ class BatchedInferencePipeline(Pipeline):
                 with the previous word
             max_new_tokens: Maximum number of new tokens to generate per-chunk. If not set,
                 the maximum will be set by the default max_length.
-            clip_timestamps:
-                Comma-separated list start,end,start,end,... timestamps (in seconds) of clips to
-                process. The last end timestamp defaults to the end of the file.
             hotwords:
                 Hotwords/hint phrases to the model. Has no effect if prefix is not None.
             word_timestamps: Extract word-level timestamps using the cross-attention pattern
@@ -623,9 +617,13 @@ class BatchedInferencePipeline(Pipeline):
                 such as repetition looping or timestamps going out of sync. Set as False
             prompt_reset_on_temperature: Resets prompt if temperature is above this value.
                 Arg has effect only if condition_on_previous_text is True. Set at 0.5
+            #TODO: support "hallucination_silence_threshold" when "word_timestamps=True"
             hallucination_silence_threshold: Optional[float]
                 When word_timestamps is True, skip silent periods longer than this threshold
                 (in seconds) when a possible hallucination is detected. set as None.
+            clip_timestamps:
+                Comma-separated list start,end,start,end,... timestamps (in seconds) of clips to
+                process. The last end timestamp defaults to the end of the file. Set as "0".
 
         unused:
             language_detection_threshold: If the maximum probability of the language tokens is
@@ -645,7 +643,6 @@ class BatchedInferencePipeline(Pipeline):
 
             - a generator over transcribed batched segments.
             - an instance of TranscriptionInfo.
-            - a dictionary with detected language and its probability.
         """
 
         sampling_rate = self.model.feature_extractor.sampling_rate
@@ -659,7 +656,7 @@ class BatchedInferencePipeline(Pipeline):
             if self.use_vad_model:
                 vad_segments = self.vad_model(
                     {
-                        "waveform": torch.from_numpy(audio).unsqueeze(0),
+                        "waveform": torch.from_numpy(audio).unsqueeze(0).float(),
                         "sample_rate": 16000,
                     }
                 )
@@ -702,16 +699,16 @@ class BatchedInferencePipeline(Pipeline):
             prepend_punctuations=prepend_punctuations,
             append_punctuations=append_punctuations,
             max_new_tokens=max_new_tokens,
-            clip_timestamps=clip_timestamps,
             hotwords=hotwords,
             word_timestamps=word_timestamps,
             hallucination_silence_threshold=None,
             condition_on_previous_text=False,
+            clip_timestamps="0",
             prompt_reset_on_temperature=0.5,
             multilingual=False,
             output_language=None,
             without_timestamps=True,
-            max_initial_timestamp=0.0,            
+            max_initial_timestamp=0.0,
         )
 
         for idx, out in enumerate(
@@ -873,14 +870,16 @@ class WhisperModel:
             )
         self.feat_kwargs = self._get_feature_kwargs(model_path, preprocessor_bytes)
         self.feature_extractor = FeatureExtractor(**self.feat_kwargs)
-        self.num_samples_per_token = self.feature_extractor.hop_length * 2
+        self.input_stride = 2
+        self.num_samples_per_token = (
+            self.feature_extractor.hop_length * self.input_stride
+        )
         self.frames_per_second = (
             self.feature_extractor.sampling_rate // self.feature_extractor.hop_length
         )
         self.tokens_per_second = (
             self.feature_extractor.sampling_rate // self.num_samples_per_token
         )
-        self.input_stride = 2
         self.time_precision = 0.02
         self.max_length = 448
 
@@ -1374,9 +1373,10 @@ class WhisperModel:
                             options.log_prob_low_threshold,
                         )
 
-                        # fast-forward to the next segment boundary
-                        seek += segment_size
-                        continue
+                if should_skip:
+                    # fast-forward to the next segment boundary
+                    seek += segment_size
+                    continue
 
             tokens = result.sequences_ids[0]
 
@@ -1962,7 +1962,8 @@ class WhisperModel:
             return []
 
         jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
-        jump_times = time_indices[jumps] * TIME_PRECISION
+
+        jump_times = time_indices[jumps] / self.tokens_per_second
         start_times = jump_times[word_boundaries[:-1]]
         end_times = jump_times[word_boundaries[1:]]
         word_probs = [
@@ -2026,7 +2027,7 @@ class WhisperModel:
         output = []
         for idx, res in enumerate(result):
             output.append({"text": text[idx].strip()})
-            
+
             # return scores
             seq_len = len(res.sequences_ids[0])
             cum_logprob = res.scores[0] * (seq_len ** options["length_penalty"])
@@ -2116,8 +2117,6 @@ class WhisperModel:
 
         # number of feature frames in 30 seconds of audio is 3000
         nb_max_frames = self.feature_extractor.nb_max_frames
-
-        # TODO: need to check if it fails for long audios and if we need to split the audio
 
         # extract features from audio with padding (default)
         features = self.feature_extractor(audio, enable_ta=enable_ta_fe)
