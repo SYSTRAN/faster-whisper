@@ -54,10 +54,16 @@ def decode_audio(
             dtype = array.dtype
             raw_buffer.write(array)
 
-    # It appears that some objects related to the resampler are not freed
-    # unless the garbage collector is manually run.
+
+    resampler = None
     del resampler
-    gc.collect()
+
+    # Depending on the number of objects created, 
+    # manually running garbage collector can slow down the processing.
+    # (https://github.com/SYSTRAN/faster-whisper/pull/856#issuecomment-2175975215)
+    
+    # gc.collect()
+
 
     audio = np.frombuffer(raw_buffer.getbuffer(), dtype=dtype)
 

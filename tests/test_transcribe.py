@@ -37,6 +37,22 @@ def test_transcribe(jfk_path):
     assert segment.text == "".join(word.word for word in segment.words)
     assert segment.start == segment.words[0].start
     assert segment.end == segment.words[-1].end
+    batched_model = BatchedInferencePipeline(model=model, use_vad_model=False)
+    result = batched_model.transcribe(jfk_path, word_timestamps=True)
+    segments = []
+    for segment, info in result:
+        assert info.language == "en"
+        assert info.language_probability > 0.7
+        segments.append(
+            {"start": segment.start, "end": segment.end, "text": segment.text}
+        )
+    
+    assert len(segments) == 1
+    assert segment.text == (
+        " And so my fellow Americans ask not what your country can do for you, "
+        "ask what you can do for your country."
+    )
+
 
 
 def test_batched_transcribe(physcisworks_path):
