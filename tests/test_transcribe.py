@@ -46,13 +46,12 @@ def test_transcribe(jfk_path):
         segments.append(
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
-    
+
     assert len(segments) == 1
     assert segment.text == (
         " And so my fellow Americans ask not what your country can do for you, "
         "ask what you can do for your country."
     )
-
 
 
 def test_batched_transcribe(physcisworks_path):

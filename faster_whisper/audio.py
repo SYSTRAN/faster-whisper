@@ -6,7 +6,6 @@ system dependencies. FFmpeg does not need to be installed on the system.
 However, the API is quite low-level so we need to manipulate audio frames directly.
 """
 
-import gc
 import io
 import itertools
 
@@ -54,16 +53,13 @@ def decode_audio(
             dtype = array.dtype
             raw_buffer.write(array)
 
-
     resampler = None
     del resampler
 
-    # Depending on the number of objects created, 
+    # Depending on the number of objects created,
     # manually running garbage collector can slow down the processing.
     # (https://github.com/SYSTRAN/faster-whisper/pull/856#issuecomment-2175975215)
-    
     # gc.collect()
-
 
     audio = np.frombuffer(raw_buffer.getbuffer(), dtype=dtype)
 
