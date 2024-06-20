@@ -1,3 +1,4 @@
 include faster_whisper/assets/silero_vad.onnx
 include requirements.txt
 include requirements.conversion.txt
+include faster_whisper/assets/pyannote_vad_model.bin
