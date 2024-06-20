@@ -10,7 +10,6 @@ from inspect import signature
 from typing import BinaryIO, Iterable, List, NamedTuple, Optional, Tuple, Union
 
 import ctranslate2
-import jsons
 import numpy as np
 import tokenizers
 import torch
@@ -267,7 +266,7 @@ class BatchedInferencePipeline(Pipeline):
             **preprocess_params,
             "enable_ta_fe": enable_ta_fe,
         }
-        options_dict = jsons.dump(options)
+        options_dict = options._asdict()
         forward_params = {**self._forward_params, **forward_params, **options_dict}
         postprocess_params = {**self._postprocess_params, **postprocess_params}
 

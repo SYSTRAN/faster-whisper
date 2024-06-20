@@ -152,9 +152,6 @@ class FeatureExtractor:
         feature extraction option using kaldi fbank features are available if torchaudio is
         available.
         """
-        if enable_ta:
-            waveform = waveform.astype(np.float32)
-
         if chunk_length is not None:
             self.n_samples = chunk_length * self.sampling_rate
             self.nb_max_frames = self.n_samples // self.hop_length
