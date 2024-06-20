@@ -323,7 +323,9 @@ class BatchedInferencePipeline(Pipeline):
         )
         return final_iterator
 
-    def get_language_and_tokenizer(self, audio, task=None, language=None):
+    def get_language_and_tokenizer(
+        self, audio, task: Optional[str] = None, language: Optional[str] = None
+    ):
         language_probability = 1.0
         if self.tokenizer is None:
             if not language:
@@ -336,15 +338,12 @@ class BatchedInferencePipeline(Pipeline):
                 language=language,
             )
         else:
-            language = language or self.tokenizer.language_code
-            task = task or self.tokenizer.task
-            if task != self.tokenizer.task or language != self.tokenizer.language_code:
-                self.tokenizer = Tokenizer(
-                    self.model.hf_tokenizer,
-                    self.model.model.is_multilingual,
-                    task=task,
-                    language=language,
-                )
+            if task is not None:
+                self.tokenizer.task = self.tokenizer.token_to_id(f"<|{task}|>")
+
+            if language is not None:
+                self.tokenizer.language = self.tokenizer.token_to_id(f"<|{language}|>")
+                self.tokenizer.language_code = language
 
         return language, language_probability, task
 
@@ -1323,12 +1322,9 @@ class WhisperModel:
                     task = "transcribe"
 
                 # Update tokenizer based on task and language
-                tokenizer = Tokenizer(
-                    self.hf_tokenizer,
-                    self.model.is_multilingual,
-                    task=task,
-                    language=language,
-                )
+                tokenizer.task = tokenizer.token_to_id(f"<|{task}|>")
+                tokenizer.language = tokenizer.token_to_id(language_token)
+                tokenizer.language_code = language
             # Update prompt based on task and language
             prompt = self.get_prompt(
                 tokenizer,
