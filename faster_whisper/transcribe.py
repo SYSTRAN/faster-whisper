@@ -652,6 +652,7 @@ class BatchedInferencePipeline(Pipeline):
 
         # if no segment split is provided, use vad_model and generate segments
         if not vad_segments:
+            # run the audio if it is less than 30 sec even without vad_segments
             if self.use_vad_model:
                 vad_segments = self.vad_model(
                     {
@@ -665,6 +666,10 @@ class BatchedInferencePipeline(Pipeline):
                     onset=self.vad_onset,
                     offset=self.vad_offset,
                 )
+            elif duration < self.chunk_size:
+                vad_segments = [
+                    {"start": 0.0, "end": duration, "segments": [(0.0, duration)]}
+                ]
             else:
                 raise RuntimeError(
                     "No vad segments found. Set 'use_vad_model' to True while loading the model"
