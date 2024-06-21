@@ -57,9 +57,8 @@ def decode_audio(
     del resampler
 
     # Depending on the number of objects created,
-    # manually running garbage collector can slow down the processing.
+    # manually running garbage collector can slow down the processing. Hence removing gc.collect()
     # (https://github.com/SYSTRAN/faster-whisper/pull/856#issuecomment-2175975215)
-    # gc.collect()
 
     audio = np.frombuffer(raw_buffer.getbuffer(), dtype=dtype)
 
