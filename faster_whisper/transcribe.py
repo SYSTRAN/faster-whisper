@@ -1595,7 +1595,7 @@ class WhisperModel:
         to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
 
         if features.ndim == 2:
-            features = np.expand_dims(features, axis=0)            
+            features = np.expand_dims(features, axis=0)
         features = get_ctranslate2_storage(features)
 
         return self.model.encode(features, to_cpu=to_cpu)
