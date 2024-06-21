@@ -212,11 +212,10 @@ class BatchedInferencePipeline(Pipeline):
 
     def preprocess(self, inputs, enable_ta_fe=True):
         audio = inputs["inputs"]
-        features = torch.tensor(
-            self.model.feature_extractor(audio, enable_ta=enable_ta_fe, padding=True)[
-                :, : self.model.feature_extractor.nb_max_frames
-            ]
-        )
+        features = self.model.feature_extractor(
+            audio, enable_ta=enable_ta_fe, padding=True
+        )[:, : self.model.feature_extractor.nb_max_frames]
+
         inputs["features"] = features
         return inputs
 
@@ -305,7 +304,7 @@ class BatchedInferencePipeline(Pipeline):
             return {
                 "inputs": [x["inputs"] for x in items],
                 "seg_metadata": [x["seg_metadata"] for x in items],
-                "features": torch.stack([x["features"] for x in items]),
+                "features": np.stack([x["features"] for x in items]),
             }
 
         if "TOKENIZERS_PARALLELISM" not in os.environ:
@@ -1595,7 +1594,8 @@ class WhisperModel:
         # to the CPU since we don't know which GPU will handle the next job.
         to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
 
-        features = np.expand_dims(features, 0)
+        if features.ndim == 2:
+            features = np.expand_dims(features, axis=0)            
         features = get_ctranslate2_storage(features)
 
         return self.model.encode(features, to_cpu=to_cpu)
@@ -1941,15 +1941,6 @@ class WhisperModel:
             )
         ]
 
-    def encode_batch(self, features: torch.Tensor) -> ctranslate2.StorageView:
-        # When the model is running on multiple GPUs, the encoder output should be moved
-        # to the CPU since we don't know which GPU will handle the next job.
-        to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
-        if features.device.type != "cpu":  # for GPU pipeline iterator
-            features = features.cpu().numpy()
-        features = get_ctranslate2_storage(features)
-        return self.model.encode(features, to_cpu=to_cpu)
-
     def assign_word_timings(self, alignments, text_token_probs, words, word_tokens):
         text_indices = np.array([pair[0] for pair in alignments])
         time_indices = np.array([pair[1] for pair in alignments])
@@ -2000,7 +1991,7 @@ class WhisperModel:
             prefix=options["prefix"],
         )
 
-        encoder_output = self.encode_batch(features)
+        encoder_output = self.encode(features)
 
         result = self.model.generate(
             encoder_output,
