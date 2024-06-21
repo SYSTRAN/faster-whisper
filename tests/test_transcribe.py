@@ -49,7 +49,7 @@ def test_transcribe(jfk_path):
 
     assert len(segments) == 1
     assert segment.text == (
-        " And so my fellow Americans ask not what your country can do for you, "
+        "And so my fellow Americans ask not what your country can do for you, "
         "ask what you can do for your country."
     )
 
@@ -77,8 +77,7 @@ def test_batched_transcribe(physcisworks_path):
         segments.append(
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
-    # more number of segments owing to vad based alignment instead of 30 sec segments
-    assert len(segments) > 8
+    assert len(segments) == 8
 
 
 def test_prefix_with_timestamps(jfk_path):

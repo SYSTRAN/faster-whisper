@@ -146,7 +146,7 @@ class BatchedInferencePipeline(Pipeline):
         language: Optional[str] = None,
         **kwargs,
     ):
-        self.model = model
+        self.model: WhisperModel = model
         self.tokenizer = tokenizer
         self.options = options
         self.preset_language = language
@@ -177,7 +177,7 @@ class BatchedInferencePipeline(Pipeline):
                 vad_onset=self.vad_onset, vad_offset=self.vad_offset
             )
         self.chunk_size = chunk_size  # VAD merging size
-
+        self.last_speech_timestamp = 0.0
         super(Pipeline, self).__init__()
 
     def _sanitize_parameters(self, **kwargs):
@@ -220,24 +220,27 @@ class BatchedInferencePipeline(Pipeline):
         return inputs
 
     def _forward(self, model_inputs, **forward_params):
-        (
-            encoder_output,
-            sot_seqs,
-            text_tokens,
-            output,
-        ) = self.model.generate_segment_batched(
+        encoder_output, outputs = self.model.generate_segment_batched(
             model_inputs["features"], self.tokenizer, forward_params
         )
 
         if forward_params["word_timestamps"]:
-            word_timings = self.align_words(
-                encoder_output, text_tokens, sot_seqs, model_inputs["seg_metadata"]
+            for segment_metadata, output in zip(model_inputs["seg_metadata"], outputs):
+                output["start"] = segment_metadata["start_time"]
+                output["end"] = segment_metadata["end_time"]
+
+            segment_size = encoder_output.shape[1] * 2
+            self.last_speech_timestamp = self.model.add_word_timestamps(
+                outputs,
+                self.tokenizer,
+                encoder_output,
+                segment_size,
+                forward_params["prepend_punctuations"],
+                forward_params["append_punctuations"],
+                self.last_speech_timestamp,
             )
 
-            for _response, _word_timings in zip(output, word_timings):
-                _response["word_timestamps"] = _word_timings
-
-        return {"output": output}
+        return {"output": outputs}
 
     def __call__(
         self, inputs, options, enable_ta_fe, num_workers=None, batch_size=None, **kwargs
@@ -373,140 +376,6 @@ class BatchedInferencePipeline(Pipeline):
         )
         vad_pipeline.instantiate(hyperparameters)
         return vad_pipeline
-
-    def align_words(self, features, text_tokens, sot_seqs, seg_metadata):
-        # Split text into word tokens using the tokenizer
-        word_tokens = []
-        for tokens in text_tokens:
-            word_tokens.append(self.tokenizer.split_to_word_tokens(tokens))
-
-        # Group indices by start sequence
-        start_seq_wise_req = {}
-        for _idx, _sot_seq in enumerate(sot_seqs):
-            if _sot_seq not in start_seq_wise_req:
-                start_seq_wise_req[_sot_seq] = []
-            start_seq_wise_req[_sot_seq].append(_idx)
-
-        # Initialize token alignments for each segment metadata
-        token_alignments = [[] for _ in seg_metadata]
-        duration_list = [
-            int(
-                (seg_meta["end_time"] - seg_meta["start_time"])
-                / self.model.feature_extractor.time_per_frame
-            )
-            for seg_meta in seg_metadata
-        ]
-
-        # Perform alignment for each group of indices with the same start sequence
-        start_seq = list(start_seq_wise_req.items())[0]
-
-        res = self.model.model.align(
-            features,
-            start_sequence=list(start_seq[0]),
-            text_tokens=text_tokens,
-            num_frames=duration_list,
-            median_filter_width=7,
-        )
-        for start_seq, req_idx in start_seq_wise_req.items():
-            for _res, _req_idx in zip(res, req_idx):
-                token_alignments[_req_idx] = _res
-
-        # Process each segment's metadata to align word timings
-        word_timings = []
-        for _idx, _seg_metadata in enumerate(seg_metadata):
-            _word_timings = self.model.assign_word_timings(
-                token_alignments[_idx].alignments,
-                token_alignments[_idx].text_token_probs,
-                word_tokens[_idx][0],
-                word_tokens[_idx][1],
-            )
-
-            stitched_seg = _seg_metadata["stitched_seg"]
-            current_seg_idx = 0
-            current_offset = stitched_seg[0][0]
-
-            for w in _word_timings:
-                w["start"] += current_offset
-                w["end"] += current_offset
-
-                if (
-                    current_seg_idx < len(stitched_seg)
-                    and (w["start"]) <= stitched_seg[current_seg_idx][1]
-                    and (w["end"]) >= stitched_seg[current_seg_idx][1]
-                ):
-                    w["end"] = stitched_seg[current_seg_idx][1]  # replace by seg end
-
-                while (
-                    current_seg_idx < len(stitched_seg)
-                    and (w["start"]) >= stitched_seg[current_seg_idx][1]
-                ):
-                    current_seg_idx += 1
-
-            word_timings.append(_word_timings)
-        return word_timings
-
-    def combine_words(self, metadata, response):
-        combined_segments = []
-
-        for meta, res in zip(metadata, response):
-            word_timestamps = res["word_timestamps"]
-            segment_texts = []
-            segment_index = 0
-            current_segment = meta["segments"][segment_index]
-            current_text = []
-            current_word_timestamps = []
-            current_start = current_segment[0]
-
-            for idx, word_info in enumerate(word_timestamps):
-                word_start, word_end, word_text = (
-                    word_info["start"],
-                    word_info["end"],
-                    word_info["word"],
-                )
-
-                # Move to the next segment if the word is outside the current segment
-                while (
-                    word_start >= current_segment[1]
-                    and segment_index < len(meta["segments"]) - 1
-                ):
-                    # Save the completed segment
-                    if current_text:
-                        segment_texts.append(
-                            {
-                                "start": current_start,
-                                "end": current_segment[1],
-                                "text": "".join(current_text),
-                                "word_timestamps": current_word_timestamps,
-                                "avg_logprob": res["avg_logprob"],
-                                "no_speech_prob": res["no_speech_prob"],
-                            }
-                        )
-                    segment_index += 1
-                    current_segment = meta["segments"][segment_index]
-                    current_start = current_segment[0]
-                    current_text = []
-                    current_word_timestamps = []
-
-                # Add word to the current segment text
-                if word_start >= current_segment[0] and word_end <= current_segment[1]:
-                    current_text.append(word_text)
-                    current_word_timestamps.append(word_info)
-
-            # Save the final segment
-            if current_text:
-                segment_texts.append(
-                    {
-                        "start": current_start,
-                        "end": current_segment[1],
-                        "text": "".join(current_text),
-                        "word_timestamps": current_word_timestamps,
-                        "avg_logprob": res["avg_logprob"],
-                        "no_speech_prob": res["no_speech_prob"],
-                    }
-                )
-
-            combined_segments.extend(segment_texts)
-        return combined_segments
 
     def transcribe(
         self,
@@ -750,22 +619,20 @@ class BatchedInferencePipeline(Pipeline):
                 yield segments, info
 
             else:
-                response = self.combine_words([vad_segments[idx]], [response])
-                segments = []
-                for res in response:
-                    segments = BatchedSegment(
-                        text=res["text"],
-                        start=round(res["start"], 3),
-                        end=round(res["end"], 3),
-                        words=res["word_timestamps"],
-                        avg_logprob=res["avg_logprob"],
-                        no_speech_prob=res["no_speech_prob"],
-                    )
-                    yield segments, info
+                segments = BatchedSegment(
+                    text=response["text"],
+                    start=round(response["start"], 3),
+                    end=round(response["end"], 3),
+                    words=response["words"],
+                    avg_logprob=response["avg_logprob"],
+                    no_speech_prob=response["no_speech_prob"],
+                )
+                yield segments, info
 
         # revert the tokenizer if multilingual inference is enabled
         if self.preset_language is None:
             self.tokenizer = None
+        self.last_speech_timestamp = 0.0
 
     def detect_language(self, audio: np.ndarray):
         segment = torch.tensor(
@@ -1783,45 +1650,66 @@ class WhisperModel:
             for segment in segments
         ]
 
-        text_tokens = list(itertools.chain.from_iterable(text_tokens_per_segment))
-        alignment = self.find_alignment(
+        if encoder_output.shape[0] == 1:
+            text_tokens = [list(itertools.chain.from_iterable(text_tokens_per_segment))]
+        else:
+            text_tokens = text_tokens_per_segment
+
+        alignments = self.find_alignment(
             tokenizer, text_tokens, encoder_output, num_frames
         )
-        word_durations = np.array([word["end"] - word["start"] for word in alignment])
-        word_durations = word_durations[word_durations.nonzero()]
-        median_duration = np.median(word_durations) if len(word_durations) > 0 else 0.0
-        median_duration = min(0.7, float(median_duration))
-        max_duration = median_duration * 2
+        for alignment in alignments:
+            word_durations = np.array(
+                [word["end"] - word["start"] for word in alignment]
+            )
+            word_durations = word_durations[word_durations.nonzero()]
+            median_duration = (
+                np.median(word_durations) if len(word_durations) > 0 else 0.0
+            )
+            median_duration = min(0.7, float(median_duration))
+            max_duration = median_duration * 2
 
-        # hack: truncate long words at sentence boundaries.
-        # a better segmentation algorithm based on VAD should be able to replace this.
-        if len(word_durations) > 0:
-            sentence_end_marks = ".。!！?？"
-            # ensure words at sentence boundaries
-            # are not longer than twice the median word duration.
-            for i in range(1, len(alignment)):
-                if alignment[i]["end"] - alignment[i]["start"] > max_duration:
-                    if alignment[i]["word"] in sentence_end_marks:
-                        alignment[i]["end"] = alignment[i]["start"] + max_duration
-                    elif alignment[i - 1]["word"] in sentence_end_marks:
-                        alignment[i]["start"] = alignment[i]["end"] - max_duration
+            # hack: truncate long words at sentence boundaries.
+            # a better segmentation algorithm based on VAD should be able to replace this.
+            if len(word_durations) > 0:
+                sentence_end_marks = ".。!！?？"
+                # ensure words at sentence boundaries
+                # are not longer than twice the median word duration.
+                for i in range(1, len(alignment)):
+                    if alignment[i]["end"] - alignment[i]["start"] > max_duration:
+                        if alignment[i]["word"] in sentence_end_marks:
+                            alignment[i]["end"] = alignment[i]["start"] + max_duration
+                        elif alignment[i - 1]["word"] in sentence_end_marks:
+                            alignment[i]["start"] = alignment[i]["end"] - max_duration
 
-        merge_punctuations(alignment, prepend_punctuations, append_punctuations)
+            merge_punctuations(alignment, prepend_punctuations, append_punctuations)
 
-        time_offset = (
-            segments[0]["seek"]
-            * self.feature_extractor.hop_length
-            / self.feature_extractor.sampling_rate
-        )
+        if encoder_output.shape[0] == 1:
+            # if the batch size is 1, split the alignments to match original
+            # segments size
+            new_alignments = []
+            word_idx = 0
+            for subsegment in text_tokens_per_segment:
+                tokens_count = 0
+                subsegment_alignments = []
+                while tokens_count <= len(subsegment) and word_idx < len(alignments[0]):
+                    alignment = alignments[0][word_idx]
+                    subsegment_alignments.append(alignment)
+                    tokens_count += len(alignment["tokens"])
+                    word_idx += 1
+                new_alignments.append(subsegment_alignments)
+            alignments = new_alignments
 
-        word_index = 0
-
-        for segment, text_tokens in zip(segments, text_tokens_per_segment):
+        for segment_idx, segment in enumerate(segments):
+            time_offset = segment["start"]
+            word_index = 0
             saved_tokens = 0
             words = []
 
-            while word_index < len(alignment) and saved_tokens < len(text_tokens):
-                timing = alignment[word_index]
+            while word_index < len(alignments[segment_idx]) and saved_tokens < len(
+                text_tokens_per_segment[segment_idx]
+            ):
+                timing = alignments[segment_idx][word_index]
 
                 if timing["word"]:
                     words.append(
@@ -1881,8 +1769,8 @@ class WhisperModel:
                     segment["end"] = words[-1]["end"]
 
                 last_speech_timestamp = segment["end"]
-
             segment["words"] = words
+        return last_speech_timestamp
 
     def find_alignment(
         self,
@@ -1895,79 +1783,62 @@ class WhisperModel:
         if len(text_tokens) == 0:
             return []
 
-        result = self.model.align(
+        results = self.model.align(
             encoder_output,
             tokenizer.sot_sequence,
-            [text_tokens],
+            text_tokens,
             num_frames,
             median_filter_width=median_filter_width,
-        )[0]
-
-        text_token_probs = result.text_token_probs
-
-        alignments = result.alignments
-        text_indices = np.array([pair[0] for pair in alignments])
-        time_indices = np.array([pair[1] for pair in alignments])
-
-        words, word_tokens = tokenizer.split_to_word_tokens(
-            text_tokens + [tokenizer.eot]
         )
-        if len(word_tokens) <= 1:
-            # return on eot only
-            # >>> np.pad([], (1, 0))
-            # array([0.])
-            # This results in crashes when we lookup jump_times with float, like
-            # IndexError: arrays used as indices must be of integer (or boolean) type
-            return []
-        word_boundaries = np.pad(np.cumsum([len(t) for t in word_tokens[:-1]]), (1, 0))
-        if len(word_boundaries) <= 1:
-            return []
+        return_list = []
+        for result, text_token in zip(results, text_tokens):
+            text_token_probs = result.text_token_probs
+            alignments = result.alignments
+            text_indices = np.array([pair[0] for pair in alignments])
+            time_indices = np.array([pair[1] for pair in alignments])
 
-        jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
-        jump_times = time_indices[jumps] / self.tokens_per_second
-        start_times = jump_times[word_boundaries[:-1]]
-        end_times = jump_times[word_boundaries[1:]]
-        word_probabilities = [
-            np.mean(text_token_probs[i:j])
-            for i, j in zip(word_boundaries[:-1], word_boundaries[1:])
-        ]
-
-        return [
-            dict(
-                word=word, tokens=tokens, start=start, end=end, probability=probability
+            words, word_tokens = tokenizer.split_to_word_tokens(
+                text_token + [tokenizer.eot]
             )
-            for word, tokens, start, end, probability in zip(
-                words, word_tokens, start_times, end_times, word_probabilities
+            if len(word_tokens) <= 1:
+                # return on eot only
+                # >>> np.pad([], (1, 0))
+                # array([0.])
+                # This results in crashes when we lookup jump_times with float, like
+                # IndexError: arrays used as indices must be of integer (or boolean) type
+                return []
+            word_boundaries = np.pad(
+                np.cumsum([len(t) for t in word_tokens[:-1]]), (1, 0)
             )
-        ]
+            if len(word_boundaries) <= 1:
+                return []
 
-    def assign_word_timings(self, alignments, text_token_probs, words, word_tokens):
-        text_indices = np.array([pair[0] for pair in alignments])
-        time_indices = np.array([pair[1] for pair in alignments])
-
-        if len(word_tokens) <= 1:
-            return []
-
-        word_boundaries = np.pad(np.cumsum([len(t) for t in word_tokens[:-1]]), (1, 0))
-        if len(word_boundaries) <= 1:
-            return []
-
-        jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
-
-        jump_times = time_indices[jumps] / self.tokens_per_second
-        start_times = jump_times[word_boundaries[:-1]]
-        end_times = jump_times[word_boundaries[1:]]
-        word_probs = [
-            np.mean(text_token_probs[i:j])
-            for i, j in zip(word_boundaries[:-1], word_boundaries[1:])
-        ]
-
-        return [
-            dict(
-                word=word, start=round(start, 2), end=round(end, 2), prob=round(prob, 2)
+            jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(
+                bool
             )
-            for word, start, end, prob in zip(words, start_times, end_times, word_probs)
-        ]
+            jump_times = time_indices[jumps] / self.tokens_per_second
+            start_times = jump_times[word_boundaries[:-1]]
+            end_times = jump_times[word_boundaries[1:]]
+            word_probabilities = [
+                np.mean(text_token_probs[i:j])
+                for i, j in zip(word_boundaries[:-1], word_boundaries[1:])
+            ]
+
+            return_list.append(
+                [
+                    dict(
+                        word=word,
+                        tokens=tokens,
+                        start=start,
+                        end=end,
+                        probability=probability,
+                    )
+                    for word, tokens, start, end, probability in zip(
+                        words, word_tokens, start_times, end_times, word_probabilities
+                    )
+                ]
+            )
+        return return_list
 
     def generate_segment_batched(
         self,
@@ -2026,11 +1897,9 @@ class WhisperModel:
 
             # return no speech prob
             output[-1]["no_speech_prob"] = res.no_speech_prob
+            output[-1]["tokens"] = res.sequences_ids[0] + [tokenizer.eot]
 
-        text_tokens = [x.sequences_ids[0] + [tokenizer.eot] for x in result]
-        sot_seqs = [tuple(_[-4:]) for _ in [prompt] * batch_size]
-
-        return encoder_output, sot_seqs, text_tokens, output
+        return encoder_output, output
 
     def detect_language_multi_segment(
         self, audio: Union[str, BinaryIO, np.ndarray], params: Optional[dict] = None
