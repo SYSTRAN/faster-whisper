@@ -210,11 +210,14 @@ class BatchedInferencePipeline(Pipeline):
         else:
             return torch.device(f"cuda:{device}")
 
-    def preprocess(self, inputs, enable_ta_fe=True):
+    def preprocess(self, inputs):
         audio = inputs["inputs"]
-        features = self.model.feature_extractor(
-            audio, enable_ta=enable_ta_fe, padding=True
-        )[:, : self.model.feature_extractor.nb_max_frames]
+        to_cpu = (
+            self.model.model.device == "cuda" and len(self.model.model.device_index) > 1
+        )
+        features = self.model.feature_extractor(audio, padding=True, to_cpu=to_cpu)[
+            :, : self.model.feature_extractor.nb_max_frames
+        ]
 
         inputs["features"] = features
         return inputs
@@ -242,9 +245,7 @@ class BatchedInferencePipeline(Pipeline):
 
         return {"output": outputs}
 
-    def __call__(
-        self, inputs, options, enable_ta_fe, num_workers=None, batch_size=None, **kwargs
-    ):
+    def __call__(self, inputs, options, num_workers=None, batch_size=None, **kwargs):
         if num_workers is None:
             if self._num_workers is None:
                 num_workers = 0
@@ -266,7 +267,6 @@ class BatchedInferencePipeline(Pipeline):
         preprocess_params = {
             **self._preprocess_params,
             **preprocess_params,
-            "enable_ta_fe": enable_ta_fe,
         }
         options_dict = options._asdict()
         forward_params = {**self._forward_params, **forward_params, **options_dict}
@@ -303,11 +303,12 @@ class BatchedInferencePipeline(Pipeline):
         forward_params=None,
         postprocess_params=None,
     ):
+
         def stack(items):
             return {
                 "inputs": [x["inputs"] for x in items],
                 "seg_metadata": [x["seg_metadata"] for x in items],
-                "features": np.stack([x["features"] for x in items]),
+                "features": torch.stack([x["features"] for x in items]),
             }
 
         if "TOKENIZERS_PARALLELISM" not in os.environ:
@@ -379,7 +380,7 @@ class BatchedInferencePipeline(Pipeline):
 
     def transcribe(
         self,
-        audio: Union[str, np.ndarray],
+        audio: Union[str, torch.Tensor],
         vad_segments: Optional[List[dict]] = None,
         batch_size: int = 16,
         num_workers: int = 0,
@@ -408,7 +409,6 @@ class BatchedInferencePipeline(Pipeline):
         prefix: Optional[str] = None,
         suppress_blank: bool = True,
         suppress_tokens: Optional[List[int]] = [-1],
-        enable_ta_fe=True,
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         max_new_tokens: Optional[int] = None,
@@ -457,7 +457,6 @@ class BatchedInferencePipeline(Pipeline):
             suppress_blank: Suppress blank outputs at the beginning of the sampling.
             suppress_tokens: List of token IDs to suppress. -1 will suppress a default set
                 of symbols as defined in the model config.json file.
-            enable_ta_fe: Use torch audio based kaldi fbank features for faster feature extraction.
             prepend_punctuations: If word_timestamps is True, merge these punctuation symbols
                 with the next word
             append_punctuations: If word_timestamps is True, merge these punctuation symbols
@@ -523,7 +522,7 @@ class BatchedInferencePipeline(Pipeline):
             if self.use_vad_model:
                 vad_segments = self.vad_model(
                     {
-                        "waveform": torch.from_numpy(audio).unsqueeze(0).float(),
+                        "waveform": audio.unsqueeze(0),
                         "sample_rate": 16000,
                     }
                 )
@@ -587,7 +586,6 @@ class BatchedInferencePipeline(Pipeline):
                 self.audio_split(audio, vad_segments, sampling_rate),
                 batch_size=batch_size,
                 num_workers=num_workers,
-                enable_ta_fe=enable_ta_fe,
                 options=batched_options,
             )
         ):
@@ -634,12 +632,13 @@ class BatchedInferencePipeline(Pipeline):
             self.tokenizer = None
         self.last_speech_timestamp = 0.0
 
-    def detect_language(self, audio: np.ndarray):
-        segment = torch.tensor(
-            self.model.feature_extractor(audio, padding=True)[
-                :, : self.model.feature_extractor.nb_max_frames
-            ]
+    def detect_language(self, audio: torch.Tensor):
+        to_cpu = (
+            self.model.model.device == "cuda" and len(self.model.model.device_index) > 1
         )
+        segment = self.model.feature_extractor(audio, padding=True, to_cpu=to_cpu)[
+            :, : self.model.feature_extractor.nb_max_frames
+        ]
         encoder_output = self.model.encode(segment)
         results = self.model.model.detect_language(encoder_output)
         language_token, language_probability = results[0][0]
@@ -650,7 +649,7 @@ class BatchedInferencePipeline(Pipeline):
         return language, language_probability
 
     def detect_language_multi_segment(
-        self, audio: Union[str, BinaryIO, np.ndarray], params: Optional[dict] = None
+        self, audio: Union[str, BinaryIO, torch.Tensor], params: Optional[dict] = None
     ):
         return self.model.detect_language_multi_segment(audio, params)
 
@@ -738,7 +737,9 @@ class WhisperModel:
                 "openai/whisper-tiny" + ("" if self.model.is_multilingual else ".en")
             )
         self.feat_kwargs = self._get_feature_kwargs(model_path, preprocessor_bytes)
-        self.feature_extractor = FeatureExtractor(**self.feat_kwargs)
+        self.feature_extractor = FeatureExtractor(
+            **self.feat_kwargs, device=self.device
+        )
         self.input_stride = 2
         self.num_samples_per_token = (
             self.feature_extractor.hop_length * self.input_stride
@@ -777,7 +778,7 @@ class WhisperModel:
 
     def transcribe(
         self,
-        audio: Union[str, BinaryIO, np.ndarray],
+        audio: Union[str, BinaryIO, torch.Tensor],
         language: Optional[str] = None,
         task: str = "transcribe",
         beam_size: int = 5,
@@ -807,7 +808,6 @@ class WhisperModel:
         without_timestamps: bool = False,
         max_initial_timestamp: float = 1.0,
         word_timestamps: bool = False,
-        enable_ta_fe=False,
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         multilingual: bool = False,
@@ -866,8 +866,6 @@ class WhisperModel:
           max_initial_timestamp: The initial timestamp cannot be later than this.
           word_timestamps: Extract word-level timestamps using the cross-attention pattern
             and dynamic time warping, and include the timestamps for each word in each segment.
-          enable_ta_fe: Use torch audio based kaldi fbank features
-            instead of torch based mel filterbank for faster feature extraction.
           prepend_punctuations: If word_timestamps is True, merge these punctuation symbols
             with the next word
           append_punctuations: If word_timestamps is True, merge these punctuation symbols
@@ -908,7 +906,7 @@ class WhisperModel:
 
         sampling_rate = self.feature_extractor.sampling_rate
 
-        if not isinstance(audio, np.ndarray):
+        if not isinstance(audio, torch.Tensor):
             audio = decode_audio(audio, sampling_rate=sampling_rate)
 
         duration = audio.shape[0] / sampling_rate
@@ -948,8 +946,9 @@ class WhisperModel:
         else:
             speech_chunks = None
 
+        to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
         features = self.feature_extractor(
-            audio, enable_ta=enable_ta_fe, chunk_length=chunk_length
+            audio, chunk_length=chunk_length, to_cpu=to_cpu
         )
 
         encoder_output = None
@@ -1088,7 +1087,7 @@ class WhisperModel:
 
     def generate_segments(
         self,
-        features: np.ndarray,
+        features: torch.Tensor,
         tokenizer: Tokenizer,
         options: TranscriptionOptions,
         encoder_output: Optional[ctranslate2.StorageView] = None,
@@ -1456,13 +1455,13 @@ class WhisperModel:
 
                 prompt_reset_since = len(all_tokens)
 
-    def encode(self, features: np.ndarray) -> ctranslate2.StorageView:
+    def encode(self, features: torch.Tensor) -> ctranslate2.StorageView:
         # When the model is running on multiple GPUs, the encoder output should be moved
         # to the CPU since we don't know which GPU will handle the next job.
         to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
 
         if features.ndim == 2:
-            features = np.expand_dims(features, axis=0)
+            features = features.unsqueeze(0)
         features = get_ctranslate2_storage(features)
 
         return self.model.encode(features, to_cpu=to_cpu)
@@ -1902,7 +1901,7 @@ class WhisperModel:
         return encoder_output, output
 
     def detect_language_multi_segment(
-        self, audio: Union[str, BinaryIO, np.ndarray], params: Optional[dict] = None
+        self, audio: Union[str, BinaryIO, torch.Tensor], params: Optional[dict] = None
     ):
         """
         Detect language based on N highly-confident segments of a language.
@@ -1917,7 +1916,6 @@ class WhisperModel:
                 "language_detection_segments": 4,
                 "vad_filter": True,
                 "vad_min_silence_duration": 2500,
-                "enable_ta_fe": False,
                 "language_threshold": 0.7,
             }
 
@@ -1933,15 +1931,14 @@ class WhisperModel:
         vad_params = dict(
             min_silence_duration_ms=params.get("vad_min_silence_duration", 2500)
         )
-        enable_ta_fe = params.get("enable_ta_fe", False)
 
         if vad_filter_enabled:
             vad_params = VadOptions(**vad_params)
 
         # decode audio if it is not decoded already
         sampling_rate = self.feature_extractor.sampling_rate
-        if not isinstance(audio, np.ndarray):
-            audio = decode_audio(audio, sampling_rate=sampling_rate)
+        if not isinstance(audio, torch.Tensor):
+            audio: torch.Tensor = decode_audio(audio, sampling_rate=sampling_rate)
 
         # calculate duration of audio as number of seconds
         # audio.shape[0] is the number of samples in the audio
@@ -1979,7 +1976,8 @@ class WhisperModel:
         nb_max_frames = self.feature_extractor.nb_max_frames
 
         # extract features from audio with padding (default)
-        features = self.feature_extractor(audio, enable_ta=enable_ta_fe)
+        to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
+        features = self.feature_extractor(audio, to_cpu=to_cpu)
 
         # number of segments in the audio
         num_segments = features.shape[-1] // nb_max_frames
@@ -2054,11 +2052,12 @@ class WhisperModel:
                     >= num_detection_segments
                 ):
                     # Considering the average probability of only confident segments
+                    mean = sum(confident_language_probabilities[language]) / len(
+                        confident_language_probabilities[language]
+                    )
                     return {
                         "language_code": language,
-                        "language_confidence": np.average(
-                            confident_language_probabilities[language]
-                        ),
+                        "language_confidence": mean,
                     }
 
         # if we are unable to get sufficient number of confident predictions,
@@ -2089,11 +2088,11 @@ class WhisperModel:
 
             # Do additional checks for silence for non-confident case
             # calculate RMS amplitude and DC offset
-            dc_offset = np.mean(audio)
+            dc_offset = audio.mean()
             audio_minus_dc_offset = audio - dc_offset
             is_silent = (
-                np.all(abs(audio) < 0.01)
-                or np.sqrt(np.mean(audio_minus_dc_offset**2)) < 0.01
+                torch.all(audio.abs() < 0.01)
+                or torch.sqrt(torch.mean(audio_minus_dc_offset**2)) < 0.01
             )
 
             if is_silent:
@@ -2238,9 +2237,12 @@ def restore_speech_timestamps(
         yield segment
 
 
-def get_ctranslate2_storage(segment: np.ndarray) -> ctranslate2.StorageView:
-    segment = np.ascontiguousarray(segment)
-    segment = ctranslate2.StorageView.from_array(segment)
+def get_ctranslate2_storage(segment: torch.Tensor) -> ctranslate2.StorageView:
+    segment = segment.contiguous()
+    segment = ctranslate2.StorageView.from_array(
+        segment if segment.is_cuda else segment.numpy()
+    )  # torch cpu tensors don't implement __array_interface__
+    # https://github.com/pytorch/pytorch/issues/51156
     return segment
 
 
