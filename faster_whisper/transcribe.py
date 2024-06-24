@@ -383,7 +383,6 @@ class BatchedInferencePipeline(Pipeline):
         audio: Union[str, torch.Tensor, np.ndarray],
         vad_segments: Optional[List[dict]] = None,
         batch_size: int = 16,
-        num_workers: int = 0,
         language: Optional[str] = None,
         task: str = None,
         log_progress: bool = False,
@@ -426,8 +425,6 @@ class BatchedInferencePipeline(Pipeline):
                 and end of voiced regions within that 30sec boundary as a list of tuples.
                 If no vad_segments specified, it uses internal vad model automatically segment them.
             batch_size: the maximum number of parallel requests to model for decoding.
-            num_workers: to enable true parallelism when running the model,
-                same as the transcribe function argument in WhisperModel class.
             language: The language spoken in the audio.
             task: either "transcribe" or "translate".
             log_progress: whether to show progress bar or not.
@@ -587,7 +584,7 @@ class BatchedInferencePipeline(Pipeline):
             self.__call__(
                 self.audio_split(audio, vad_segments, sampling_rate),
                 batch_size=batch_size,
-                num_workers=num_workers,
+                num_workers=self.model.model.num_workers,
                 options=batched_options,
             )
         ):
