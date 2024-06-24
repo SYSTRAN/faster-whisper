@@ -584,7 +584,7 @@ class BatchedInferencePipeline(Pipeline):
             self.__call__(
                 self.audio_split(audio, vad_segments, sampling_rate),
                 batch_size=batch_size,
-                num_workers=self.model.model.num_workers,
+                num_workers=0,
                 options=batched_options,
             )
         ):
@@ -1349,7 +1349,7 @@ class WhisperModel:
 
             if options.word_timestamps:
                 self.add_word_timestamps(
-                    current_segments,
+                    [current_segments],
                     tokenizer,
                     encoder_output,
                     segment_size,
@@ -1645,15 +1645,15 @@ class WhisperModel:
         if len(segments) == 0:
             return
 
-        text_tokens_per_segment = [
-            [token for token in segment["tokens"] if token < tokenizer.eot]
-            for segment in segments
-        ]
-
-        if encoder_output.shape[0] == 1:
-            text_tokens = [list(itertools.chain.from_iterable(text_tokens_per_segment))]
-        else:
-            text_tokens = text_tokens_per_segment
+        text_tokens = []
+        text_tokens_per_segment = []
+        for segment in segments:
+            segment_tokens = [
+                [token for token in subsegment["tokens"] if token < tokenizer.eot]
+                for subsegment in segment
+            ]
+            text_tokens.append(list(itertools.chain.from_iterable(segment_tokens)))
+            text_tokens_per_segment.append(segment_tokens)
 
         alignments = self.find_alignment(
             tokenizer, text_tokens, encoder_output, num_frames
@@ -1684,92 +1684,99 @@ class WhisperModel:
 
             merge_punctuations(alignment, prepend_punctuations, append_punctuations)
 
-        if encoder_output.shape[0] == 1:
-            # if the batch size is 1, split the alignments to match original
-            # segments size
-            new_alignments = []
+        new_alignments = []
+        for segment_idx, segment in enumerate(text_tokens_per_segment):
             word_idx = 0
-            for subsegment in text_tokens_per_segment:
+            segment_alignments = []
+            for subsegment in segment:
                 tokens_count = 0
                 subsegment_alignments = []
-                while tokens_count <= len(subsegment) and word_idx < len(alignments[0]):
-                    alignment = alignments[0][word_idx]
+                while tokens_count <= len(subsegment) and word_idx < len(
+                    alignments[segment_idx]
+                ):
+                    alignment = alignments[segment_idx][word_idx]
                     subsegment_alignments.append(alignment)
                     tokens_count += len(alignment["tokens"])
                     word_idx += 1
-                new_alignments.append(subsegment_alignments)
-            alignments = new_alignments
+                segment_alignments.append(subsegment_alignments)
+            new_alignments.append(segment_alignments)
 
         for segment_idx, segment in enumerate(segments):
-            time_offset = segment["start"]
-            word_index = 0
-            saved_tokens = 0
-            words = []
+            for subsegment_idx, subsegment in enumerate(segment):
+                time_offset = subsegment["start"]
+                word_index = 0
+                saved_tokens = 0
+                words = []
 
-            while word_index < len(alignments[segment_idx]) and saved_tokens < len(
-                text_tokens_per_segment[segment_idx]
-            ):
-                timing = alignments[segment_idx][word_index]
-
-                if timing["word"]:
-                    words.append(
-                        dict(
-                            word=timing["word"],
-                            start=round(time_offset + timing["start"], 2),
-                            end=round(time_offset + timing["end"], 2),
-                            probability=timing["probability"],
-                        )
-                    )
-
-                saved_tokens += len(timing["tokens"])
-                word_index += 1
-
-            # hack: truncate long words at segment boundaries.
-            # a better segmentation algorithm based on VAD should be able to replace this.
-            if len(words) > 0:
-                # ensure the first and second word after a pause is not longer than
-                # twice the median word duration.
-                if words[0]["end"] - last_speech_timestamp > median_duration * 4 and (
-                    words[0]["end"] - words[0]["start"] > max_duration
-                    or (
-                        len(words) > 1
-                        and words[1]["end"] - words[0]["start"] > max_duration * 2
-                    )
+                while word_index < len(
+                    new_alignments[segment_idx][subsegment_idx]
+                ) and saved_tokens < len(
+                    text_tokens_per_segment[segment_idx][subsegment_idx]
                 ):
-                    if (
-                        len(words) > 1
-                        and words[1]["end"] - words[1]["start"] > max_duration
+                    timing = new_alignments[segment_idx][subsegment_idx][word_index]
+
+                    if timing["word"]:
+                        words.append(
+                            dict(
+                                word=timing["word"],
+                                start=round(time_offset + timing["start"], 2),
+                                end=round(time_offset + timing["end"], 2),
+                                probability=timing["probability"],
+                            )
+                        )
+
+                    saved_tokens += len(timing["tokens"])
+                    word_index += 1
+
+                # hack: truncate long words at segment boundaries.
+                # a better segmentation algorithm based on VAD should be able to replace this.
+                if len(words) > 0:
+                    # ensure the first and second word after a pause is not longer than
+                    # twice the median word duration.
+                    if words[0][
+                        "end"
+                    ] - last_speech_timestamp > median_duration * 4 and (
+                        words[0]["end"] - words[0]["start"] > max_duration
+                        or (
+                            len(words) > 1
+                            and words[1]["end"] - words[0]["start"] > max_duration * 2
+                        )
                     ):
-                        boundary = max(
-                            words[1]["end"] / 2, words[1]["end"] - max_duration
+                        if (
+                            len(words) > 1
+                            and words[1]["end"] - words[1]["start"] > max_duration
+                        ):
+                            boundary = max(
+                                words[1]["end"] / 2, words[1]["end"] - max_duration
+                            )
+                            words[0]["end"] = words[1]["start"] = boundary
+                        words[0]["start"] = max(0, words[0]["end"] - max_duration)
+
+                    # prefer the segment-level start timestamp if the first word is too long.
+                    if (
+                        subsegment["start"] < words[0]["end"]
+                        and subsegment["start"] - 0.5 > words[0]["start"]
+                    ):
+                        words[0]["start"] = max(
+                            0,
+                            min(words[0]["end"] - median_duration, subsegment["start"]),
                         )
-                        words[0]["end"] = words[1]["start"] = boundary
-                    words[0]["start"] = max(0, words[0]["end"] - max_duration)
+                    else:
+                        subsegment["start"] = words[0]["start"]
 
-                # prefer the segment-level start timestamp if the first word is too long.
-                if (
-                    segment["start"] < words[0]["end"]
-                    and segment["start"] - 0.5 > words[0]["start"]
-                ):
-                    words[0]["start"] = max(
-                        0, min(words[0]["end"] - median_duration, segment["start"])
-                    )
-                else:
-                    segment["start"] = words[0]["start"]
+                    # prefer the segment-level end timestamp if the last word is too long.
+                    if (
+                        subsegment["end"] > words[-1]["start"]
+                        and subsegment["end"] + 0.5 < words[-1]["end"]
+                    ):
+                        words[-1]["end"] = max(
+                            words[-1]["start"] + median_duration, subsegment["end"]
+                        )
+                    else:
+                        subsegment["end"] = words[-1]["end"]
 
-                # prefer the segment-level end timestamp if the last word is too long.
-                if (
-                    segment["end"] > words[-1]["start"]
-                    and segment["end"] + 0.5 < words[-1]["end"]
-                ):
-                    words[-1]["end"] = max(
-                        words[-1]["start"] + median_duration, segment["end"]
-                    )
-                else:
-                    segment["end"] = words[-1]["end"]
-
-                last_speech_timestamp = segment["end"]
-            segment["words"] = words
+                    last_speech_timestamp = subsegment["end"]
+                segments[segment_idx][subsegment_idx]["words"] = words
         return last_speech_timestamp
 
     def find_alignment(
