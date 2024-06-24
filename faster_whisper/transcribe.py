@@ -380,7 +380,7 @@ class BatchedInferencePipeline(Pipeline):
 
     def transcribe(
         self,
-        audio: Union[str, torch.Tensor],
+        audio: Union[str, torch.Tensor, np.ndarray],
         vad_segments: Optional[List[dict]] = None,
         batch_size: int = 16,
         num_workers: int = 0,
@@ -512,8 +512,10 @@ class BatchedInferencePipeline(Pipeline):
 
         sampling_rate = self.model.feature_extractor.sampling_rate
 
-        if isinstance(audio, str):
-            audio = decode_audio(audio)
+        if isinstance(audio, np.ndarray):
+            audio = torch.from_numpy(audio)
+        elif not isinstance(audio, torch.Tensor):
+            audio = decode_audio(audio, sampling_rate=sampling_rate)
         duration = audio.shape[0] / sampling_rate
 
         # if no segment split is provided, use vad_model and generate segments
@@ -778,7 +780,7 @@ class WhisperModel:
 
     def transcribe(
         self,
-        audio: Union[str, BinaryIO, torch.Tensor],
+        audio: Union[str, BinaryIO, torch.Tensor, np.ndarray],
         language: Optional[str] = None,
         task: str = "transcribe",
         beam_size: int = 5,
@@ -906,7 +908,9 @@ class WhisperModel:
 
         sampling_rate = self.feature_extractor.sampling_rate
 
-        if not isinstance(audio, torch.Tensor):
+        if isinstance(audio, np.ndarray):
+            audio = torch.from_numpy(audio)
+        elif not isinstance(audio, torch.Tensor):
             audio = decode_audio(audio, sampling_rate=sampling_rate)
 
         duration = audio.shape[0] / sampling_rate
