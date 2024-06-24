@@ -30,7 +30,7 @@ def test_transcribe(jfk_path):
     segment = segments[0]
 
     assert segment.text == (
-        " And so my fellow Americans ask not what your country can do for you, "
+        " And so, my fellow Americans, ask not what your country can do for you, "
         "ask what you can do for your country."
     )
 
@@ -131,7 +131,7 @@ def test_stereo_diarization(data_dir):
     segments, _ = model.transcribe(left)
     transcription = "".join(segment.text for segment in segments).strip()
     assert transcription == (
-        "He began a confused complaint against the wizard, "
+        "He began a confused complaint against the wizard "
         "who had vanished behind the curtain on the left."
     )
 

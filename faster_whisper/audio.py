@@ -46,7 +46,7 @@ def pad_or_trim(array, length: int, *, axis: int = -1):
 
     if array.shape[axis] < length:
         pad_widths = [0,] * array.ndim * 2
-        pad_widths[2 * axis + 1] = length - array.shape[axis]
+        pad_widths[2 * axis] = length - array.shape[axis]
         array = torch.nn.functional.pad(array, tuple(pad_widths[::-1]))
 
     return array
