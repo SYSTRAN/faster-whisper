@@ -431,7 +431,7 @@ class BatchedInferencePipeline(Pipeline):
         max_new_tokens: Optional[int] = None,
         hotwords: Optional[str] = None,
         word_timestamps: bool = False,
-        without_timestamps: bool = False,
+        without_timestamps: bool = True,
     ) -> Tuple[Iterable[BatchedSegment], TranscriptionInfo]:
         """transcribe audio in chunks in batched fashion and return with language info.
 
