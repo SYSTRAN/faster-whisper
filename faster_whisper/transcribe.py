@@ -70,6 +70,7 @@ class BatchedSegment(NamedTuple):
     no_speech_prob (float): no speech probability of the segment.
     """
 
+    id: int
     start: float
     end: float
     text: str
@@ -227,23 +228,46 @@ class BatchedInferencePipeline(Pipeline):
             model_inputs["features"], self.tokenizer, forward_params
         )
 
+        segment_size = encoder_output.shape[1] * 2
+        segmented_outputs = []
+        for segment_metadata, output in zip(model_inputs["seg_metadata"], outputs):
+            subsegments, seek, single_timestamp_ending = (
+                self.model._split_segments_by_timestamps(
+                    tokenizer=self.tokenizer,
+                    tokens=output["tokens"],
+                    time_offset=segment_metadata["start_time"],
+                    segment_size=segment_size,
+                    segment_duration=segment_metadata["end_time"]
+                    - segment_metadata["start_time"],
+                    seek=0,
+                )
+            )
+            segmented_outputs.append(
+                [
+                    dict(
+                        text=self.tokenizer.decode(subsegment["tokens"]),
+                        avg_logprob=output["avg_logprob"],
+                        no_speech_prob=output["no_speech_prob"],
+                        tokens=subsegment["tokens"],
+                        start=subsegment["start"],
+                        end=subsegment["end"],
+                    )
+                    for subsegment in subsegments
+                ]
+            )
         if forward_params["word_timestamps"]:
-            for segment_metadata, output in zip(model_inputs["seg_metadata"], outputs):
-                output["start"] = segment_metadata["start_time"]
-                output["end"] = segment_metadata["end_time"]
-
-            segment_size = encoder_output.shape[1] * 2
             self.last_speech_timestamp = self.model.add_word_timestamps(
-                outputs,
+                segmented_outputs,
                 self.tokenizer,
                 encoder_output,
                 segment_size,
                 forward_params["prepend_punctuations"],
                 forward_params["append_punctuations"],
                 self.last_speech_timestamp,
+                batched=True,
             )
 
-        return {"output": outputs}
+        return {"output": segmented_outputs}
 
     def __call__(self, inputs, options, batch_size=None, **kwargs):
 
@@ -407,6 +431,7 @@ class BatchedInferencePipeline(Pipeline):
         max_new_tokens: Optional[int] = None,
         hotwords: Optional[str] = None,
         word_timestamps: bool = False,
+        without_timestamps: bool = False,
     ) -> Tuple[Iterable[BatchedSegment], TranscriptionInfo]:
         """transcribe audio in chunks in batched fashion and return with language info.
 
@@ -459,9 +484,9 @@ class BatchedInferencePipeline(Pipeline):
             word_timestamps: Extract word-level timestamps using the cross-attention pattern
                 and dynamic time warping, and include the timestamps for each word in each segment.
                 Set as False.
+            without_timestamps: Only sample text tokens.
 
         Static params: (Fixed for batched version)
-            without_timestamps: Only sample text tokens, set as True.
             max_initial_timestamp: The initial timestamp cannot be later than this, set at 0.0.
             multilingual: If True, perform transcription on multilingual videos. Set as False.
             output_language: Valid only if multilingual is set to True.
@@ -570,10 +595,10 @@ class BatchedInferencePipeline(Pipeline):
             prompt_reset_on_temperature=0.5,
             multilingual=False,
             output_language=None,
-            without_timestamps=True,
+            without_timestamps=without_timestamps,
             max_initial_timestamp=0.0,
         )
-
+        seg_idx = 0
         for idx, out in enumerate(
             self.__call__(
                 self.audio_split(audio, vad_segments, sampling_rate),
@@ -585,7 +610,9 @@ class BatchedInferencePipeline(Pipeline):
                 percent_complete = ((idx + 1) / total_segments) * 100
                 self.model.logger.info(f"Progress: {percent_complete:.2f}%...")
 
-            response = out["output"]
+            responses = out["output"]
+            if batch_size == 1:
+                responses = responses[0]
 
             info = TranscriptionInfo(
                 language=language,
@@ -596,24 +623,18 @@ class BatchedInferencePipeline(Pipeline):
                 vad_options=None,
                 all_language_probs=None,
             )
-
-            if not batched_options.word_timestamps:
+            for response in responses:
+                seg_idx += 1
                 segments = BatchedSegment(
-                    text=response["text"],
-                    start=round(vad_segments[idx]["start"], 3),
-                    end=round(vad_segments[idx]["end"], 3),
-                    words=None,
-                    avg_logprob=response["avg_logprob"],
-                    no_speech_prob=response["no_speech_prob"],
-                )
-                yield segments, info
-
-            else:
-                segments = BatchedSegment(
+                    id=seg_idx,
                     text=response["text"],
                     start=round(response["start"], 3),
                     end=round(response["end"], 3),
-                    words=response["words"],
+                    words=(
+                        None
+                        if not batched_options.word_timestamps
+                        else response["words"]
+                    ),
                     avg_logprob=response["avg_logprob"],
                     no_speech_prob=response["no_speech_prob"],
                 )
@@ -1079,6 +1100,85 @@ class WhisperModel:
 
         return segments, info
 
+    def _split_segments_by_timestamps(
+        self,
+        tokenizer: Tokenizer,
+        tokens: list[int],
+        time_offset: float,
+        segment_size: int,
+        segment_duration: float,
+        seek: int,
+    ) -> list[list[int]]:
+        current_segments = []
+        single_timestamp_ending = (
+            len(tokens) >= 2 and tokens[-2] < tokenizer.timestamp_begin <= tokens[-1]
+        )
+
+        consecutive_timestamps = [
+            i
+            for i in range(len(tokens))
+            if i > 0
+            and tokens[i] >= tokenizer.timestamp_begin
+            and tokens[i - 1] >= tokenizer.timestamp_begin
+        ]
+
+        if len(consecutive_timestamps) > 0:
+            slices = list(consecutive_timestamps)
+            if single_timestamp_ending:
+                slices.append(len(tokens))
+
+            last_slice = 0
+            for current_slice in slices:
+                sliced_tokens = tokens[last_slice:current_slice]
+                start_timestamp_position = sliced_tokens[0] - tokenizer.timestamp_begin
+                end_timestamp_position = sliced_tokens[-1] - tokenizer.timestamp_begin
+                start_time = (
+                    time_offset + start_timestamp_position * self.time_precision
+                )
+                end_time = time_offset + end_timestamp_position * self.time_precision
+
+                current_segments.append(
+                    dict(
+                        seek=seek,
+                        start=start_time,
+                        end=end_time,
+                        tokens=sliced_tokens,
+                    )
+                )
+                last_slice = current_slice
+
+            if single_timestamp_ending:
+                # single timestamp at the end means no speech after the last timestamp.
+                seek += segment_size
+            else:
+                # otherwise, ignore the unfinished segment and seek to the last timestamp
+                last_timestamp_position = (
+                    tokens[last_slice - 1] - tokenizer.timestamp_begin
+                )
+                seek += last_timestamp_position * self.input_stride
+
+        else:
+            duration = segment_duration
+            timestamps = [
+                token for token in tokens if token >= tokenizer.timestamp_begin
+            ]
+            if len(timestamps) > 0 and timestamps[-1] != tokenizer.timestamp_begin:
+                last_timestamp_position = timestamps[-1] - tokenizer.timestamp_begin
+                duration = last_timestamp_position * self.time_precision
+
+            current_segments.append(
+                dict(
+                    seek=seek,
+                    start=time_offset,
+                    end=time_offset + duration,
+                    tokens=tokens,
+                )
+            )
+
+            seek += segment_size
+
+        return current_segments, seek, single_timestamp_ending
+
     def generate_segments(
         self,
         features: torch.Tensor,
@@ -1240,7 +1340,6 @@ class WhisperModel:
             tokens = result.sequences_ids[0]
 
             previous_seek = seek
-            current_segments = []
 
             # anomalous words are very long/short/improbable
             def word_anomaly_score(word: dict) -> float:
@@ -1266,79 +1365,16 @@ class WhisperModel:
             def next_words_segment(segments: List[dict]) -> Optional[dict]:
                 return next((s for s in segments if s["words"]), None)
 
-            single_timestamp_ending = (
-                len(tokens) >= 2
-                and tokens[-2] < tokenizer.timestamp_begin <= tokens[-1]
-            )
-
-            consecutive_timestamps = [
-                i
-                for i in range(len(tokens))
-                if i > 0
-                and tokens[i] >= tokenizer.timestamp_begin
-                and tokens[i - 1] >= tokenizer.timestamp_begin
-            ]
-
-            if len(consecutive_timestamps) > 0:
-                slices = list(consecutive_timestamps)
-                if single_timestamp_ending:
-                    slices.append(len(tokens))
-
-                last_slice = 0
-                for current_slice in slices:
-                    sliced_tokens = tokens[last_slice:current_slice]
-                    start_timestamp_position = (
-                        sliced_tokens[0] - tokenizer.timestamp_begin
-                    )
-                    end_timestamp_position = (
-                        sliced_tokens[-1] - tokenizer.timestamp_begin
-                    )
-                    start_time = (
-                        time_offset + start_timestamp_position * self.time_precision
-                    )
-                    end_time = (
-                        time_offset + end_timestamp_position * self.time_precision
-                    )
-
-                    current_segments.append(
-                        dict(
-                            seek=seek,
-                            start=start_time,
-                            end=end_time,
-                            tokens=sliced_tokens,
-                        )
-                    )
-                    last_slice = current_slice
-
-                if single_timestamp_ending:
-                    # single timestamp at the end means no speech after the last timestamp.
-                    seek += segment_size
-                else:
-                    # otherwise, ignore the unfinished segment and seek to the last timestamp
-                    last_timestamp_position = (
-                        tokens[last_slice - 1] - tokenizer.timestamp_begin
-                    )
-                    seek += last_timestamp_position * self.input_stride
-
-            else:
-                duration = segment_duration
-                timestamps = [
-                    token for token in tokens if token >= tokenizer.timestamp_begin
-                ]
-                if len(timestamps) > 0 and timestamps[-1] != tokenizer.timestamp_begin:
-                    last_timestamp_position = timestamps[-1] - tokenizer.timestamp_begin
-                    duration = last_timestamp_position * self.time_precision
-
-                current_segments.append(
-                    dict(
-                        seek=seek,
-                        start=time_offset,
-                        end=time_offset + duration,
-                        tokens=tokens,
-                    )
+            current_segments, seek, single_timestamp_ending = (
+                self._split_segments_by_timestamps(
+                    tokenizer=tokenizer,
+                    tokens=tokens,
+                    time_offset=time_offset,
+                    segment_size=segment_size,
+                    segment_duration=segment_duration,
+                    seek=seek,
                 )
-
-                seek += segment_size
+            )
 
             if options.word_timestamps:
                 self.add_word_timestamps(
@@ -1349,6 +1385,7 @@ class WhisperModel:
                     options.prepend_punctuations,
                     options.append_punctuations,
                     last_speech_timestamp=last_speech_timestamp,
+                    batched=False,
                 )
 
                 if not single_timestamp_ending:
@@ -1634,7 +1671,8 @@ class WhisperModel:
         prepend_punctuations: str,
         append_punctuations: str,
         last_speech_timestamp: float,
-    ) -> None:
+        batched: bool,
+    ) -> float:
         if len(segments) == 0:
             return
 
@@ -1696,7 +1734,11 @@ class WhisperModel:
 
         for segment_idx, segment in enumerate(segments):
             for subsegment_idx, subsegment in enumerate(segment):
-                time_offset = subsegment["start"]
+                time_offset = (
+                    (subsegment["start"] + last_speech_timestamp)
+                    if batched
+                    else subsegment["start"]
+                )
                 word_index = 0
                 saved_tokens = 0
                 words = []
@@ -1877,19 +1919,9 @@ class WhisperModel:
             return_no_speech_prob=True,
         )
 
-        tokens_batch = [x.sequences_ids[0] for x in result]
-
-        def decode_batch(tokens: List[List[int]]) -> str:
-            res = []
-            for tk in tokens:
-                res.append([token for token in tk if token < tokenizer.eot])
-            return tokenizer.tokenizer.decode_batch(res)
-
-        text = decode_batch(tokens_batch)
         output = []
-        for idx, res in enumerate(result):
-            output.append({"text": text[idx].strip()})
-
+        for res in result:
+            output.append({})
             # return scores
             seq_len = len(res.sequences_ids[0])
             cum_logprob = res.scores[0] * (seq_len ** options["length_penalty"])
@@ -1897,7 +1929,7 @@ class WhisperModel:
 
             # return no speech prob
             output[-1]["no_speech_prob"] = res.no_speech_prob
-            output[-1]["tokens"] = res.sequences_ids[0] + [tokenizer.eot]
+            output[-1]["tokens"] = res.sequences_ids[0]
 
         return encoder_output, output
 
