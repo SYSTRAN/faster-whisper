@@ -1103,12 +1103,12 @@ class WhisperModel:
     def _split_segments_by_timestamps(
         self,
         tokenizer: Tokenizer,
-        tokens: list[int],
+        tokens: List[int],
         time_offset: float,
         segment_size: int,
         segment_duration: float,
         seek: int,
-    ) -> list[list[int]]:
+    ) -> List[List[int]]:
         current_segments = []
         single_timestamp_ending = (
             len(tokens) >= 2 and tokens[-2] < tokenizer.timestamp_begin <= tokens[-1]
