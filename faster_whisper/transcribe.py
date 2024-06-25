@@ -151,7 +151,7 @@ class BatchedInferencePipeline(Pipeline):
         self.options = options
         self.preset_language = language
         self._batch_size = kwargs.pop("batch_size", None)
-        self._num_workers = 1
+        self._num_workers = 0
         self.use_vad_model = use_vad_model
         self.vad_onset = 0.500
         self.vad_offset = 0.363
@@ -245,12 +245,8 @@ class BatchedInferencePipeline(Pipeline):
 
         return {"output": outputs}
 
-    def __call__(self, inputs, options, num_workers=None, batch_size=None, **kwargs):
-        if num_workers is None:
-            if self._num_workers is None:
-                num_workers = 0
-            else:
-                num_workers = self._num_workers
+    def __call__(self, inputs, options, batch_size=None, **kwargs):
+
         if batch_size is None:
             if self._batch_size is None:
                 batch_size = 1
@@ -284,7 +280,6 @@ class BatchedInferencePipeline(Pipeline):
 
         return self.get_iterator(
             inputs,
-            num_workers,
             batch_size,
             preprocess_params,
             forward_params,
@@ -297,7 +292,6 @@ class BatchedInferencePipeline(Pipeline):
     def get_iterator(
         self,
         inputs,
-        num_workers: int,
         batch_size: int,
         preprocess_params=None,
         forward_params=None,
@@ -316,7 +310,7 @@ class BatchedInferencePipeline(Pipeline):
         # TODO hack by collating feature_extractor and image_processor
         dataset = PipelineIterator(inputs, self.preprocess, preprocess_params)
         dataloader = torch.utils.data.DataLoader(
-            dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=stack
+            dataset, num_workers=self._num_workers, batch_size=batch_size, collate_fn=stack
         )
         model_iterator = PipelineIterator(
             dataloader, self.forward, forward_params, loader_batch_size=batch_size
@@ -584,7 +578,6 @@ class BatchedInferencePipeline(Pipeline):
             self.__call__(
                 self.audio_split(audio, vad_segments, sampling_rate),
                 batch_size=batch_size,
-                num_workers=0,
                 options=batched_options,
             )
         ):
