@@ -1684,7 +1684,7 @@ class WhisperModel:
             for subsegment in segment:
                 tokens_count = 0
                 subsegment_alignments = []
-                while tokens_count <= len(subsegment) and word_idx < len(
+                while tokens_count < len(subsegment) and word_idx < len(
                     alignments[segment_idx]
                 ):
                     alignment = alignments[segment_idx][word_idx]
