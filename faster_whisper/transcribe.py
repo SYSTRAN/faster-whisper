@@ -264,7 +264,6 @@ class BatchedInferencePipeline(Pipeline):
                 forward_params["prepend_punctuations"],
                 forward_params["append_punctuations"],
                 self.last_speech_timestamp,
-                batched=True,
             )
 
         return {"output": segmented_outputs}
@@ -1385,7 +1384,6 @@ class WhisperModel:
                     options.prepend_punctuations,
                     options.append_punctuations,
                     last_speech_timestamp=last_speech_timestamp,
-                    batched=False,
                 )
 
                 if not single_timestamp_ending:
@@ -1671,7 +1669,6 @@ class WhisperModel:
         prepend_punctuations: str,
         append_punctuations: str,
         last_speech_timestamp: float,
-        batched: bool,
     ) -> float:
         if len(segments) == 0:
             return
@@ -1715,40 +1712,20 @@ class WhisperModel:
 
             merge_punctuations(alignment, prepend_punctuations, append_punctuations)
 
-        new_alignments = []
-        for segment_idx, segment in enumerate(text_tokens_per_segment):
-            word_idx = 0
-            segment_alignments = []
-            for subsegment in segment:
-                tokens_count = 0
-                subsegment_alignments = []
-                while tokens_count < len(subsegment) and word_idx < len(
-                    alignments[segment_idx]
-                ):
-                    alignment = alignments[segment_idx][word_idx]
-                    subsegment_alignments.append(alignment)
-                    tokens_count += len(alignment["tokens"])
-                    word_idx += 1
-                segment_alignments.append(subsegment_alignments)
-            new_alignments.append(segment_alignments)
 
         for segment_idx, segment in enumerate(segments):
+            word_index = 0
+            time_offset = segment[0]["start"]
             for subsegment_idx, subsegment in enumerate(segment):
-                time_offset = (
-                    (subsegment["start"] + last_speech_timestamp)
-                    if batched
-                    else subsegment["start"]
-                )
-                word_index = 0
                 saved_tokens = 0
                 words = []
 
                 while word_index < len(
-                    new_alignments[segment_idx][subsegment_idx]
+                    alignments[segment_idx]
                 ) and saved_tokens < len(
                     text_tokens_per_segment[segment_idx][subsegment_idx]
                 ):
-                    timing = new_alignments[segment_idx][subsegment_idx][word_index]
+                    timing = alignments[segment_idx][word_index]
 
                     if timing["word"]:
                         words.append(
