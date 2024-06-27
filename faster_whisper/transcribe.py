@@ -548,7 +548,7 @@ class BatchedInferencePipeline(Pipeline):
         batch_size = batch_size or self._batch_size
 
         duration_after_vad = sum(segment['end'] - segment['start'] for segment in vad_segments)
-        
+
         # batched options: see the difference with default options in WhisperModel
         batched_options = TranscriptionOptions(
             beam_size=beam_size,
@@ -582,23 +582,33 @@ class BatchedInferencePipeline(Pipeline):
             without_timestamps=without_timestamps,
             max_initial_timestamp=0.0,
         )
-        
+
         info = TranscriptionInfo(
-                language=language,
-                language_probability=language_probability,
-                duration=duration,
-                duration_after_vad=duration_after_vad,
-                transcription_options=batched_options,
-                vad_options=None,
-                all_language_probs=all_language_probs,
-            )
-        
-        segments = self._batched_segments_generator(audio, vad_segments, sampling_rate, batch_size, batched_options, log_progress)
-        
+            language=language,
+            language_probability=language_probability,
+            duration=duration,
+            duration_after_vad=duration_after_vad,
+            transcription_options=batched_options,
+            vad_options=None,
+            all_language_probs=all_language_probs,
+        )
+
+        segments = self._batched_segments_generator(
+            audio,
+            vad_segments,
+            sampling_rate,
+            batch_size,
+            batched_options,
+            log_progress,
+        )
+
         return segments, info
-        
-    def _batched_segments_generator(self,audio,vad_segments,sampling_rate,batch_size,options, log_progress):
+
+    def _batched_segments_generator(
+        self, audio, vad_segments, sampling_rate, batch_size, options, log_progress
+    ):
         seg_idx = 0
+        total_segments = len(vad_segments)
         for idx, out in enumerate(
             self.__call__(
                 self.audio_split(audio, vad_segments, sampling_rate),
@@ -606,7 +616,6 @@ class BatchedInferencePipeline(Pipeline):
                 options=options,
             )
         ):
-            total_segments = len(vad_segments)
             if log_progress:
                 percent_complete = ((idx + 1) / total_segments) * 100
                 self.model.logger.info(f"Progress: {percent_complete:.2f}%...")
@@ -623,22 +632,18 @@ class BatchedInferencePipeline(Pipeline):
                     text=response["text"],
                     start=round(response["start"], 3),
                     end=round(response["end"], 3),
-                    words=(
-                        None
-                        if not options.word_timestamps
-                        else response["words"]
-                    ),
+                    words=(None if not options.word_timestamps else response["words"]),
                     tokens=response["tokens"],
                     avg_logprob=response["avg_logprob"],
                     no_speech_prob=response["no_speech_prob"],
                     compression_ratio=response["compression_ratio"],
                 )
                 yield segments
-                
-            # revert the tokenizer if multilingual inference is enabled
-            if self.preset_language is None:
-                self.tokenizer = None
-            self.last_speech_timestamp = 0.0
+
+        # revert the tokenizer if multilingual inference is enabled
+        if self.preset_language is None:
+            self.tokenizer = None
+        self.last_speech_timestamp = 0.0
 
     def detect_language(self, audio: torch.Tensor):
         to_cpu = (
