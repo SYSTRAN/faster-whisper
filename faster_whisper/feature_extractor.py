@@ -38,11 +38,7 @@ class FeatureExtractor:
         if padding:
             waveform = torch.nn.functional.pad(waveform, (0, self.n_samples))
 
-        waveform = (
-            waveform.half().to(self.device)
-            if self.device == "cuda"
-            else waveform.float()
-        )
+        waveform = waveform.to(self.device) if self.device == "cuda" else waveform
 
         fbank = ta_kaldi.fbank(
             waveform.unsqueeze(0),
