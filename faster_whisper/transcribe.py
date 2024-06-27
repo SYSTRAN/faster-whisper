@@ -52,31 +52,11 @@ class Segment(NamedTuple):
     end: float
     text: str
     tokens: List[int]
-    temperature: float
     avg_logprob: float
     compression_ratio: float
     no_speech_prob: float
     words: Optional[List[Word]]
-
-
-class BatchedSegment(NamedTuple):
-    """
-    A single segment in batched transcription of a speech.
-
-    start (float): Start time in seconds.
-    end (float): End time in seconds.
-    text (str): transcription of the segment.
-    avg_logprob (float): average log probability of the segment.
-    no_speech_prob (float): no speech probability of the segment.
-    """
-
-    id: int
-    start: float
-    end: float
-    text: str
-    words: Optional[List[Word]]
-    no_speech_prob: float
-    avg_logprob: float
+    temperature: Optional[float] = 1.0
 
 
 # Added additional parameters for multilingual videos and fixes below
@@ -251,6 +231,9 @@ class BatchedInferencePipeline(Pipeline):
                         tokens=subsegment["tokens"],
                         start=subsegment["start"],
                         end=subsegment["end"],
+                        compression_ratio=get_compression_ratio(
+                            self.tokenizer.decode(subsegment["tokens"])
+                        ),
                     )
                     for subsegment in subsegments
                 ]
@@ -431,7 +414,7 @@ class BatchedInferencePipeline(Pipeline):
         hotwords: Optional[str] = None,
         word_timestamps: bool = False,
         without_timestamps: bool = True,
-    ) -> Tuple[Iterable[BatchedSegment], TranscriptionInfo]:
+    ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """transcribe audio in chunks in batched fashion and return with language info.
 
         Arguments:
@@ -624,7 +607,8 @@ class BatchedInferencePipeline(Pipeline):
             )
             for response in responses:
                 seg_idx += 1
-                segments = BatchedSegment(
+                segments = Segment(
+                    seek=int(responses[-1]["end"] * self.model.frames_per_second),
                     id=seg_idx,
                     text=response["text"],
                     start=round(response["start"], 3),
@@ -634,8 +618,10 @@ class BatchedInferencePipeline(Pipeline):
                         if not batched_options.word_timestamps
                         else response["words"]
                     ),
+                    tokens=response["tokens"],
                     avg_logprob=response["avg_logprob"],
                     no_speech_prob=response["no_speech_prob"],
+                    compression_ratio=response["compression_ratio"],
                 )
                 yield segments, info
 
@@ -1711,7 +1697,6 @@ class WhisperModel:
                             alignment[i]["start"] = alignment[i]["end"] - max_duration
 
             merge_punctuations(alignment, prepend_punctuations, append_punctuations)
-
 
         for segment_idx, segment in enumerate(segments):
             word_index = 0
