@@ -1688,6 +1688,7 @@ class WhisperModel:
         alignments = self.find_alignment(
             tokenizer, text_tokens, encoder_output, num_frames
         )
+        median_max_durations = []
         for alignment in alignments:
             word_durations = np.array(
                 [word["end"] - word["start"] for word in alignment]
@@ -1713,10 +1714,12 @@ class WhisperModel:
                             alignment[i]["start"] = alignment[i]["end"] - max_duration
 
             merge_punctuations(alignment, prepend_punctuations, append_punctuations)
+            median_max_durations.append((median_duration, max_duration))
 
         for segment_idx, segment in enumerate(segments):
             word_index = 0
             time_offset = segment[0]["start"]
+            median_duration, max_duration = median_max_durations[segment_idx]
             for subsegment_idx, subsegment in enumerate(segment):
                 saved_tokens = 0
                 words = []
