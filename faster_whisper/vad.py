@@ -251,7 +251,7 @@ class SileroVADModel:
 
     def get_initial_state(self, batch_size: int):
         state = np.zeros((2, batch_size, 128), dtype=np.float32)
-        context = np.zeros(0, dtype=np.float32)
+        context = np.zeros((batch_size, 64), dtype=np.float32)
         return state, context
 
     def __call__(self, x, state, context, sr: int):
