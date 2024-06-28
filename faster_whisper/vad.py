@@ -256,6 +256,8 @@ class SileroVADModel:
         return state, context
 
     def __call__(self, x, states, sr: int):
+        state, context = states
+
         if len(x.shape) == 1:
             x = np.expand_dims(x, 0)
         if len(x.shape) > 2:
@@ -264,8 +266,6 @@ class SileroVADModel:
             )
         if sr / x.shape[1] > 31.25:
             raise ValueError("Input audio chunk is too short")
-        
-        state, context = states
 
         ort_inputs = {
             "input": x,
@@ -274,6 +274,5 @@ class SileroVADModel:
         }
 
         out, state = self.session.run(None, ort_inputs)
-        out = np.array(out, dtype='float32')
 
-        return out, state
+        return out, states
