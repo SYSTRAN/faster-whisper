@@ -1,7 +1,6 @@
 import bisect
 import functools
 import os
-import warnings
 
 from typing import List, NamedTuple, Optional
 
