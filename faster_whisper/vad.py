@@ -274,6 +274,6 @@ class SileroVADModel:
         }
 
         out, state = self.session.run(None, ort_inputs)
-        out = np.array(out)
+        out = np.array(out, dtype='float32')
 
         return out, state
