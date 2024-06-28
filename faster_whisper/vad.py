@@ -73,14 +73,14 @@ def get_speech_timestamps(
     audio_length_samples = len(audio)
 
     model = get_vad_model()
-    state = model.get_initial_state(batch_size=1)
+    states = model.get_initial_states(batch_size=1)
 
     speech_probs = []
     for current_start_sample in range(0, audio_length_samples, window_size_samples):
         chunk = audio[current_start_sample : current_start_sample + window_size_samples]
         if len(chunk) < window_size_samples:
             chunk = np.pad(chunk, (0, int(window_size_samples - len(chunk))))
-        speech_prob, state = model(chunk, state, sampling_rate)
+        speech_prob, states = model(chunk, states, sampling_rate)
         speech_probs.append(speech_prob)
 
     triggered = False
@@ -250,12 +250,12 @@ class SileroVADModel:
             sess_options=opts,
         )
 
-    def get_initial_state(self, batch_size: int):
-        h = np.zeros((2, batch_size, 64), dtype=np.float32)
-        c = np.zeros((2, batch_size, 64), dtype=np.float32)
-        return h, c
+    def get_initial_states(self, batch_size: int):
+        state = np.zeros((2, batch_size, 128), dtype='float32')
+        context = np.zeros((0,), dtype='float32')
+        return state, context
 
-    def __call__(self, x, state, sr: int):
+    def __call__(self, x, states, sr: int):
         if len(x.shape) == 1:
             x = np.expand_dims(x, 0)
         if len(x.shape) > 2:
@@ -264,17 +264,15 @@ class SileroVADModel:
             )
         if sr / x.shape[1] > 31.25:
             raise ValueError("Input audio chunk is too short")
-
-        h, c = state
+        
+        state, context = states
 
         ort_inputs = {
             "input": x,
-            "h": h,
-            "c": c,
+            "state": state,
             "sr": np.array(sr, dtype="int64"),
         }
 
-        out, h, c = self.session.run(None, ort_inputs)
-        state = (h, c)
+        out, state = self.session.run(None, ort_inputs)
 
         return out, state
