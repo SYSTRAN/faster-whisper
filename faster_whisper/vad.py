@@ -251,9 +251,8 @@ class SileroVADModel:
         )
 
     def get_initial_state(self, batch_size: int):
-        h = np.zeros((2, batch_size, 64), dtype=np.float32)
-        c = np.zeros((2, batch_size, 64), dtype=np.float32)
-        return h, c
+        state = np.zeros((2, batch_size, 128), dtype=np.float32)
+        return state
 
     def __call__(self, x, state, sr: int):
         if len(x.shape) == 1:
@@ -265,16 +264,12 @@ class SileroVADModel:
         if sr / x.shape[1] > 31.25:
             raise ValueError("Input audio chunk is too short")
 
-        h, c = state
-
         ort_inputs = {
             "input": x,
-            "h": h,
-            "c": c,
+            "state": state,
             "sr": np.array(sr, dtype="int64"),
         }
 
-        out, h, c = self.session.run(None, ort_inputs)
-        state = (h, c)
+        out, state = self.session.run(None, ort_inputs)
 
         return out, state
