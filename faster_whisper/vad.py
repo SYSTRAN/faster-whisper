@@ -72,14 +72,14 @@ def get_speech_timestamps(
     audio_length_samples = len(audio)
 
     model = get_vad_model()
-    state = model.get_initial_state(batch_size=1)
+    state, context = model.get_initial_state(batch_size=1)
 
     speech_probs = []
     for current_start_sample in range(0, audio_length_samples, window_size_samples):
         chunk = audio[current_start_sample : current_start_sample + window_size_samples]
         if len(chunk) < window_size_samples:
             chunk = np.pad(chunk, (0, int(window_size_samples - len(chunk))))
-        speech_prob, state = model(chunk, state, sampling_rate)
+        speech_prob, state = model(chunk, state, context, sampling_rate)
         speech_probs.append(speech_prob)
 
     triggered = False
@@ -251,9 +251,10 @@ class SileroVADModel:
 
     def get_initial_state(self, batch_size: int):
         state = np.zeros((2, batch_size, 128), dtype=np.float32)
-        return state
+        context = np.zeros((batch_size, 64))
+        return state, context
 
-    def __call__(self, x, state, sr: int):
+    def __call__(self, x, state, context, sr: int):
         if len(x.shape) == 1:
             x = np.expand_dims(x, 0)
         if len(x.shape) > 2:
@@ -262,6 +263,8 @@ class SileroVADModel:
             )
         if sr / x.shape[1] > 31.25:
             raise ValueError("Input audio chunk is too short")
+        
+        x = np.concatenate([context, x], axis=1)
 
         ort_inputs = {
             "input": x,
@@ -270,5 +273,6 @@ class SileroVADModel:
         }
 
         out, state = self.session.run(None, ort_inputs)
+        context = x[..., -64:]
 
-        return out, state
+        return out, state, context
