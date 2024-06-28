@@ -79,7 +79,7 @@ def get_speech_timestamps(
         chunk = audio[current_start_sample : current_start_sample + window_size_samples]
         if len(chunk) < window_size_samples:
             chunk = np.pad(chunk, (0, int(window_size_samples - len(chunk))))
-        speech_prob, state = model(chunk, state, context, sampling_rate)
+        speech_prob, state, context = model(chunk, state, context, sampling_rate)
         speech_probs.append(speech_prob)
 
     triggered = False
