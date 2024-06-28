@@ -72,7 +72,7 @@ def get_speech_timestamps(
     audio_length_samples = len(audio)
 
     model = get_vad_model()
-    state, context = model.get_initial_state(batch_size=1)
+    state, context = model.get_initial_states(batch_size=1)
 
     speech_probs = []
     for current_start_sample in range(0, audio_length_samples, window_size_samples):
@@ -249,7 +249,7 @@ class SileroVADModel:
             sess_options=opts,
         )
 
-    def get_initial_state(self, batch_size: int):
+    def get_initial_states(self, batch_size: int):
         state = np.zeros((2, batch_size, 128), dtype=np.float32)
         context = np.zeros((batch_size, 64), dtype=np.float32)
         return state, context
