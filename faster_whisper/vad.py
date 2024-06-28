@@ -270,7 +270,7 @@ class SileroVADModel:
         ort_inputs = {
             "input": x,
             "state": state,
-            "sr": np.array(sr, dtype="int64"),
+            "sr": np.array(sr),
         }
 
         out, state = self.session.run(None, ort_inputs)
