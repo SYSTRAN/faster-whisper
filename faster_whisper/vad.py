@@ -274,5 +274,6 @@ class SileroVADModel:
         }
 
         out, state = self.session.run(None, ort_inputs)
+        states = state, context
 
         return out, states
