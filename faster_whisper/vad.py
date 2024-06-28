@@ -263,7 +263,7 @@ class SileroVADModel:
             )
         if sr / x.shape[1] > 31.25:
             raise ValueError("Input audio chunk is too short")
-        
+
         x = np.concatenate([context, x], axis=1)
 
         ort_inputs = {
