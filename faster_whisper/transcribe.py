@@ -106,7 +106,6 @@ class TranscriptionInfo(NamedTuple):
 
 
 class BatchedInferencePipeline(Pipeline):
-
     """
     Huggingface Pipeline wrapper for WhisperModel.
     Copyright (c) 2022, Max Bain
@@ -316,7 +315,10 @@ class BatchedInferencePipeline(Pipeline):
         # TODO hack by collating feature_extractor and image_processor
         dataset = PipelineIterator(inputs, self.preprocess, preprocess_params)
         dataloader = torch.utils.data.DataLoader(
-            dataset, num_workers=self._num_workers, batch_size=batch_size, collate_fn=stack
+            dataset,
+            num_workers=self._num_workers,
+            batch_size=batch_size,
+            collate_fn=stack,
         )
         model_iterator = PipelineIterator(
             dataloader, self.forward, forward_params, loader_batch_size=batch_size
@@ -333,7 +335,9 @@ class BatchedInferencePipeline(Pipeline):
         language_probability = 1.0
         if self.tokenizer is None:
             if not language:
-                language, language_probability, all_language_probs = self.detect_language(audio)
+                language, language_probability, all_language_probs = (
+                    self.detect_language(audio)
+                )
             task = task or "transcribe"
             self.tokenizer = Tokenizer(
                 self.model.hf_tokenizer,
@@ -542,12 +546,14 @@ class BatchedInferencePipeline(Pipeline):
                     "No vad segments found. Set 'use_vad_model' to True while loading the model"
                 )
 
-        language, language_probability, task, all_language_probs = self.get_language_and_tokenizer(
-            audio, task, language
+        language, language_probability, task, all_language_probs = (
+            self.get_language_and_tokenizer(audio, task, language)
         )
         batch_size = batch_size or self._batch_size
 
-        duration_after_vad = sum(segment['end'] - segment['start'] for segment in vad_segments)
+        duration_after_vad = sum(
+            segment["end"] - segment["start"] for segment in vad_segments
+        )
 
         # batched options: see the difference with default options in WhisperModel
         batched_options = TranscriptionOptions(
@@ -1724,9 +1730,7 @@ class WhisperModel:
                 saved_tokens = 0
                 words = []
 
-                while word_index < len(
-                    alignments[segment_idx]
-                ) and saved_tokens < len(
+                while word_index < len(alignments[segment_idx]) and saved_tokens < len(
                     text_tokens_per_segment[segment_idx][subsegment_idx]
                 ):
                     timing = alignments[segment_idx][word_index]
