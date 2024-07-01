@@ -47,7 +47,7 @@ class VadOptions(NamedTuple):
 
 
 def get_speech_timestamps(
-    audio: np.ndarray,
+    audio: torch.Tensor,
     vad_options: Optional[VadOptions] = None,
     **kwargs,
 ) -> List[dict]:
@@ -195,12 +195,12 @@ def get_speech_timestamps(
     return speeches
 
 
-def collect_chunks(audio: np.ndarray, chunks: List[dict]) -> np.ndarray:
+def collect_chunks(audio: torch.Tensor, chunks: List[dict]) -> torch.Tensor:
     """Collects and concatenates audio chunks."""
     if not chunks:
-        return np.array([], dtype=np.float32)
+        return torch.tensor([], dtype=torch.float32)
 
-    return np.concatenate([audio[chunk["start"] : chunk["end"]] for chunk in chunks])
+    return torch.cat([audio[chunk["start"] : chunk["end"]] for chunk in chunks])
 
 
 class SpeechTimestampsMap:
