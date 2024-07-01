@@ -38,11 +38,11 @@ def test_transcribe(jfk_path):
     assert segment.start == segment.words[0].start
     assert segment.end == segment.words[-1].end
     batched_model = BatchedInferencePipeline(model=model, use_vad_model=False)
-    result = batched_model.transcribe(jfk_path, word_timestamps=True)
+    result, info = batched_model.transcribe(jfk_path, word_timestamps=True)
+    assert info.language == "en"
+    assert info.language_probability > 0.7
     segments = []
-    for segment, info in result:
-        assert info.language == "en"
-        assert info.language_probability > 0.7
+    for segment in result:
         segments.append(
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
@@ -57,27 +57,29 @@ def test_transcribe(jfk_path):
 def test_batched_transcribe(physcisworks_path):
     model = WhisperModel("tiny")
     batched_model = BatchedInferencePipeline(model=model)
-    result = batched_model.transcribe(physcisworks_path, batch_size=16)
+    result, info = batched_model.transcribe(physcisworks_path, batch_size=16)
+    assert info.language == "en"
+    assert info.language_probability > 0.7
     segments = []
-    for segment, info in result:
-        assert info.language == "en"
-        assert info.language_probability > 0.7
+    for segment in result:
         segments.append(
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
     # number of near 30 sec segments
     assert len(segments) == 8
 
-    result = batched_model.transcribe(
-        physcisworks_path, batch_size=16, word_timestamps=True
+    result, info = batched_model.transcribe(
+        physcisworks_path,
+        batch_size=16,
+        without_timestamps=False,
+        word_timestamps=True,
     )
     segments = []
-    for segment, info in result:
+    for segment in result:
         assert segment.words is not None
         segments.append(
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
-    # more number of segments owing to vad based alignment instead of 30 sec segments
     assert len(segments) > 8
 
 
