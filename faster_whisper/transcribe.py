@@ -136,6 +136,7 @@ class BatchedInferencePipeline(Pipeline):
         self.vad_onset = 0.500
         self.vad_offset = 0.363
         self.vad_model_path = os.path.join(get_assets_path(), "pyannote_vad_model.bin")
+        self.vad_model = None
 
         (
             self._preprocess_params,
@@ -149,7 +150,7 @@ class BatchedInferencePipeline(Pipeline):
         else:
             self.device = device
 
-        if self.use_vad_model:
+        if self.use_vad_model and self.vad_model is None:
             self.vad_device = self.get_device(vad_device)
 
             # load vad model and perform VAD preprocessing if needed
@@ -200,6 +201,7 @@ class BatchedInferencePipeline(Pipeline):
         ]
 
         inputs["features"] = features
+        del features
         return inputs
 
     def _forward(self, model_inputs, **forward_params):
@@ -210,16 +212,18 @@ class BatchedInferencePipeline(Pipeline):
         segment_size = encoder_output.shape[1] * 2
         segmented_outputs = []
         for segment_metadata, output in zip(model_inputs["seg_metadata"], outputs):
-            subsegments, seek, single_timestamp_ending = (
-                self.model._split_segments_by_timestamps(
-                    tokenizer=self.tokenizer,
-                    tokens=output["tokens"],
-                    time_offset=segment_metadata["start_time"],
-                    segment_size=segment_size,
-                    segment_duration=segment_metadata["end_time"]
-                    - segment_metadata["start_time"],
-                    seek=0,
-                )
+            (
+                subsegments,
+                seek,
+                single_timestamp_ending,
+            ) = self.model._split_segments_by_timestamps(
+                tokenizer=self.tokenizer,
+                tokens=output["tokens"],
+                time_offset=segment_metadata["start_time"],
+                segment_size=segment_size,
+                segment_duration=segment_metadata["end_time"]
+                - segment_metadata["start_time"],
+                seek=0,
             )
             segmented_outputs.append(
                 [
@@ -251,7 +255,6 @@ class BatchedInferencePipeline(Pipeline):
         return {"output": segmented_outputs}
 
     def __call__(self, inputs, options, batch_size=None, **kwargs):
-
         if batch_size is None:
             if self._batch_size is None:
                 batch_size = 1
@@ -302,7 +305,6 @@ class BatchedInferencePipeline(Pipeline):
         forward_params=None,
         postprocess_params=None,
     ):
-
         def stack(items):
             return {
                 "inputs": [x["inputs"] for x in items],
@@ -333,11 +335,14 @@ class BatchedInferencePipeline(Pipeline):
     ):
         all_language_probs = None
         language_probability = 1.0
+
         if self.tokenizer is None:
             if not language:
-                language, language_probability, all_language_probs = (
-                    self.model.detect_language(audio)
-                )
+                (
+                    language,
+                    language_probability,
+                    all_language_probs,
+                ) = self.model.detect_language_function(audio)
             task = task or "transcribe"
             self.tokenizer = Tokenizer(
                 self.model.hf_tokenizer,
@@ -546,9 +551,12 @@ class BatchedInferencePipeline(Pipeline):
                     "No vad segments found. Set 'use_vad_model' to True while loading the model"
                 )
 
-        language, language_probability, task, all_language_probs = (
-            self.get_language_and_tokenizer(audio, task, language)
-        )
+        (
+            language,
+            language_probability,
+            task,
+            all_language_probs,
+        ) = self.get_language_and_tokenizer(audio, task, language)
         batch_size = batch_size or self._batch_size
 
         duration_after_vad = sum(
@@ -976,16 +984,27 @@ class WhisperModel:
                     or language_detection_segments < 1
                 ):
                     language_detection_segments = 1
-                seek = 0
-                detected_language_info = {}
+                start_timestamp = (
+                    float(clip_timestamps.split(",")[0])
+                    if isinstance(clip_timestamps, str)
+                    else clip_timestamps[0]
+                )
                 content_frames = (
                     features.shape[-1] - self.feature_extractor.nb_max_frames
                 )
-                while (
-                    seek <= content_frames
-                    and seek
-                    < self.feature_extractor.nb_max_frames * language_detection_segments
-                ):
+                seek = (
+                    int(start_timestamp * self.frames_per_second)
+                    if start_timestamp * self.frames_per_second < content_frames
+                    else 0
+                )
+                end_frames = min(
+                    seek
+                    + self.feature_extractor.nb_max_frames
+                    * language_detection_segments,
+                    content_frames,
+                )
+                detected_language_info = {}
+                while seek < end_frames:
                     segment = features[
                         :, seek : seek + self.feature_extractor.nb_max_frames
                     ]
@@ -1354,15 +1373,17 @@ class WhisperModel:
             def next_words_segment(segments: List[dict]) -> Optional[dict]:
                 return next((s for s in segments if s["words"]), None)
 
-            current_segments, seek, single_timestamp_ending = (
-                self._split_segments_by_timestamps(
-                    tokenizer=tokenizer,
-                    tokens=tokens,
-                    time_offset=time_offset,
-                    segment_size=segment_size,
-                    segment_duration=segment_duration,
-                    seek=seek,
-                )
+            (
+                current_segments,
+                seek,
+                single_timestamp_ending,
+            ) = self._split_segments_by_timestamps(
+                tokenizer=tokenizer,
+                tokens=tokens,
+                time_offset=time_offset,
+                segment_size=segment_size,
+                segment_duration=segment_duration,
+                seek=seek,
             )
 
             if options.word_timestamps:
@@ -1375,7 +1396,6 @@ class WhisperModel:
                     options.append_punctuations,
                     last_speech_timestamp=last_speech_timestamp,
                 )
-
                 if not single_timestamp_ending:
                     last_word_end = get_end(current_segments)
                     if last_word_end is not None and last_word_end > time_offset:
@@ -1432,7 +1452,6 @@ class WhisperModel:
                 last_word_end = get_end(current_segments)
                 if last_word_end is not None:
                     last_speech_timestamp = last_word_end
-
             for segment in current_segments:
                 tokens = segment["tokens"]
                 text = tokenizer.decode(tokens)
@@ -1900,6 +1919,21 @@ class WhisperModel:
 
         return encoder_output, output
 
+    def detect_language_function(self, audio: torch.Tensor):
+        to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
+        segment = self.feature_extractor(audio, padding=True, to_cpu=to_cpu)[
+            :, : self.feature_extractor.nb_max_frames
+        ]
+        encoder_output = self.encode(segment)
+        results = self.model.detect_language(encoder_output)
+        language_token, language_probability = results[0][0]
+        language = language_token[2:-2]
+        self.logger.info(
+            f"Detected language: {language} ({language_probability:.2f}) in first 30s of audio..."
+        )
+        all_language_probs = [(token[2:-2], prob) for (token, prob) in results[0]]
+        return language, language_probability, all_language_probs
+
     def detect_language(self, audio: torch.Tensor):
         to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
         segment = self.feature_extractor(audio, padding=True, to_cpu=to_cpu)[
@@ -2123,38 +2157,6 @@ class WhisperModel:
         return {"language_code": None, "language_confidence": 1.0}
 
 
-default_batched_asr_options = {
-    "beam_size": 5,
-    "best_of": 5,
-    "patience": 1,
-    "length_penalty": 1,
-    "repetition_penalty": 1,
-    "no_repeat_ngram_size": 0,
-    "temperatures": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-    "compression_ratio_threshold": 2.4,
-    "log_prob_threshold": -1.0,
-    "no_speech_threshold": 0.6,
-    "condition_on_previous_text": False,
-    "prompt_reset_on_temperature": 0.5,
-    "initial_prompt": None,
-    "prefix": None,
-    "suppress_blank": True,
-    "suppress_tokens": [-1],
-    "max_new_tokens": None,
-    "clip_timestamps": "0",
-    "hallucination_silence_threshold": None,
-    "without_timestamps": True,  # False for timings
-    "max_initial_timestamp": 0.0,
-    "word_timestamps": False,
-    "prepend_punctuations": "\"'“¿([{-",
-    "append_punctuations": "\"'.。,，!！?？:：”)]}、",
-    "log_prob_low_threshold": None,
-    "multilingual": False,
-    "output_language": "en",
-    "hotwords": None,
-}
-
-
 def restore_speech_timestamps(
     segments: Iterable[Segment],
     speech_chunks: List[dict],
@@ -2238,9 +2240,11 @@ def merge_punctuations(alignment: List[dict], prepended: str, appended: str) -> 
         if previous["word"].startswith(" ") and previous["word"].strip() in prepended:
             # prepend it to the following word
             following["word"] = previous["word"] + following["word"]
-            following["tokens"] = previous["tokens"] + following["tokens"]
+            if "tokens" in alignment[0].keys():
+                following["tokens"] = previous["tokens"] + following["tokens"]
+                previous["tokens"] = []
             previous["word"] = ""
-            previous["tokens"] = []
+
         else:
             j = i
         i -= 1
@@ -2254,9 +2258,11 @@ def merge_punctuations(alignment: List[dict], prepended: str, appended: str) -> 
         if not previous["word"].endswith(" ") and following["word"] in appended:
             # append it to the previous word
             previous["word"] = previous["word"] + following["word"]
-            previous["tokens"] = previous["tokens"] + following["tokens"]
+            if "tokens" in alignment[0].keys():
+                previous["tokens"] = previous["tokens"] + following["tokens"]
+                following["tokens"] = []
             following["word"] = ""
-            following["tokens"] = []
+
         else:
             i = j
         j += 1
