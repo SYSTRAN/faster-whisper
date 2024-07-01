@@ -212,16 +212,18 @@ class BatchedInferencePipeline(Pipeline):
         segment_size = encoder_output.shape[1] * 2
         segmented_outputs = []
         for segment_metadata, output in zip(model_inputs["seg_metadata"], outputs):
-            subsegments, seek, single_timestamp_ending = (
-                self.model._split_segments_by_timestamps(
-                    tokenizer=self.tokenizer,
-                    tokens=output["tokens"],
-                    time_offset=segment_metadata["start_time"],
-                    segment_size=segment_size,
-                    segment_duration=segment_metadata["end_time"]
-                    - segment_metadata["start_time"],
-                    seek=0,
-                )
+            (
+                subsegments,
+                seek,
+                single_timestamp_ending,
+            ) = self.model._split_segments_by_timestamps(
+                tokenizer=self.tokenizer,
+                tokens=output["tokens"],
+                time_offset=segment_metadata["start_time"],
+                segment_size=segment_size,
+                segment_duration=segment_metadata["end_time"]
+                - segment_metadata["start_time"],
+                seek=0,
             )
             segmented_outputs.append(
                 [
@@ -253,7 +255,6 @@ class BatchedInferencePipeline(Pipeline):
         return {"output": segmented_outputs}
 
     def __call__(self, inputs, options, batch_size=None, **kwargs):
-
         if batch_size is None:
             if self._batch_size is None:
                 batch_size = 1
@@ -304,7 +305,6 @@ class BatchedInferencePipeline(Pipeline):
         forward_params=None,
         postprocess_params=None,
     ):
-
         def stack(items):
             return {
                 "inputs": [x["inputs"] for x in items],
@@ -338,9 +338,11 @@ class BatchedInferencePipeline(Pipeline):
 
         if self.tokenizer is None:
             if not language:
-                language, language_probability, all_language_probs = (
-                    self.detect_language(audio)
-                )
+                (
+                    language,
+                    language_probability,
+                    all_language_probs,
+                ) = self.detect_language(audio)
             task = task or "transcribe"
             self.tokenizer = Tokenizer(
                 self.model.hf_tokenizer,
@@ -549,9 +551,12 @@ class BatchedInferencePipeline(Pipeline):
                     "No vad segments found. Set 'use_vad_model' to True while loading the model"
                 )
 
-        language, language_probability, task, all_language_probs = (
-            self.get_language_and_tokenizer(audio, task, language)
-        )
+        (
+            language,
+            language_probability,
+            task,
+            all_language_probs,
+        ) = self.get_language_and_tokenizer(audio, task, language)
         batch_size = batch_size or self._batch_size
 
         duration_after_vad = sum(
@@ -1375,15 +1380,17 @@ class WhisperModel:
             def next_words_segment(segments: List[dict]) -> Optional[dict]:
                 return next((s for s in segments if s["words"]), None)
 
-            current_segments, seek, single_timestamp_ending = (
-                self._split_segments_by_timestamps(
-                    tokenizer=tokenizer,
-                    tokens=tokens,
-                    time_offset=time_offset,
-                    segment_size=segment_size,
-                    segment_duration=segment_duration,
-                    seek=seek,
-                )
+            (
+                current_segments,
+                seek,
+                single_timestamp_ending,
+            ) = self._split_segments_by_timestamps(
+                tokenizer=tokenizer,
+                tokens=tokens,
+                time_offset=time_offset,
+                segment_size=segment_size,
+                segment_duration=segment_duration,
+                seek=seek,
             )
 
             if options.word_timestamps:
