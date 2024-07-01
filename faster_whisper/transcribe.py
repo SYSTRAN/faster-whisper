@@ -342,7 +342,7 @@ class BatchedInferencePipeline(Pipeline):
                     language,
                     language_probability,
                     all_language_probs,
-                ) = self.detect_language(audio)
+                ) = self.model.detect_language(audio)
             task = task or "transcribe"
             self.tokenizer = Tokenizer(
                 self.model.hf_tokenizer,
@@ -658,28 +658,6 @@ class BatchedInferencePipeline(Pipeline):
         if self.preset_language is None:
             self.tokenizer = None
         self.last_speech_timestamp = 0.0
-
-    def detect_language(self, audio: torch.Tensor):
-        to_cpu = (
-            self.model.model.device == "cuda" and len(self.model.model.device_index) > 1
-        )
-        segment = self.model.feature_extractor(audio, padding=True, to_cpu=to_cpu)[
-            :, : self.model.feature_extractor.nb_max_frames
-        ]
-        encoder_output = self.model.encode(segment)
-        results = self.model.model.detect_language(encoder_output)
-        language_token, language_probability = results[0][0]
-        language = language_token[2:-2]
-        self.model.logger.info(
-            f"Detected language: {language} ({language_probability:.2f}) in first 30s of audio..."
-        )
-        all_language_probs = [(token[2:-2], prob) for (token, prob) in results[0]]
-        return language, language_probability, all_language_probs
-
-    def detect_language_multi_segment(
-        self, audio: Union[str, BinaryIO, torch.Tensor], params: Optional[dict] = None
-    ):
-        return self.model.detect_language_multi_segment(audio, params)
 
 
 class WhisperModel:
@@ -1937,6 +1915,21 @@ class WhisperModel:
 
         return encoder_output, output
 
+    def detect_language(self, audio: torch.Tensor):
+        to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
+        segment = self.feature_extractor(audio, padding=True, to_cpu=to_cpu)[
+            :, : self.feature_extractor.nb_max_frames
+        ]
+        encoder_output = self.encode(segment)
+        results = self.model.detect_language(encoder_output)
+        language_token, language_probability = results[0][0]
+        language = language_token[2:-2]
+        self.logger.info(
+            f"Detected language: {language} ({language_probability:.2f}) in first 30s of audio..."
+        )
+        all_language_probs = [(token[2:-2], prob) for (token, prob) in results[0]]
+        return language, language_probability, all_language_probs
+
     def detect_language_multi_segment(
         self, audio: Union[str, BinaryIO, torch.Tensor], params: Optional[dict] = None
     ):
@@ -2143,100 +2136,6 @@ class WhisperModel:
 
         # Language is not detected for any segment and none of prev conditions met
         return {"language_code": "silence", "language_confidence": 1.0}
-
-
-default_batched_asr_options = {
-    "beam_size": 5,
-    "best_of": 5,
-    "patience": 1,
-    "length_penalty": 1,
-    "repetition_penalty": 1,
-    "no_repeat_ngram_size": 0,
-    "temperatures": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-    "compression_ratio_threshold": 2.4,
-    "log_prob_threshold": -1.0,
-    "no_speech_threshold": 0.6,
-    "condition_on_previous_text": False,
-    "prompt_reset_on_temperature": 0.5,
-    "initial_prompt": None,
-    "prefix": None,
-    "suppress_blank": True,
-    "suppress_tokens": [-1],
-    "max_new_tokens": None,
-    "clip_timestamps": "0",
-    "hallucination_silence_threshold": None,
-    "without_timestamps": True,  # False for timings
-    "max_initial_timestamp": 0.0,
-    "word_timestamps": False,
-    "prepend_punctuations": "\"'“¿([{-",
-    "append_punctuations": "\"'.。,，!！?？:：”)]}、",
-    "log_prob_low_threshold": None,
-    "multilingual": False,
-    "output_language": "en",
-    "hotwords": None,
-}
-
-
-def load_model_batch(
-    whisper_arch,
-    device,
-    device_index=0,
-    compute_type="float16",
-    asr_options=None,
-    language: Optional[str] = None,
-    model=None,
-    task="transcribe",
-    download_root=None,
-    threads=4,
-):
-    """Load a Whisper model for inference.
-    Args:
-        whisper_arch: str - The name of the Whisper model to load.
-        device: str - The device to load the model on.
-        compute_type: str - The compute type to use for the model.
-        options: dict - A dictionary of options to use for the model.
-        language: str - The language of the model. (use English for now)
-        download_root: Optional[str] - The root directory to download the model to.
-        threads: int - The number of cpu threads to use per worker.
-    Returns:
-        A Whisper pipeline.
-    """
-
-    if whisper_arch.endswith(".en"):
-        language = "en"
-
-    model = WhisperModel(
-        whisper_arch,
-        device=device,
-        device_index=device_index,
-        compute_type=compute_type,
-        download_root=download_root,
-        cpu_threads=threads,
-    )
-    if language is not None:
-        tokenizer = Tokenizer(
-            model.hf_tokenizer,
-            model.model.is_multilingual,
-            task=task,
-            language=language,
-        )
-    else:
-        model.logger.warning(
-            "No language specified, it will be detected causing increase in inference time."
-        )
-        tokenizer = None
-
-    if asr_options is not None:
-        default_batched_asr_options.update(asr_options)
-
-    batched_asr_options = TranscriptionOptions(**default_batched_asr_options)
-
-    return BatchedInferencePipeline(
-        model=model,
-        options=batched_asr_options,
-        tokenizer=tokenizer,
-        language=language,
-    )
 
 
 def restore_speech_timestamps(

@@ -185,7 +185,7 @@ The batched version of faster-whisper is inspired by [whisper-x](https://github.
 The following code snippet illustrates how to run inference with batched version on an example audio file. Please also refer to the test scripts of batched faster whisper.
 
 ```python
-from faster_whisper import BatchedInferencePipeline
+from faster_whisper import WhisperModel, BatchedInferencePipeline
 
 model = WhisperModel("medium", device="cuda", compute_type="float16")
 batched_model = BatchedInferencePipeline(model=model)
