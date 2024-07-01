@@ -312,7 +312,7 @@ class BatchedInferencePipeline(Pipeline):
 
         if "TOKENIZERS_PARALLELISM" not in os.environ:
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        # TODO hack by collating feature_extractor and image_processor
+
         dataset = PipelineIterator(inputs, self.preprocess, preprocess_params)
         dataloader = torch.utils.data.DataLoader(
             dataset,
@@ -336,7 +336,7 @@ class BatchedInferencePipeline(Pipeline):
         if self.tokenizer is None:
             if not language:
                 language, language_probability, all_language_probs = (
-                    self.detect_language(audio)
+                    self.model.detect_language(audio)
                 )
             task = task or "transcribe"
             self.tokenizer = Tokenizer(
@@ -638,7 +638,11 @@ class BatchedInferencePipeline(Pipeline):
                     text=response["text"],
                     start=round(response["start"], 3),
                     end=round(response["end"], 3),
-                    words=(None if not options.word_timestamps else response["words"]),
+                    words=(
+                        None
+                        if not options.word_timestamps
+                        else [Word(**word) for word in response["words"]]
+                    ),
                     tokens=response["tokens"],
                     avg_logprob=response["avg_logprob"],
                     no_speech_prob=response["no_speech_prob"],
@@ -650,28 +654,6 @@ class BatchedInferencePipeline(Pipeline):
         if self.preset_language is None:
             self.tokenizer = None
         self.last_speech_timestamp = 0.0
-
-    def detect_language(self, audio: torch.Tensor):
-        to_cpu = (
-            self.model.model.device == "cuda" and len(self.model.model.device_index) > 1
-        )
-        segment = self.model.feature_extractor(audio, padding=True, to_cpu=to_cpu)[
-            :, : self.model.feature_extractor.nb_max_frames
-        ]
-        encoder_output = self.model.encode(segment)
-        results = self.model.model.detect_language(encoder_output)
-        language_token, language_probability = results[0][0]
-        language = language_token[2:-2]
-        self.model.logger.info(
-            f"Detected language: {language} ({language_probability:.2f}) in first 30s of audio..."
-        )
-        all_language_probs = [(token[2:-2], prob) for (token, prob) in results[0]]
-        return language, language_probability, all_language_probs
-
-    def detect_language_multi_segment(
-        self, audio: Union[str, BinaryIO, torch.Tensor], params: Optional[dict] = None
-    ):
-        return self.model.detect_language_multi_segment(audio, params)
 
 
 class WhisperModel:
@@ -1918,6 +1900,21 @@ class WhisperModel:
 
         return encoder_output, output
 
+    def detect_language(self, audio: torch.Tensor):
+        to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
+        segment = self.feature_extractor(audio, padding=True, to_cpu=to_cpu)[
+            :, : self.feature_extractor.nb_max_frames
+        ]
+        encoder_output = self.encode(segment)
+        results = self.model.detect_language(encoder_output)
+        language_token, language_probability = results[0][0]
+        language = language_token[2:-2]
+        self.logger.info(
+            f"Detected language: {language} ({language_probability:.2f}) in first 30s of audio..."
+        )
+        all_language_probs = [(token[2:-2], prob) for (token, prob) in results[0]]
+        return language, language_probability, all_language_probs
+
     def detect_language_multi_segment(
         self, audio: Union[str, BinaryIO, torch.Tensor], params: Optional[dict] = None
     ):
@@ -1981,14 +1978,14 @@ class WhisperModel:
 
             # if the audio after VAD is less than 2% of the original audio, consider it as silence
             if duration_vad / duration < speech_percentage_threshold:
-                return {"language_code": "silence", "language_confidence": 1.0}
+                return {"language_code": None, "language_confidence": 1.0}
 
             # update duration to be the duration after VAD
             duration = duration_vad
 
         # if the duration of the audio is less than 1 second, consider it as silence
         if duration < 1.0:
-            return {"language_code": "silence", "language_confidence": 1.0}
+            return {"language_code": None, "language_confidence": 1.0}
 
         # number of feature frames in 30 seconds of audio is 3000
         nb_max_frames = self.feature_extractor.nb_max_frames
@@ -2114,7 +2111,7 @@ class WhisperModel:
             )
 
             if is_silent:
-                return {"language_code": "silence", "language_confidence": 1.0}
+                return {"language_code": None, "language_confidence": 1.0}
 
             if max_language is not None:
                 return {
@@ -2123,7 +2120,7 @@ class WhisperModel:
                 }
 
         # Language is not detected for any segment and none of prev conditions met
-        return {"language_code": "silence", "language_confidence": 1.0}
+        return {"language_code": None, "language_confidence": 1.0}
 
 
 default_batched_asr_options = {
@@ -2156,68 +2153,6 @@ default_batched_asr_options = {
     "output_language": "en",
     "hotwords": None,
 }
-
-
-def load_model_batch(
-    whisper_arch,
-    device,
-    device_index=0,
-    compute_type="float16",
-    asr_options=None,
-    language: Optional[str] = None,
-    model=None,
-    task="transcribe",
-    download_root=None,
-    threads=4,
-):
-    """Load a Whisper model for inference.
-    Args:
-        whisper_arch: str - The name of the Whisper model to load.
-        device: str - The device to load the model on.
-        compute_type: str - The compute type to use for the model.
-        options: dict - A dictionary of options to use for the model.
-        language: str - The language of the model. (use English for now)
-        download_root: Optional[str] - The root directory to download the model to.
-        threads: int - The number of cpu threads to use per worker.
-    Returns:
-        A Whisper pipeline.
-    """
-
-    if whisper_arch.endswith(".en"):
-        language = "en"
-
-    model = WhisperModel(
-        whisper_arch,
-        device=device,
-        device_index=device_index,
-        compute_type=compute_type,
-        download_root=download_root,
-        cpu_threads=threads,
-    )
-    if language is not None:
-        tokenizer = Tokenizer(
-            model.hf_tokenizer,
-            model.model.is_multilingual,
-            task=task,
-            language=language,
-        )
-    else:
-        model.logger.warning(
-            "No language specified, it will be detected causing increase in inference time."
-        )
-        tokenizer = None
-
-    if asr_options is not None:
-        default_batched_asr_options.update(asr_options)
-
-    batched_asr_options = TranscriptionOptions(**default_batched_asr_options)
-
-    return BatchedInferencePipeline(
-        model=model,
-        options=batched_asr_options,
-        tokenizer=tokenizer,
-        language=language,
-    )
 
 
 def restore_speech_timestamps(
