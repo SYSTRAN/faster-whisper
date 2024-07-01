@@ -282,7 +282,7 @@ class SileroVADModel:
         out, state = self.session.run(None, ort_inputs)
         context = x[..., -64:]
 
-        return out, state
+        return out, state, context
 
 
 # The code below is copied from whisper-x (https://github.com/m-bain/whisperX)
