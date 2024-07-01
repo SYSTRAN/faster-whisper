@@ -342,7 +342,7 @@ class BatchedInferencePipeline(Pipeline):
                     language,
                     language_probability,
                     all_language_probs,
-                ) = self.model.detect_language(audio)
+                ) = self.model.detect_language_function(audio)
             task = task or "transcribe"
             self.tokenizer = Tokenizer(
                 self.model.hf_tokenizer,
@@ -1919,7 +1919,7 @@ class WhisperModel:
 
         return encoder_output, output
 
-    def detect_language(self, audio: torch.Tensor):
+    def detect_language_function(self, audio: torch.Tensor):
         to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
         segment = self.feature_extractor(audio, padding=True, to_cpu=to_cpu)[
             :, : self.feature_extractor.nb_max_frames
