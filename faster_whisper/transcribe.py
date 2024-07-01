@@ -314,7 +314,7 @@ class BatchedInferencePipeline(Pipeline):
 
         if "TOKENIZERS_PARALLELISM" not in os.environ:
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        # TODO hack by collating feature_extractor and image_processor
+
         dataset = PipelineIterator(inputs, self.preprocess, preprocess_params)
         dataloader = torch.utils.data.DataLoader(
             dataset,
@@ -646,7 +646,11 @@ class BatchedInferencePipeline(Pipeline):
                     text=response["text"],
                     start=round(response["start"], 3),
                     end=round(response["end"], 3),
-                    words=(None if not options.word_timestamps else response["words"]),
+                    words=(
+                        None
+                        if not options.word_timestamps
+                        else [Word(**word) for word in response["words"]]
+                    ),
                     tokens=response["tokens"],
                     avg_logprob=response["avg_logprob"],
                     no_speech_prob=response["no_speech_prob"],
@@ -1930,6 +1934,21 @@ class WhisperModel:
         all_language_probs = [(token[2:-2], prob) for (token, prob) in results[0]]
         return language, language_probability, all_language_probs
 
+    def detect_language(self, audio: torch.Tensor):
+        to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
+        segment = self.feature_extractor(audio, padding=True, to_cpu=to_cpu)[
+            :, : self.feature_extractor.nb_max_frames
+        ]
+        encoder_output = self.encode(segment)
+        results = self.model.detect_language(encoder_output)
+        language_token, language_probability = results[0][0]
+        language = language_token[2:-2]
+        self.logger.info(
+            f"Detected language: {language} ({language_probability:.2f}) in first 30s of audio..."
+        )
+        all_language_probs = [(token[2:-2], prob) for (token, prob) in results[0]]
+        return language, language_probability, all_language_probs
+
     def detect_language_multi_segment(
         self, audio: Union[str, BinaryIO, torch.Tensor], params: Optional[dict] = None
     ):
@@ -1993,14 +2012,14 @@ class WhisperModel:
 
             # if the audio after VAD is less than 2% of the original audio, consider it as silence
             if duration_vad / duration < speech_percentage_threshold:
-                return {"language_code": "silence", "language_confidence": 1.0}
+                return {"language_code": None, "language_confidence": 1.0}
 
             # update duration to be the duration after VAD
             duration = duration_vad
 
         # if the duration of the audio is less than 1 second, consider it as silence
         if duration < 1.0:
-            return {"language_code": "silence", "language_confidence": 1.0}
+            return {"language_code": None, "language_confidence": 1.0}
 
         # number of feature frames in 30 seconds of audio is 3000
         nb_max_frames = self.feature_extractor.nb_max_frames
@@ -2126,7 +2145,7 @@ class WhisperModel:
             )
 
             if is_silent:
-                return {"language_code": "silence", "language_confidence": 1.0}
+                return {"language_code": None, "language_confidence": 1.0}
 
             if max_language is not None:
                 return {
