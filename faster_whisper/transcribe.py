@@ -2135,7 +2135,7 @@ class WhisperModel:
                 }
 
         # Language is not detected for any segment and none of prev conditions met
-        return {"language_code": "silence", "language_confidence": 1.0}
+        return {"language_code": None, "language_confidence": 1.0}
 
 
 def restore_speech_timestamps(
