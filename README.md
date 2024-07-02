@@ -188,9 +188,9 @@ from faster_whisper import WhisperModel, BatchedInferencePipeline
 
 model = WhisperModel("medium", device="cuda", compute_type="float16")
 batched_model = BatchedInferencePipeline(model=model)
-result = batched_model.transcribe("audio.mp3", batch_size=16)
+segments, info = batched_model.transcribe("audio.mp3", batch_size=16)
 
-for segment, info in result:
+for segment in segments:
     print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
 ```
 
