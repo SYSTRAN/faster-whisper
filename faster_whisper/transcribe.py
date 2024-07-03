@@ -1233,7 +1233,6 @@ def get_suppressed_tokens(
     tokenizer: Tokenizer,
     suppress_tokens: Optional[List[int]],
 ) -> Optional[List[int]]:
-
     suppress_tokens = list(suppress_tokens)
 
     if -1 in suppress_tokens:
