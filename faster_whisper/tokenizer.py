@@ -105,6 +105,42 @@ class Tokenizer:
             [s if isinstance(s, str) else self.tokenizer.decode(s) for s in outputs]
         )
 
+    @cached_property
+    def non_speech_tokens(self) -> Tuple[int]:
+        """
+        Returns the list of tokens to suppress in order to avoid any speaker tags or non-speech
+        annotations, to prevent sampling texts that are not actually spoken in the audio, e.g.
+
+        - ♪♪♪
+        - ( SPEAKING FOREIGN LANGUAGE )
+        - [DAVID] Hey there,
+
+        keeping basic punctuations like commas, periods, question marks, exclamation points, etc.
+        """
+        symbols = list('"#()*+/:;<=>@[\\]^_`{|}~「」『』')
+        symbols += (
+            "<< >> <<< >>> -- --- -( -[ (' (\" (( )) ((( ))) [[ ]] {{ }} ♪♪ ♪♪♪".split()
+        )
+
+        # symbols that may be a single token or multiple tokens depending on the tokenizer.
+        # In case they're multiple tokens, suppress the first token, which is safe because:
+        # These are between U+2640 and U+267F miscellaneous symbols that are okay to suppress
+        # in generations, and in the 3-byte UTF-8 representation they share the first two bytes.
+        miscellaneous = set("♩♪♫♬♭♮♯")
+        assert all(0x2640 <= ord(c) <= 0x267F for c in miscellaneous)
+
+        # allow hyphens "-" and single quotes "'" between words, but not at the beginning of a word
+        result = {self.encode(" -")[0], self.encode(" '")[0]}
+        for symbol in symbols + list(miscellaneous):
+            for tokens in [
+                self.encode(symbol),
+                self.encode(" " + symbol),
+            ]:
+                if len(tokens) == 1 or symbol in miscellaneous:
+                    result.add(tokens[0])
+
+        return tuple(sorted(result))
+
     def split_to_word_tokens(
         self, tokens: List[int]
     ) -> Tuple[List[str], List[List[int]]]:
