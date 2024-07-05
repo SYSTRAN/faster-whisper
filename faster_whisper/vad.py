@@ -499,7 +499,7 @@ class BinarizeVadScores:
 
 def merge_chunks(
     segments,
-    chunk_size,
+    chunk_length,
     onset: float = 0.5,
     offset: Optional[float] = None,
     edge_padding: float = 0.1,
@@ -512,8 +512,8 @@ def merge_chunks(
     seg_idxs = []
     speaker_idxs = []
 
-    assert chunk_size > 0
-    binarize = BinarizeVadScores(max_duration=chunk_size, onset=onset, offset=offset)
+    assert chunk_length > 0
+    binarize = BinarizeVadScores(max_duration=chunk_length, onset=onset, offset=offset)
     segments = binarize(segments)
     segments_list = []
     for speech_turn in segments.get_timeline():
@@ -542,7 +542,7 @@ def merge_chunks(
             if seg.end > segments_list[idx + 1].start:
                 seg.end -= edge_padding
 
-        if seg.end - curr_start > chunk_size and curr_end - curr_start > 0:
+        if seg.end - curr_start > chunk_length and curr_end - curr_start > 0:
             merged_segments.append(
                 {
                     "start": curr_start,
