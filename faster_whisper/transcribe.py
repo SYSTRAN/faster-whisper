@@ -492,7 +492,6 @@ class WhisperModel:
             vad_options=vad_parameters,
             all_language_probs=all_language_probs,
         )
-
         return segments, info
 
     def generate_segments(
@@ -1231,10 +1230,8 @@ def get_compression_ratio(text: str) -> float:
 
 def get_suppressed_tokens(
     tokenizer: Tokenizer,
-    suppress_tokens: Optional[List[int]],
+    suppress_tokens: Tuple[int],
 ) -> Optional[List[int]]:
-    suppress_tokens = list(suppress_tokens)
-
     if -1 in suppress_tokens:
         suppress_tokens = [t for t in suppress_tokens if t >= 0]
         suppress_tokens.extend(tokenizer.non_speech_tokens)
