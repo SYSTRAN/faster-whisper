@@ -360,8 +360,9 @@ class BatchedInferencePipeline(Pipeline):
 
         return language, language_probability, task, all_language_probs
 
-    def audio_split(self, audio, segments, sampling_rate):
-        "Returns splitted audio chunks as iterator"
+    @staticmethod
+    def audio_split(audio, segments, sampling_rate):
+        """Returns splitted audio chunks as iterator"""
 
         for seg in segments:
             f1 = int(seg["start"] * sampling_rate)
@@ -2113,8 +2114,6 @@ class WhisperModel:
             )
 
             return frequency, prob_avg
-
-        max_language = None
 
         if detected_languages:
             # Use the key function to find the language with maximum frequency and probability
