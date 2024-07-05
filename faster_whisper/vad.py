@@ -334,7 +334,7 @@ class VoiceActivitySegmentation(VoiceActivityDetection, ABC):
             hook (callable): Hook called with signature: hook("step_name", step_artefact, file=file)
 
         Returns:
-            segmentations (Annotation): Voice activity segmentation.
+            segmentations (SlidingWindowFeature): Voice activity segmentation.
         """
         # setup hook (e.g. for debugging purposes)
         hook = self.setup_hook(file, hook=hook)
