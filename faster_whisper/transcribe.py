@@ -390,7 +390,7 @@ class WhisperModel:
                     content_frames,
                 )
                 detected_language_info = {}
-                while seek < end_frames:
+                while seek <= end_frames:
                     segment = features[
                         :, seek : seek + self.feature_extractor.nb_max_frames
                     ]
