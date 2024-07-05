@@ -2134,11 +2134,10 @@ class WhisperModel:
             if is_silent:
                 return {"language_code": None, "language_confidence": 1.0}
 
-            if max_language is not None:
-                return {
-                    "language_code": max_language,
-                    "language_confidence": max_probability,
-                }
+            return {
+                "language_code": max_language,
+                "language_confidence": max_probability,
+            }
 
         # Language is not detected for any segment and none of prev conditions met
         return {"language_code": None, "language_confidence": 1.0}
