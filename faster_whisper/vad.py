@@ -2,6 +2,7 @@ import bisect
 import functools
 import os
 
+from abc import ABC
 from collections.abc import Callable
 from typing import List, NamedTuple, Optional, Union
 
@@ -294,7 +295,7 @@ class SegmentX:
         self.speaker = speaker
 
 
-class VoiceActivitySegmentation(VoiceActivityDetection):
+class VoiceActivitySegmentation(VoiceActivityDetection, ABC):
     """Pipeline wrapper class for Voice Activity Segmentation based on VAD scores."""
 
     def __init__(
@@ -323,7 +324,9 @@ class VoiceActivitySegmentation(VoiceActivityDetection):
             **inference_kwargs,
         )
 
-    def apply(self, file: AudioFile, hook: Optional[Callable] = None) -> Annotation:
+    def apply(
+        self, file: AudioFile, hook: Optional[Callable] = None
+    ) -> SlidingWindowFeature:
         """Apply voice activity detection on the audio file.
 
         Args:
@@ -331,7 +334,7 @@ class VoiceActivitySegmentation(VoiceActivityDetection):
             hook (callable): Hook called with signature: hook("step_name", step_artefact, file=file)
 
         Returns:
-            segmentations (Annotation): Voice activity segmentation.
+            segmentations (SlidingWindowFeature): Voice activity segmentation.
         """
         # setup hook (e.g. for debugging purposes)
         hook = self.setup_hook(file, hook=hook)
