@@ -120,7 +120,7 @@ class BatchedInferencePipeline(Pipeline):
         options: Optional[NamedTuple] = None,
         tokenizer=None,
         device: Union[int, str, "torch.device"] = -1,
-        chunk_size: int = 30,
+        chunk_length: int = 30,
         vad_device: Union[int, str, "torch.device"] = "auto",
         framework="pt",
         language: Optional[str] = None,
@@ -157,7 +157,7 @@ class BatchedInferencePipeline(Pipeline):
             self.vad_model = self.load_vad_model(
                 vad_onset=self.vad_onset, vad_offset=self.vad_offset
             )
-        self.chunk_size = chunk_size  # VAD merging size
+        self.chunk_length = chunk_length  # VAD merging size
         self.last_speech_timestamp = 0.0
         super(Pipeline, self).__init__()
 
@@ -538,11 +538,11 @@ class BatchedInferencePipeline(Pipeline):
                 )
                 vad_segments = merge_chunks(
                     vad_segments,
-                    self.chunk_size,
+                    self.chunk_length,
                     onset=self.vad_onset,
                     offset=self.vad_offset,
                 )
-            elif duration < self.chunk_size:
+            elif duration < self.chunk_length:
                 vad_segments = [
                     {"start": 0.0, "end": duration, "segments": [(0.0, duration)]}
                 ]
