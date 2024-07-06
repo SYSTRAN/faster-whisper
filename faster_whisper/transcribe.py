@@ -352,10 +352,14 @@ class BatchedInferencePipeline(Pipeline):
             )
         else:
             if task is not None:
-                self.tokenizer.task = self.tokenizer.token_to_id(f"<|{task}|>")
+                self.tokenizer.task = self.tokenizer.tokenizer.token_to_id(
+                    f"<|{task}|>"
+                )
 
             if language is not None:
-                self.tokenizer.language = self.tokenizer.token_to_id(f"<|{language}|>")
+                self.tokenizer.language = self.tokenizer.tokenizer.token_to_id(
+                    f"<|{language}|>"
+                )
                 self.tokenizer.language_code = language
 
         return language, language_probability, task, all_language_probs
@@ -551,6 +555,15 @@ class BatchedInferencePipeline(Pipeline):
                 raise RuntimeError(
                     "No vad segments found. Set 'use_vad_model' to True while loading the model"
                 )
+        if self.model.model.is_multilingual:
+            language = language or self.preset_language
+        elif language != "en":
+            if language is not None:
+                self.model.logger.warning(
+                    f"English-only model is used, but {language} language is"
+                    "chosen, setting language to 'en'."
+                )
+            language = "en"
 
         (
             language,
@@ -1293,8 +1306,8 @@ class WhisperModel:
                     task = "transcribe"
 
                 # Update tokenizer based on task and language
-                tokenizer.task = tokenizer.token_to_id(f"<|{task}|>")
-                tokenizer.language = tokenizer.token_to_id(language_token)
+                tokenizer.task = tokenizer.tokenizer.token_to_id(f"<|{task}|>")
+                tokenizer.language = tokenizer.tokenizer.token_to_id(language_token)
                 tokenizer.language_code = language
             # Update prompt based on task and language
             prompt = self.get_prompt(
