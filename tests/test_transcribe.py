@@ -7,7 +7,6 @@ from faster_whisper.transcribe import get_suppressed_tokens
 
 
 class TestTranscribe(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         cls.data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")

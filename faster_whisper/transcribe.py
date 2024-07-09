@@ -450,13 +450,16 @@ class WhisperModel:
         encoder_output = None
 
         if language is None:
-            language, language_probability, all_language_probs, encoder_output = (
-                self.detect_language(
-                    audio=audio,
-                    clip_timestamps=clip_timestamps,
-                    language_detection_threshold=language_detection_threshold,
-                    language_detection_segments=language_detection_segments,
-                )
+            (
+                language,
+                language_probability,
+                all_language_probs,
+                encoder_output,
+            ) = self.detect_language(
+                audio=audio,
+                clip_timestamps=clip_timestamps,
+                language_detection_threshold=language_detection_threshold,
+                language_detection_segments=language_detection_segments,
             )
         else:
             if not self.model.is_multilingual and language != "en":
