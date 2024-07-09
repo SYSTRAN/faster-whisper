@@ -8,7 +8,7 @@ __pycache__/
 venv/
 
 # Unit Test
-.pytest_cache/
+./tests/__pycache__
 
 # Ignore IDE, Editor Files
 .idea/

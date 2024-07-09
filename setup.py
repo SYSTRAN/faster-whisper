@@ -60,7 +60,6 @@ setup(
             "black==23.*",
             "flake8==6.*",
             "isort==5.*",
-            "pytest==7.*",
         ],
     },
     packages=find_packages(),

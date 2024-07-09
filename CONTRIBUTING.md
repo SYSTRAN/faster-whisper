@@ -17,7 +17,7 @@ pip install -e .[dev]
 1. Make sure the existing tests are still passing (and consider adding new tests as well!):
 
 ```bash
-pytest tests/
+python -m unittest discover tests/
 ```
 
 2. Reformat and validate the code with the following tools:

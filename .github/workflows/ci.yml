@@ -57,9 +57,9 @@ jobs:
           pip install wheel
           pip install -e .[dev]
 
-      - name: Run pytest
+      - name: Run unittest
         run: |
-          pytest -v tests/
+          python -m unittest discover tests/
 
 
   build-and-push-package:
