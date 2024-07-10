@@ -101,8 +101,8 @@ class TranscriptionInfo(NamedTuple):
     vad_options: VadOptions
 
 
-# The code below is originally from HF pipeline and is used in whisper-x (https://github.com/m-bain/whisperX)
-# and adapted for faster_whisper
+# The code below is originally from HF pipeline and is used in whisper-x
+# (https://github.com/m-bain/whisperX) and adapted for faster_whisper
 
 
 class BatchedInferencePipeline(Pipeline):
