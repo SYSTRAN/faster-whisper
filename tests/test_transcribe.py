@@ -1,6 +1,6 @@
 import os
 
-from faster_whisper import WhisperModel, decode_audio
+from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 from faster_whisper.tokenizer import Tokenizer
 from faster_whisper.transcribe import get_suppressed_tokens
 
@@ -39,6 +39,50 @@ def test_transcribe(jfk_path):
     assert segment.text == "".join(word.word for word in segment.words)
     assert segment.start == segment.words[0].start
     assert segment.end == segment.words[-1].end
+    batched_model = BatchedInferencePipeline(model=model, use_vad_model=False)
+    result, info = batched_model.transcribe(jfk_path, word_timestamps=True)
+    assert info.language == "en"
+    assert info.language_probability > 0.7
+    segments = []
+    for segment in result:
+        segments.append(
+            {"start": segment.start, "end": segment.end, "text": segment.text}
+        )
+
+    assert len(segments) == 1
+    assert segment.text == (
+        " And so my fellow Americans ask not what your country can do for you, "
+        "ask what you can do for your country."
+    )
+
+
+def test_batched_transcribe(physcisworks_path):
+    model = WhisperModel("tiny")
+    batched_model = BatchedInferencePipeline(model=model)
+    result, info = batched_model.transcribe(physcisworks_path, batch_size=16)
+    assert info.language == "en"
+    assert info.language_probability > 0.7
+    segments = []
+    for segment in result:
+        segments.append(
+            {"start": segment.start, "end": segment.end, "text": segment.text}
+        )
+    # number of near 30 sec segments
+    assert len(segments) == 8
+
+    result, info = batched_model.transcribe(
+        physcisworks_path,
+        batch_size=16,
+        without_timestamps=False,
+        word_timestamps=True,
+    )
+    segments = []
+    for segment in result:
+        assert segment.words is not None
+        segments.append(
+            {"start": segment.start, "end": segment.end, "text": segment.text}
+        )
+    assert len(segments) > 8
 
 
 def test_prefix_with_timestamps(jfk_path):
@@ -99,6 +143,13 @@ def test_stereo_diarization(data_dir):
     segments, _ = model.transcribe(right)
     transcription = "".join(segment.text for segment in segments).strip()
     assert transcription == "The horizon seems extremely distant."
+
+
+def test_multisegment_lang_id(physcisworks_path):
+    model = WhisperModel("tiny")
+    language_info = model.detect_language_multi_segment(physcisworks_path)
+    assert language_info["language_code"] == "en"
+    assert language_info["language_confidence"] > 0.8
 
 
 def test_suppressed_tokens_minus_1():
