@@ -34,6 +34,7 @@ from faster_whisper.vad import (
     collect_chunks,
     get_speech_timestamps,
     merge_chunks,
+    _silero_vad_full,
 )
 
 
@@ -426,14 +427,8 @@ class BatchedInferencePipeline:
         if not vad_segments:
             # run the audio if it is less than 30 sec even without vad_segments
             if self.use_vad_model:
-                vad_segments = self.vad_model(
-                    {
-                        "waveform": audio.unsqueeze(0),
-                        "sample_rate": 16000,
-                    }
-                )
-                vad_segments = merge_chunks(
-                    vad_segments,
+                vad_segments = _silero_vad_full(
+                    audio,
                     self.chunk_length,
                     onset=self.vad_onset,
                     offset=self.vad_offset,
