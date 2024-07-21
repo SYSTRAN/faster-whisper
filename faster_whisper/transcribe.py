@@ -211,9 +211,12 @@ class BatchedInferencePipeline(Pipeline):
             model_inputs["features"], self.tokenizer, forward_params
         )
 
-        segment_size = encoder_output.shape[1] * 2
         segmented_outputs = []
+        segment_sizes = []
         for segment_metadata, output in zip(model_inputs["seg_metadata"], outputs):
+            duration = segment_metadata["end_time"] - segment_metadata["start_time"]
+            segment_size = int(duration * self.model.frames_per_second)
+            segment_sizes.append(segment_size)
             (
                 subsegments,
                 seek,
@@ -223,8 +226,7 @@ class BatchedInferencePipeline(Pipeline):
                 tokens=output["tokens"],
                 time_offset=segment_metadata["start_time"],
                 segment_size=segment_size,
-                segment_duration=segment_metadata["end_time"]
-                - segment_metadata["start_time"],
+                segment_duration=duration,
                 seek=0,
             )
             segmented_outputs.append(
@@ -248,7 +250,7 @@ class BatchedInferencePipeline(Pipeline):
                 segmented_outputs,
                 self.tokenizer,
                 encoder_output,
-                segment_size,
+                segment_sizes,
                 forward_params["prepend_punctuations"],
                 forward_params["append_punctuations"],
                 self.last_speech_timestamp,
