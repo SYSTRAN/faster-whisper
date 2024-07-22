@@ -122,6 +122,8 @@ class BatchedInferencePipeline(Pipeline):
         device: Union[int, str, "torch.device"] = -1,
         chunk_length: int = 30,
         vad_device: Union[int, str, "torch.device"] = "auto",
+        vad_onset: float = 0.500,
+        vad_offset: float = 0.363,
         framework="pt",
         language: Optional[str] = None,
         **kwargs,
@@ -133,8 +135,8 @@ class BatchedInferencePipeline(Pipeline):
         self._batch_size = kwargs.pop("batch_size", None)
         self._num_workers = 0
         self.use_vad_model = use_vad_model
-        self.vad_onset = 0.500
-        self.vad_offset = 0.363
+        self.vad_onset = vad_onset
+        self.vad_offset = vad_offset
         self.vad_model_path = os.path.join(get_assets_path(), "pyannote_vad_model.bin")
         self.vad_model = None
 
