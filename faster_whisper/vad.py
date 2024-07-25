@@ -46,15 +46,11 @@ def get_vad_scores(
     audio: torch.Tensor, sampling_rate: int = 16000, window_size_samples: int = 512
 ):
     model = get_vad_model()
-    state, context = model.get_initial_states(batch_size=1)
 
-    speech_probs = []
-    for current_start_sample in range(0, len(audio), window_size_samples):
-        chunk = audio[current_start_sample : current_start_sample + window_size_samples]
-        if len(chunk) < window_size_samples:
-            chunk = np.pad(chunk, (0, int(window_size_samples - len(chunk))))
-        speech_prob, state, context = model(chunk, state, context, sampling_rate)
-        speech_probs.append(speech_prob)
+    padded_audio = np.pad(
+        audio.numpy(), (0, window_size_samples - audio.shape[0] % window_size_samples)
+    )
+    scores = model(padded_audio.reshape(1, -1))
 
     starts = np.asarray(range(0, len(audio), window_size_samples))
     ends = starts + window_size_samples
@@ -69,7 +65,6 @@ def get_vad_scores(
         for s, e, m in zip(starts, ends, middle)
     ]
 
-    scores = np.stack(speech_probs).squeeze(-1)
     return scores, timestamps
 
 
@@ -255,12 +250,13 @@ class SpeechTimestampsMap:
 @functools.lru_cache
 def get_vad_model():
     """Returns the VAD model instance."""
-    path = os.path.join(get_assets_path(), "silero_vad.onnx")
-    return SileroVADModel(path)
+    encoder_path = os.path.join(get_assets_path(), "silero_encoder.onnx")
+    decoder_path = os.path.join(get_assets_path(), "silero_decoder.onnx")
+    return SileroVADModel(encoder_path, decoder_path)
 
 
 class SileroVADModel:
-    def __init__(self, path):
+    def __init__(self, encoder_path, decoder_path):
         try:
             import onnxruntime
         except ImportError as e:
@@ -269,43 +265,59 @@ class SileroVADModel:
             ) from e
 
         opts = onnxruntime.SessionOptions()
-        opts.inter_op_num_threads = 1
-        opts.intra_op_num_threads = 1
+        opts.inter_op_num_threads = 0
+        opts.intra_op_num_threads = 0
         opts.log_severity_level = 4
 
-        self.session = onnxruntime.InferenceSession(
-            path,
+        self.encoder_session = onnxruntime.InferenceSession(
+            encoder_path,
+            providers=["CPUExecutionProvider"],
+            sess_options=opts,
+        )
+        self.decoder_session = onnxruntime.InferenceSession(
+            decoder_path,
             providers=["CPUExecutionProvider"],
             sess_options=opts,
         )
 
-    def get_initial_states(self, batch_size: int):
-        state = np.zeros((2, batch_size, 128), dtype=np.float32)
-        context = np.zeros((batch_size, 64), dtype=np.float32)
-        return state, context
+    def __call__(
+        self, audio: np.ndarray, num_samples: int = 512, context_size_samples: int = 64
+    ):
+        assert (
+            audio.ndim == 2
+        ), "Input should be a 2D tensor with size (batch_size, num_samples)"
+        assert (
+            audio.shape[1] % num_samples == 0
+        ), "Input size should be a multiple of num_samples"
 
-    def __call__(self, x, state, context, sr: int):
-        if len(x.shape) == 1:
-            x = np.expand_dims(x, 0)
-        if len(x.shape) > 2:
-            raise ValueError(
-                f"Too many dimensions for input audio chunk {len(x.shape)}"
+        batch_size = audio.shape[0]
+
+        state = np.zeros((2, batch_size, 128), dtype="float32")
+        context = np.zeros(
+            (batch_size, context_size_samples),
+            dtype="float32",
+        )
+
+        batched_audio = audio.reshape(batch_size, -1, num_samples)
+        context = batched_audio[..., -context_size_samples:]
+        context[:, -1] = 0
+        context = np.roll(context, 1, 1)
+        batched_audio = np.concatenate([context, batched_audio], 2)
+
+        batched_audio = batched_audio.reshape(-1, num_samples + context_size_samples)
+
+        encoder_output = self.encoder_session.run(None, {"input": batched_audio})[0]
+        encoder_output = encoder_output.reshape(batch_size, -1, 128)
+
+        decoder_outputs = []
+        for window in np.split(encoder_output, encoder_output.shape[1], axis=1):
+            out, state = self.decoder_session.run(
+                None, {"input": window.squeeze(1), "state": state}
             )
-        if sr / x.shape[1] > 31.25:
-            raise ValueError("Input audio chunk is too short")
+            decoder_outputs.append(out)
 
-        x = np.concatenate([context, x], axis=1)
-
-        ort_inputs = {
-            "input": x,
-            "state": state,
-            "sr": np.array(sr, dtype="int64"),
-        }
-
-        out, state = self.session.run(None, ort_inputs)
-        context = x[..., -64:]
-
-        return out, state, context
+        out = np.stack(decoder_outputs, axis=1).squeeze(-1)
+        return out
 
 
 # BSD 2-Clause License
