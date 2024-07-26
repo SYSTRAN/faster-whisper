@@ -522,9 +522,9 @@ class BatchedInferencePipeline:
         )
         features = torch.stack(
             [
-                self.model.feature_extractor(
-                    audio_segment, chunk_length=self.chunk_length, to_cpu=to_cpu
-                )[..., : self.model.feature_extractor.nb_max_frames]
+                self.model.feature_extractor(audio_segment, to_cpu=to_cpu)[
+                    ..., : self.model.feature_extractor.nb_max_frames
+                ]
                 for audio_segment in audio_segments
             ]
         )
