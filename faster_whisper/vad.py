@@ -2,17 +2,10 @@ import bisect
 import functools
 import os
 
-from abc import ABC
-from collections.abc import Callable
-from typing import List, NamedTuple, Optional, Union
+from typing import List, NamedTuple, Optional
 
 import numpy as np
 import torch
-
-from pyannote.audio.core.io import AudioFile
-from pyannote.audio.pipelines import VoiceActivityDetection
-from pyannote.audio.pipelines.utils import PipelineModel
-from pyannote.core import Annotation, Segment, SlidingWindowFeature
 
 from faster_whisper.utils import get_assets_path
 
@@ -35,11 +28,12 @@ class VadOptions(NamedTuple):
       speech_pad_ms: Final speech chunks are padded by speech_pad_ms each side
     """
 
-    threshold: float = 0.5
-    min_speech_duration_ms: int = 250
+    onset: float = 0.5
+    offset: float = onset - 0.15
+    min_speech_duration_ms: int = 0
     max_speech_duration_s: float = float("inf")
-    min_silence_duration_ms: int = 2000
-    speech_pad_ms: int = 400
+    min_silence_duration_ms: int = 500
+    speech_pad_ms: int = 200
 
 
 def get_vad_scores(
@@ -65,140 +59,7 @@ def get_vad_scores(
         for s, e, m in zip(starts, ends, middle)
     ]
 
-    return scores, timestamps
-
-
-def get_speech_timestamps(
-    audio: torch.Tensor,
-    vad_options: Optional[VadOptions] = None,
-    **kwargs,
-) -> List[dict]:
-    """This method is used for splitting long audios into speech chunks using silero VAD.
-
-    Args:
-      audio: One dimensional float array.
-      vad_options: Options for VAD processing.
-      kwargs: VAD options passed as keyword arguments for backward compatibility.
-
-    Returns:
-      List of dicts containing begin and end samples of each speech chunk.
-    """
-    if vad_options is None:
-        vad_options = VadOptions(**kwargs)
-
-    threshold = vad_options.threshold
-    min_speech_duration_ms = vad_options.min_speech_duration_ms
-    max_speech_duration_s = vad_options.max_speech_duration_s
-    min_silence_duration_ms = vad_options.min_silence_duration_ms
-    window_size_samples = 512
-    speech_pad_ms = vad_options.speech_pad_ms
-    sampling_rate = 16000
-    min_speech_samples = sampling_rate * min_speech_duration_ms / 1000
-    speech_pad_samples = sampling_rate * speech_pad_ms / 1000
-    max_speech_samples = (
-        sampling_rate * max_speech_duration_s
-        - window_size_samples
-        - 2 * speech_pad_samples
-    )
-    min_silence_samples = sampling_rate * min_silence_duration_ms / 1000
-    min_silence_samples_at_max_speech = sampling_rate * 98 / 1000
-
-    audio_length_samples = len(audio)
-
-    speech_probs, timestamps = get_vad_scores(audio)
-
-    triggered = False
-    speeches = []
-    current_speech = {}
-    neg_threshold = threshold - 0.15
-
-    # to save potential segment end (and tolerate some silence)
-    temp_end = 0
-    # to save potential segment limits in case of maximum segment size reached
-    prev_end = next_start = 0
-
-    for i, speech_prob in enumerate(speech_probs):
-        if (speech_prob >= threshold) and temp_end:
-            temp_end = 0
-            if next_start < prev_end:
-                next_start = window_size_samples * i
-
-        if (speech_prob >= threshold) and not triggered:
-            triggered = True
-            current_speech["start"] = window_size_samples * i
-            continue
-
-        if (
-            triggered
-            and (window_size_samples * i) - current_speech["start"] > max_speech_samples
-        ):
-            if prev_end:
-                current_speech["end"] = prev_end
-                speeches.append(current_speech)
-                current_speech = {}
-                # previously reached silence (< neg_thres) and is still not speech (< thres)
-                if next_start < prev_end:
-                    triggered = False
-                else:
-                    current_speech["start"] = next_start
-                prev_end = next_start = temp_end = 0
-            else:
-                current_speech["end"] = window_size_samples * i
-                speeches.append(current_speech)
-                current_speech = {}
-                prev_end = next_start = temp_end = 0
-                triggered = False
-                continue
-
-        if (speech_prob < neg_threshold) and triggered:
-            if not temp_end:
-                temp_end = window_size_samples * i
-            # condition to avoid cutting in very short silence
-            if (window_size_samples * i) - temp_end > min_silence_samples_at_max_speech:
-                prev_end = temp_end
-            if (window_size_samples * i) - temp_end < min_silence_samples:
-                continue
-            else:
-                current_speech["end"] = temp_end
-                if (
-                    current_speech["end"] - current_speech["start"]
-                ) > min_speech_samples:
-                    speeches.append(current_speech)
-                current_speech = {}
-                prev_end = next_start = temp_end = 0
-                triggered = False
-                continue
-
-    if (
-        current_speech
-        and (audio_length_samples - current_speech["start"]) > min_speech_samples
-    ):
-        current_speech["end"] = audio_length_samples
-        speeches.append(current_speech)
-
-    for i, speech in enumerate(speeches):
-        if i == 0:
-            speech["start"] = int(max(0, speech["start"] - speech_pad_samples))
-        if i != len(speeches) - 1:
-            silence_duration = speeches[i + 1]["start"] - speech["end"]
-            if silence_duration < 2 * speech_pad_samples:
-                speech["end"] += int(silence_duration // 2)
-                speeches[i + 1]["start"] = int(
-                    max(0, speeches[i + 1]["start"] - silence_duration // 2)
-                )
-            else:
-                speech["end"] = int(
-                    min(audio_length_samples, speech["end"] + speech_pad_samples)
-                )
-                speeches[i + 1]["start"] = int(
-                    max(0, speeches[i + 1]["start"] - speech_pad_samples)
-                )
-        else:
-            speech["end"] = int(
-                min(audio_length_samples, speech["end"] + speech_pad_samples)
-            )
-
-    return speeches
+    return scores.squeeze(-1), timestamps
 
 
 def collect_chunks(audio: torch.Tensor, chunks: List[dict]) -> torch.Tensor:
@@ -348,394 +209,120 @@ class SileroVADModel:
 
 # The code below is copied from whisper-x (https://github.com/m-bain/whisperX)
 # and adapted for faster_whisper.
-class SegmentX:
-    def __init__(self, start, end, speaker=None):
-        self.start = start
-        self.end = end
-        self.speaker = speaker
 
 
-class VoiceActivitySegmentation(VoiceActivityDetection, ABC):
-    """Pipeline wrapper class for Voice Activity Segmentation based on VAD scores."""
-
-    def __init__(
-        self,
-        segmentation: PipelineModel = "pyannote/segmentation",
-        device: Optional[Union[str, torch.device]] = None,
-        fscore: bool = False,
-        use_auth_token: Optional[str] = None,
-        **inference_kwargs,
-    ):
-        """Initialize the pipeline with the model name and the optional device.
-
-        Args:
-            dict parameters of VoiceActivityDetection class from pyannote:
-            segmentation (PipelineModel): Loaded model name.
-            device (torch.device or None): Device to perform the segmentation.
-            fscore (bool): Flag indicating whether to compute F-score during inference.
-            use_auth_token (str or None): Optional authentication token for model access.
-            inference_kwargs (dict):  Additional arguments from VoiceActivityDetection pipeline.
-        """
-        super().__init__(
-            segmentation=segmentation,
-            device=device,
-            fscore=fscore,
-            use_auth_token=use_auth_token,
-            **inference_kwargs,
-        )
-
-    def apply(
-        self, file: AudioFile, hook: Optional[Callable] = None
-    ) -> SlidingWindowFeature:
-        """Apply voice activity detection on the audio file.
-
-        Args:
-            file (AudioFile): Processed file.
-            hook (callable): Hook called with signature: hook("step_name", step_artefact, file=file)
-
-        Returns:
-            segmentations (SlidingWindowFeature): Voice activity segmentation.
-        """
-        # setup hook (e.g. for debugging purposes)
-        hook = self.setup_hook(file, hook=hook)
-
-        # apply segmentation model if needed
-        # output shape is (num_chunks, num_frames, 1)
-        if self.training:
-            if self.CACHED_SEGMENTATION in file:
-                segmentations = file[self.CACHED_SEGMENTATION]
-            else:
-                segmentations = self._segmentation(file)
-                file[self.CACHED_SEGMENTATION] = segmentations
-        else:
-            segmentations: SlidingWindowFeature = self._segmentation(file)
-
-        return segmentations
-
-
-class BinarizeVadScores:
-    """Binarize detection scores using hysteresis thresholding.
-
-    Reference:
-        Gregory Gelly and Jean-Luc Gauvain. "Minimum Word Error Training of
-        RNN-based Voice Activity Detection", InterSpeech 2015.
-
-        Modified by Max Bain to include WhisperX's min-cut operation
-        https://arxiv.org/abs/2303.00747
-
-    """
-
-    def __init__(
-        self,
-        onset: float = 0.5,
-        offset: Optional[float] = None,
-        min_duration_on: float = 0.0,
-        min_duration_off: float = 0.0,
-        pad_onset: float = 0.0,
-        pad_offset: float = 0.0,
-        max_duration: float = float("inf"),
-    ):
-        """Initializes the parameters for Binarizing the VAD scores.
-
-        Args:
-            onset (float, optional):
-                Onset threshold. Defaults to 0.5.
-            offset (float, optional):
-                Offset threshold. Defaults to `onset`.
-            min_duration_on (float, optional):
-                Remove active regions shorter than that many seconds. Defaults to 0s.
-            min_duration_off (float, optional):
-                Fill inactive regions shorter than that many seconds. Defaults to 0s.
-            pad_onset (float, optional):
-                Extend active regions by moving their start time by that many seconds.
-                Defaults to 0s.
-            pad_offset (float, optional):
-                Extend active regions by moving their end time by that many seconds.
-                Defaults to 0s.
-            max_duration (float):
-                The maximum length of an active segment.
-        """
-        super().__init__()
-
-        self.onset = onset
-        self.offset = offset or onset
-
-        self.pad_onset = pad_onset
-        self.pad_offset = pad_offset
-
-        self.min_duration_on = min_duration_on
-        self.min_duration_off = min_duration_off
-
-        self.max_duration = max_duration
-
-    def __get_active_regions(self, scores: SlidingWindowFeature) -> Annotation:
-        """Extract active regions from VAD scores.
-
-        Args:
-            scores (SlidingWindowFeature): Detection scores.
-
-        Returns:
-            active (Annotation): Active regions.
-        """
-        num_frames, num_classes = scores.data.shape
-        frames = scores.sliding_window
-        timestamps = [frames[i].middle for i in range(num_frames)]
-        # annotation meant to store 'active' regions
-        active = Annotation()
-        for k, k_scores in enumerate(scores.data.T):
-            label = k if scores.labels is None else scores.labels[k]
-
-            # initial state
-            start = timestamps[0]
-            is_active = k_scores[0] > self.onset
-            curr_scores = [k_scores[0]]
-            curr_timestamps = [start]
-            t = start
-            # optionally add `strict=False` for python 3.10 or later
-            for t, y in zip(timestamps[1:], k_scores[1:]):
-                # currently active
-                if is_active:
-                    curr_duration = t - start
-                    if curr_duration > self.max_duration:
-                        search_after = len(curr_scores) // 2
-                        # divide segment
-                        min_score_div_idx = search_after + np.argmin(
-                            curr_scores[search_after:]
-                        )
-                        min_score_t = curr_timestamps[min_score_div_idx]
-                        region = Segment(
-                            start - self.pad_onset, min_score_t + self.pad_offset
-                        )
-                        active[region, k] = label
-                        start = curr_timestamps[min_score_div_idx]
-                        curr_scores = curr_scores[min_score_div_idx + 1 :]
-                        curr_timestamps = curr_timestamps[min_score_div_idx + 1 :]
-                    # switching from active to inactive
-                    elif y < self.offset:
-                        region = Segment(start - self.pad_onset, t + self.pad_offset)
-                        active[region, k] = label
-                        start = t
-                        is_active = False
-                        curr_scores = []
-                        curr_timestamps = []
-                    curr_scores.append(y)
-                    curr_timestamps.append(t)
-                # currently inactive
-                else:
-                    # switching from inactive to active
-                    if y > self.onset:
-                        start = t
-                        is_active = True
-
-            # if active at the end, add final region
-            if is_active:
-                region = Segment(start - self.pad_onset, t + self.pad_offset)
-                active[region, k] = label
-
-        return active
-
-    def __call__(self, scores: SlidingWindowFeature) -> Annotation:
-        """Binarize detection scores.
-
-        Args:
-            scores (SlidingWindowFeature): Detection scores.
-
-        Returns:
-            active (Annotation): Binarized scores.
-        """
-        active = self.__get_active_regions(scores)
-        # because of padding, some active regions might be overlapping: merge them.
-        # also: fill same speaker gaps shorter than min_duration_off
-        if self.pad_offset > 0.0 or self.pad_onset > 0.0 or self.min_duration_off > 0.0:
-            if self.max_duration < float("inf"):
-                raise NotImplementedError("This would break current max_duration param")
-            active = active.support(collar=self.min_duration_off)
-
-        # remove tracks shorter than min_duration_on
-        if self.min_duration_on > 0:
-            for segment, track in list(active.itertracks()):
-                if segment.duration < self.min_duration_on:
-                    del active[segment, track]
-
-        return active
-
-
-def merge_chunks(
-    segments,
-    chunk_length,
-    onset: float = 0.5,
-    offset: Optional[float] = None,
-    edge_padding: float = 0.1,
+def get_active_regions(
+    scores: np.ndarray,
+    timestamps: List[dict],
+    vad_options: VadOptions = None,
 ):
-    """
-    Merge operation described in whisper-x paper
-    """
-    curr_end = 0
-    merged_segments = []
-    seg_idxs = []
-    speaker_idxs = []
-
-    assert chunk_length > 0
-    binarize = BinarizeVadScores(max_duration=chunk_length, onset=onset, offset=offset)
-    segments = binarize(segments)
-    segments_list = []
-    for speech_turn in segments.get_timeline():
-        segments_list.append(
-            SegmentX(
-                max(0.0, speech_turn.start - edge_padding),
-                speech_turn.end + edge_padding,
-                "UNKNOWN",
-            )
-        )  # 100ms edge padding to account for edge errors
-
-    if len(segments_list) == 0:
-        print("No active speech found in audio")
-        return []
-
-    # Make sur the starting point is the start of the segment.
-    curr_start = segments_list[0].start
-
-    for idx, seg in enumerate(segments_list):
-        # if any segment start timing is less than previous segment end timing,
-        # reset the edge padding. Similarly for end timing.
-        if idx > 0:
-            if seg.start < segments_list[idx - 1].end:
-                seg.start += edge_padding
-        if idx < len(segments_list) - 1:
-            if seg.end > segments_list[idx + 1].start:
-                seg.end -= edge_padding
-
-        if seg.end - curr_start > chunk_length and curr_end - curr_start > 0:
-            merged_segments.append(
-                {
-                    "start": curr_start,
-                    "end": curr_end,
-                    "segments": seg_idxs,
-                }
-            )
-            curr_start = seg.start
-            seg_idxs = []
-            speaker_idxs = []
-        curr_end = seg.end
-        seg_idxs.append((seg.start, seg.end))
-        speaker_idxs.append(seg.speaker)
-    # add final
-    merged_segments.append(
-        {
-            "start": curr_start,
-            "end": curr_end,
-            "segments": seg_idxs,
-        }
-    )
-    return merged_segments
-
-
-def _new_get_active_regions(
-    scores, timestamps, max_duration, onset, offset=None, pad_onset=0.0, pad_offset=0.0
-) -> Annotation:
     """Extract active regions from VAD scores.
 
     Args:
-        scores (SlidingWindowFeature): Detection scores.
+        scores List: Detection scores.
+        timestamps List: timestamps for each score
+        vad_options VadOptions: options for VAD
 
     Returns:
-        active (Annotation): Active regions.
+        segments List: Active regions.
     """
+    if vad_options is None:
+        vad_options = VadOptions()
 
-    offset = offset or onset
+    onset = vad_options.onset
+    offset = vad_options.offset
+    max_speech_duration_s = vad_options.max_speech_duration_s
+    silence_threshold = vad_options.min_silence_duration_ms // 16
+    speech_pad = vad_options.speech_pad_ms / 1000
 
-    #####################################################
-    timestamps = [ts["middle"] for ts in timestamps]
-    # annotation meant to store 'active' regions
-    active = Annotation()
-    for k, k_scores in enumerate(scores.T):
-        label = k  # if scores.labels is None else scores.labels[k]
-
+    for k_scores in scores:
         # initial state
-        start = timestamps[0]
+        start = timestamps[0]["start"]
         is_active = k_scores[0] > onset
-        curr_scores = [k_scores[0]]
-        curr_timestamps = [start]
-        t = start
-        # optionally add `strict=False` for python 3.10 or later
-        for t, y in zip(timestamps[1:], k_scores[1:]):
+        curr_scores = [k_scores[0]] if is_active else []
+        curr_timestamps = [start] if is_active else []
+        segments = []
+        silence_counter = 0
+        for timestamp, score in zip(timestamps[1:], k_scores[1:]):
             # currently active
             if is_active:
-                curr_duration = t - start
-                if curr_duration > max_duration:
+                current_duration = timestamp["end"] - start
+                if current_duration > max_speech_duration_s:
                     search_after = len(curr_scores) // 2
                     # divide segment
                     min_score_div_idx = search_after + np.argmin(
                         curr_scores[search_after:]
                     )
                     min_score_t = curr_timestamps[min_score_div_idx]
-                    region = Segment(start - pad_onset, min_score_t + pad_offset)
-                    active[region, k] = label
-                    start = curr_timestamps[min_score_div_idx]
+                    segments.append(
+                        {
+                            "start": start - speech_pad,
+                            "end": min_score_t["end"] + speech_pad,
+                        }
+                    )
+                    start = curr_timestamps[min_score_div_idx]["start"]
                     curr_scores = curr_scores[min_score_div_idx + 1 :]
                     curr_timestamps = curr_timestamps[min_score_div_idx + 1 :]
+                    if silence_counter != 0:
+                        silence_counter = sum(s < offset for s in curr_scores)
                 # switching from active to inactive
-                elif y < offset:
-                    region = Segment(start - pad_onset, t + pad_offset)
-                    active[region, k] = label
-                    start = t
-                    is_active = False
-                    curr_scores = []
-                    curr_timestamps = []
-                curr_scores.append(y)
-                curr_timestamps.append(t)
+                elif score < offset:
+                    silence_counter += 1
+                    if silence_counter > silence_threshold:
+                        segments.append(
+                            {
+                                "start": start - speech_pad,
+                                "end": curr_timestamps[-silence_counter]["end"]
+                                + speech_pad,
+                            }
+                        )
+                        is_active = False
+                        curr_scores = []
+                        curr_timestamps = []
+                        silence_counter = 0
+                        continue
+                else:
+                    silence_counter = 0
+
+                curr_scores.append(score)
+                curr_timestamps.append(timestamp)
             # currently inactive
             else:
                 # switching from inactive to active
-                if y > onset:
-                    start = t
+                if score > onset:
+                    start = timestamp["start"]
                     is_active = True
+                    silence_counter = 0
 
         # if active at the end, add final region
         if is_active:
-            region = Segment(start - pad_onset, t + pad_offset)
-            active[region, k] = label
-
-    return active
-
-
-def _silero_vad_full(waveform, chunk_size, onset, offset):
-
-    scores, timestamps = get_vad_scores(waveform)
-
-    active = _new_get_active_regions(scores, timestamps, chunk_size, onset, offset)
-
-    curr_end = 0
-    merged_segments = []
-    seg_idxs = []
-    speaker_idxs = []
-    segments_list = []
-    segments = active
-    edge_padding = 0.1
-    for speech_turn in segments.get_timeline():
-        segments_list.append(
-            SegmentX(
-                max(0.0, speech_turn.start - edge_padding),
-                speech_turn.end + edge_padding,
-                "UNKNOWN",
+            segments.append(
+                {"start": start - speech_pad, "end": timestamp["end"] + speech_pad}
             )
-        )  # 100ms edge padding to account for edge errors
 
-    assert len(segments_list) != 0, "No active speech found in audio"
-    # Make sur the starting point is the start of the segment.
-    curr_start = segments_list[0].start
+    return segments
+
+
+def merge_segments(segments_list, vad_options: VadOptions):
+    curr_end = 0
+    seg_idxs = []
+    merged_segments = []
+    edge_padding = vad_options.speech_pad_ms / 1000
+    chunk_size = vad_options.max_speech_duration_s
+
+    curr_start = segments_list[0]["start"]
 
     for idx, seg in enumerate(segments_list):
         # if any segment start timing is less than previous segment end timing,
         # reset the edge padding. Similarly for end timing.
         if idx > 0:
-            if seg.start < segments_list[idx - 1].end:
-                seg.start += edge_padding
+            if seg["start"] < segments_list[idx - 1]["end"]:
+                seg["start"] += edge_padding
         if idx < len(segments_list) - 1:
-            if seg.end > segments_list[idx + 1].start:
-                seg.end -= edge_padding
+            if seg["end"] > segments_list[idx + 1]["start"]:
+                seg["end"] -= edge_padding
 
-        if seg.end - curr_start > chunk_size and curr_end - curr_start > 0:
+        if seg["end"] - curr_start > chunk_size and curr_end - curr_start > 0:
             merged_segments.append(
                 {
                     "start": curr_start,
@@ -743,12 +330,10 @@ def _silero_vad_full(waveform, chunk_size, onset, offset):
                     "segments": seg_idxs,
                 }
             )
-            curr_start = seg.start
+            curr_start = seg["start"]
             seg_idxs = []
-            speaker_idxs = []
-        curr_end = seg.end
-        seg_idxs.append((seg.start, seg.end))
-        speaker_idxs.append(seg.speaker)
+        curr_end = seg["end"]
+        seg_idxs.append((seg["start"], seg["end"]))
     # add final
     merged_segments.append(
         {
@@ -758,3 +343,29 @@ def _silero_vad_full(waveform, chunk_size, onset, offset):
         }
     )
     return merged_segments
+
+
+def support_segments(segments, collar=0):
+    """
+    Merge segments separated by less than `collar` seconds.
+
+    Args:
+        segments (List[Dict]): List of segments with 'start' and 'end' keys.
+        collar (float, optional): Maximum gap between segments to merge. Defaults to 0.
+
+    Returns:
+        List[Dict]: List of merged segments.
+    """
+    supported_segments = []
+    current_segment = segments[0]
+    current_segment["start"] = max(current_segment["start"], 0)
+
+    for segment in segments[1:]:
+        if segment["start"] - current_segment["end"] <= collar:
+            current_segment["end"] = segment["end"]
+        else:
+            supported_segments.append(current_segment)
+            current_segment = segment
+
+    supported_segments.append(current_segment)
+    return supported_segments
