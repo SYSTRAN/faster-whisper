@@ -214,7 +214,7 @@ class SileroVADModel:
 def get_active_regions(
     scores: np.ndarray,
     timestamps: List[dict],
-    vad_options: VadOptions = None,
+    vad_options: VadOptions,
 ):
     """Extract active regions from VAD scores.
 
@@ -226,8 +226,6 @@ def get_active_regions(
     Returns:
         segments List: Active regions.
     """
-    if vad_options is None:
-        vad_options = VadOptions()
 
     onset = vad_options.onset
     offset = vad_options.offset
@@ -235,70 +233,67 @@ def get_active_regions(
     silence_threshold = vad_options.min_silence_duration_ms // 16
     speech_pad = vad_options.speech_pad_ms / 1000
 
-    for k_scores in scores:
-        # initial state
-        start = timestamps[0]["start"]
-        is_active = k_scores[0] > onset
-        curr_scores = [k_scores[0]] if is_active else []
-        curr_timestamps = [start] if is_active else []
-        segments = []
-        silence_counter = 0
-        for timestamp, score in zip(timestamps[1:], k_scores[1:]):
-            # currently active
-            if is_active:
-                current_duration = timestamp["end"] - start
-                if current_duration > max_speech_duration_s:
-                    search_after = len(curr_scores) // 2
-                    # divide segment
-                    min_score_div_idx = search_after + np.argmin(
-                        curr_scores[search_after:]
-                    )
-                    min_score_t = curr_timestamps[min_score_div_idx]
+    # initial state
+    start = timestamps[0]["start"]
+    is_active = scores[0] > onset
+    curr_scores = [scores[0]] if is_active else []
+    curr_timestamps = [start] if is_active else []
+    segments = []
+    silence_counter = 0
+    for timestamp, score in zip(timestamps[1:], scores[1:]):
+        # currently active
+        if is_active:
+            current_duration = timestamp["end"] - start
+            if current_duration > max_speech_duration_s:
+                search_after = len(curr_scores) // 2
+                # divide segment
+                min_score_div_idx = search_after + np.argmin(curr_scores[search_after:])
+                min_score_t = curr_timestamps[min_score_div_idx]
+                segments.append(
+                    {
+                        "start": start - speech_pad,
+                        "end": min_score_t["end"] + speech_pad,
+                    }
+                )
+                start = curr_timestamps[min_score_div_idx]["start"]
+                curr_scores = curr_scores[min_score_div_idx + 1 :]
+                curr_timestamps = curr_timestamps[min_score_div_idx + 1 :]
+                if silence_counter != 0:
+                    silence_counter = sum(s < offset for s in curr_scores)
+            # switching from active to inactive
+            elif score < offset:
+                silence_counter += 1
+                if silence_counter > silence_threshold:
                     segments.append(
                         {
                             "start": start - speech_pad,
-                            "end": min_score_t["end"] + speech_pad,
+                            "end": curr_timestamps[-silence_counter + 1]["end"]
+                            + speech_pad,
                         }
                     )
-                    start = curr_timestamps[min_score_div_idx]["start"]
-                    curr_scores = curr_scores[min_score_div_idx + 1 :]
-                    curr_timestamps = curr_timestamps[min_score_div_idx + 1 :]
-                    if silence_counter != 0:
-                        silence_counter = sum(s < offset for s in curr_scores)
-                # switching from active to inactive
-                elif score < offset:
-                    silence_counter += 1
-                    if silence_counter > silence_threshold:
-                        segments.append(
-                            {
-                                "start": start - speech_pad,
-                                "end": curr_timestamps[-silence_counter]["end"]
-                                + speech_pad,
-                            }
-                        )
-                        is_active = False
-                        curr_scores = []
-                        curr_timestamps = []
-                        silence_counter = 0
-                        continue
-                else:
+                    is_active = False
+                    curr_scores = []
+                    curr_timestamps = []
                     silence_counter = 0
-
-                curr_scores.append(score)
-                curr_timestamps.append(timestamp)
-            # currently inactive
+                    continue
             else:
-                # switching from inactive to active
-                if score > onset:
-                    start = timestamp["start"]
-                    is_active = True
-                    silence_counter = 0
+                silence_counter = 0
 
-        # if active at the end, add final region
-        if is_active:
-            segments.append(
-                {"start": start - speech_pad, "end": timestamp["end"] + speech_pad}
-            )
+            curr_scores.append(score)
+            curr_timestamps.append(timestamp)
+        # currently inactive
+        else:
+            # switching from inactive to active
+            if score > onset:
+                start = timestamp["start"]
+                is_active = True
+                silence_counter = 0
+
+    # if active at the end, add final region
+    if is_active:
+        segments.append(
+            {"start": start - speech_pad, "end": timestamp["end"] + speech_pad}
+        )
 
     return segments
 
