@@ -385,7 +385,9 @@ class BatchedInferencePipeline:
                     vad_parameters = VadOptions(**vad_parameters)
 
                 scores, timestamps = get_vad_scores(audio)
-                active_segments = get_active_regions(scores.squeeze(), timestamps, vad_parameters)
+                active_segments = get_active_regions(
+                    scores.squeeze(), timestamps, vad_parameters
+                )
                 active_segments = support_segments(active_segments)
                 vad_segments = merge_segments(active_segments, vad_parameters)
             elif duration < chunk_length:
@@ -797,7 +799,9 @@ class WhisperModel:
             elif isinstance(vad_parameters, dict):
                 vad_parameters = VadOptions(**vad_parameters)
             scores, timestamps = get_vad_scores(audio)
-            active_segments = get_active_regions(scores.squeeze(), timestamps, vad_parameters)
+            active_segments = get_active_regions(
+                scores.squeeze(), timestamps, vad_parameters
+            )
             speech_chunks = support_segments(active_segments)
             audio = collect_chunks(audio, speech_chunks)
             duration_after_vad = audio.shape[0] / sampling_rate
@@ -1853,7 +1857,9 @@ class WhisperModel:
         if vad_filter_enabled:
             # get chunks of audio that contain speech
             scores, timestamps = get_vad_scores(audio)
-            active_segments = get_active_regions(scores.squeeze(), timestamps, vad_params)
+            active_segments = get_active_regions(
+                scores.squeeze(), timestamps, vad_params
+            )
             speech_chunks = support_segments(active_segments)
             # merge chunks of audio that contain speech into a single array
             audio = collect_chunks(audio, speech_chunks)
