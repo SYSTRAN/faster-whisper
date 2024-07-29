@@ -1764,7 +1764,7 @@ class WhisperModel:
 
         encoder_output = self.encode(features)
 
-        result = self.model.generate(
+        async_result = self.model.generate(
             encoder_output,
             [prompt] * batch_size,
             beam_size=options["beam_size"],
@@ -1775,8 +1775,9 @@ class WhisperModel:
             suppress_tokens=options["suppress_tokens"],
             return_scores=True,
             return_no_speech_prob=True,
+            asynchronous=True,
         )
-
+        result = [result.result() for result in async_result]
         output = []
         for res in result:
             output.append({})
