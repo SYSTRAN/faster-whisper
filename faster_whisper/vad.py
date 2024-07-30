@@ -251,7 +251,7 @@ def get_active_regions(
                 min_score_t = curr_timestamps[min_score_div_idx]
                 segments.append(
                     {
-                        "start": start - speech_pad,
+                        "start": max(0, start - speech_pad),
                         "end": min_score_t["end"] + speech_pad,
                     }
                 )
@@ -266,8 +266,8 @@ def get_active_regions(
                 if silence_counter > silence_threshold:
                     segments.append(
                         {
-                            "start": start - speech_pad,
-                            "end": curr_timestamps[-silence_counter + 1]["end"]
+                            "start": max(0, start - speech_pad),
+                            "end": curr_timestamps[-silence_counter]["end"]
                             + speech_pad,
                         }
                     )
@@ -294,7 +294,7 @@ def get_active_regions(
     # if active at the end, add final region
     if is_active:
         segments.append(
-            {"start": start - speech_pad, "end": timestamp["end"] + speech_pad}
+            {"start": max(0, start - speech_pad), "end": timestamp["end"] + speech_pad}
         )
 
     return segments
