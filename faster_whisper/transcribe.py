@@ -376,7 +376,7 @@ class BatchedInferencePipeline:
                         offset=0.363,
                         max_speech_duration_s=chunk_length,
                         speech_pad_ms=100,
-                        min_silence_duration_ms=160,
+                        min_silence_duration_ms=0,
                     )
                 elif isinstance(vad_parameters, dict):
                     if "max_speech_duration_s" in vad_parameters.keys():
@@ -388,7 +388,6 @@ class BatchedInferencePipeline:
                 active_segments = get_active_regions(
                     scores.squeeze(), timestamps, vad_parameters
                 )
-                active_segments = support_segments(active_segments)
                 vad_segments = merge_segments(active_segments, vad_parameters)
             elif duration < chunk_length:
                 vad_segments = [
@@ -1764,7 +1763,7 @@ class WhisperModel:
 
         encoder_output = self.encode(features)
 
-        async_result = self.model.generate(
+        result = self.model.generate(
             encoder_output,
             [prompt] * batch_size,
             beam_size=options["beam_size"],
@@ -1775,9 +1774,8 @@ class WhisperModel:
             suppress_tokens=options["suppress_tokens"],
             return_scores=True,
             return_no_speech_prob=True,
-            asynchronous=True,
         )
-        result = [result.result() for result in async_result]
+
         output = []
         for res in result:
             output.append({})
