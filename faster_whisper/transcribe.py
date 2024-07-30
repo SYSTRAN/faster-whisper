@@ -217,7 +217,6 @@ class BatchedInferencePipeline:
             seg_metadata = {
                 "start_time": seg["start"],
                 "end_time": seg["end"],
-                "stitched_seg": seg["segments"],
             }
             audio_segments.append(audio[f1:f2])
             segments_metadata.append(seg_metadata)
@@ -798,6 +797,13 @@ class WhisperModel:
                 scores.squeeze(), timestamps, vad_parameters
             )
             speech_chunks = support_segments(active_segments)
+            speech_chunks = [
+                {
+                    "start": int(chunk["start"] * sampling_rate),
+                    "end": int(chunk["end"] * sampling_rate),
+                }
+                for chunk in speech_chunks
+            ]
             audio = collect_chunks(audio, speech_chunks)
             duration_after_vad = audio.shape[0] / sampling_rate
 
@@ -1856,6 +1862,13 @@ class WhisperModel:
                 scores.squeeze(), timestamps, vad_params
             )
             speech_chunks = support_segments(active_segments)
+            speech_chunks = [
+                {
+                    "start": int(chunk["start"] * sampling_rate),
+                    "end": int(chunk["end"] * sampling_rate),
+                }
+                for chunk in speech_chunks
+            ]
             # merge chunks of audio that contain speech into a single array
             audio = collect_chunks(audio, speech_chunks)
 
