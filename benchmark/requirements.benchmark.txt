@@ -4,3 +4,4 @@ evaluate
 datasets
 memory_profiler
 py3nvml
+pytubefix
