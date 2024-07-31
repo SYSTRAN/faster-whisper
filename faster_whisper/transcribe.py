@@ -25,10 +25,8 @@ from faster_whisper.vad import (
     SpeechTimestampsMap,
     VadOptions,
     collect_chunks,
-    get_active_regions,
-    get_vad_scores,
+    get_speech_timestamps,
     merge_segments,
-    support_segments,
 )
 
 
@@ -376,10 +374,11 @@ class BatchedInferencePipeline:
                         **vad_parameters, max_speech_duration_s=chunk_length
                     )
 
-                scores, timestamps = get_vad_scores(audio)
-                active_segments = get_active_regions(
-                    scores.squeeze(), timestamps, vad_parameters
-                )
+                active_segments = get_speech_timestamps(audio, vad_parameters)
+                active_segments = [
+                    {"start": r["start"] / 16000, "end": r["end"] / 16000}
+                    for r in active_segments
+                ]
                 clip_timestamps = merge_segments(active_segments, vad_parameters)
             # run the audio if it is less than 30 sec even without clip_timestamps
             elif duration < chunk_length:
@@ -789,18 +788,7 @@ class WhisperModel:
                 vad_parameters = VadOptions()
             elif isinstance(vad_parameters, dict):
                 vad_parameters = VadOptions(**vad_parameters)
-            scores, timestamps = get_vad_scores(audio)
-            active_segments = get_active_regions(
-                scores.squeeze(), timestamps, vad_parameters
-            )
-            speech_chunks = support_segments(active_segments)
-            speech_chunks = [
-                {
-                    "start": int(chunk["start"] * sampling_rate),
-                    "end": int(chunk["end"] * sampling_rate),
-                }
-                for chunk in speech_chunks
-            ]
+            speech_chunks = get_speech_timestamps(audio, vad_parameters)
             audio = collect_chunks(audio, speech_chunks)
             duration_after_vad = audio.shape[0] / sampling_rate
 
@@ -1854,19 +1842,7 @@ class WhisperModel:
         # Check if vad is enabled, and collect voiced segments
         if vad_filter_enabled:
             # get chunks of audio that contain speech
-            scores, timestamps = get_vad_scores(audio)
-            active_segments = get_active_regions(
-                scores.squeeze(), timestamps, vad_params
-            )
-            speech_chunks = support_segments(active_segments)
-            speech_chunks = [
-                {
-                    "start": int(chunk["start"] * sampling_rate),
-                    "end": int(chunk["end"] * sampling_rate),
-                }
-                for chunk in speech_chunks
-            ]
-            # merge chunks of audio that contain speech into a single array
+            speech_chunks = get_speech_timestamps(audio, vad_params)
             audio = collect_chunks(audio, speech_chunks)
 
             # calculate new duration of audio without silence
