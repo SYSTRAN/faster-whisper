@@ -328,7 +328,7 @@ def merge_segments(segments_list, vad_options: VadOptions):
     seg_idxs = []
     merged_segments = []
     edge_padding = vad_options.speech_pad_ms / 1000
-    chunk_size = vad_options.max_speech_duration_s
+    chunk_length = vad_options.max_speech_duration_s
 
     curr_start = segments_list[0]["start"]
 
@@ -342,7 +342,7 @@ def merge_segments(segments_list, vad_options: VadOptions):
             if seg["end"] > segments_list[idx + 1]["start"]:
                 seg["end"] -= edge_padding
 
-        if seg["end"] - curr_start > chunk_size and curr_end - curr_start > 0:
+        if seg["end"] - curr_start > chunk_length and curr_end - curr_start > 0:
             merged_segments.append(
                 {
                     "start": curr_start,

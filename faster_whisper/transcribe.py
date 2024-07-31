@@ -1843,6 +1843,7 @@ class WhisperModel:
         if vad_filter_enabled:
             # get chunks of audio that contain speech
             speech_chunks = get_speech_timestamps(audio, vad_params)
+            # merge chunks of audio that contain speech into a single array
             audio = collect_chunks(audio, speech_chunks)
 
             # calculate new duration of audio without silence
