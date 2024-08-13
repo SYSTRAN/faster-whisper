@@ -118,15 +118,15 @@ class BatchedInferencePipeline:
         self.preset_language = language
         self.last_speech_timestamp = 0.0
 
-    def forward(self, features, segments_metadata, **forward_params):
+    def forward(self, features, chunks_metadata, **forward_params):
         encoder_output, outputs = self.model.generate_segment_batched(
             features, self.tokenizer, forward_params
         )
 
         segmented_outputs = []
         segment_sizes = []
-        for segment_metadata, output in zip(segments_metadata, outputs):
-            duration = segment_metadata["end_time"] - segment_metadata["start_time"]
+        for chunk_metadata, output in zip(chunks_metadata, outputs):
+            duration = chunk_metadata["end_time"] - chunk_metadata["start_time"]
             segment_size = int(ceil(duration) * self.model.frames_per_second)
             segment_sizes.append(segment_size)
             (
@@ -136,7 +136,7 @@ class BatchedInferencePipeline:
             ) = self.model._split_segments_by_timestamps(
                 tokenizer=self.tokenizer,
                 tokens=output["tokens"],
-                time_offset=segment_metadata["start_time"],
+                time_offset=chunk_metadata["start_time"],
                 segment_size=segment_size,
                 segment_duration=duration,
                 seek=0,
@@ -203,22 +203,6 @@ class BatchedInferencePipeline:
                 self.tokenizer.language_code = language
 
         return language, language_probability, task, all_language_probs
-
-    @staticmethod
-    def audio_split(audio, segments, sampling_rate):
-        """Returns splitted audio chunks as iterator"""
-        audio_segments = []
-        segments_metadata = []
-        for seg in segments:
-            f1 = int(seg["start"] * sampling_rate)
-            f2 = int(seg["end"] * sampling_rate)
-            seg_metadata = {
-                "start_time": seg["start"],
-                "end_time": seg["end"],
-            }
-            audio_segments.append(audio[f1:f2])
-            segments_metadata.append(seg_metadata)
-        return audio_segments, segments_metadata
 
     def transcribe(
         self,
@@ -375,14 +359,10 @@ class BatchedInferencePipeline:
                     )
 
                 active_segments = get_speech_timestamps(audio, vad_parameters)
-                active_segments = [
-                    {"start": r["start"] / 16000, "end": r["end"] / 16000}
-                    for r in active_segments
-                ]
                 clip_timestamps = merge_segments(active_segments, vad_parameters)
             # run the audio if it is less than 30 sec even without clip_timestamps
             elif duration < chunk_length:
-                clip_timestamps = [{"start": 0.0, "end": duration}]
+                clip_timestamps = [{"start": 0, "end": audio.shape[0]}]
             else:
                 raise RuntimeError(
                     "No clip timestamps found. "
@@ -406,7 +386,8 @@ class BatchedInferencePipeline:
         ) = self.get_language_and_tokenizer(audio, task, language)
 
         duration_after_vad = sum(
-            segment["end"] - segment["start"] for segment in clip_timestamps
+            (segment["end"] - segment["start"]) / sampling_rate
+            for segment in clip_timestamps
         )
 
         # batched options: see the difference with default options in WhisperModel
@@ -453,24 +434,22 @@ class BatchedInferencePipeline:
             all_language_probs=all_language_probs,
         )
 
-        audio_segments, segments_metadata = self.audio_split(
-            audio, clip_timestamps, sampling_rate
-        )
+        audio_chunks, chunks_metadata = collect_chunks(audio, clip_timestamps)
         to_cpu = (
             self.model.model.device == "cuda" and len(self.model.model.device_index) > 1
         )
         features = torch.stack(
             [
-                self.model.feature_extractor(audio_segment, to_cpu=to_cpu)[
+                self.model.feature_extractor(chunk, to_cpu=to_cpu)[
                     ..., : self.model.feature_extractor.nb_max_frames
                 ]
-                for audio_segment in audio_segments
+                for chunk in audio_chunks
             ]
         )
 
         segments = self._batched_segments_generator(
             features,
-            segments_metadata,
+            chunks_metadata,
             batch_size,
             batched_options,
             log_progress,
@@ -479,14 +458,14 @@ class BatchedInferencePipeline:
         return segments, info
 
     def _batched_segments_generator(
-        self, features, segments_metadata, batch_size, options, log_progress
+        self, features, chunks_metadata, batch_size, options, log_progress
     ):
         pbar = tqdm(total=len(features), disable=not log_progress, position=0)
         seg_idx = 0
         for i in range(0, len(features), batch_size):
             results = self.forward(
                 features[i : i + batch_size],
-                segments_metadata[i : i + batch_size],
+                chunks_metadata[i : i + batch_size],
                 **options._asdict(),
             )
 
@@ -789,7 +768,8 @@ class WhisperModel:
             elif isinstance(vad_parameters, dict):
                 vad_parameters = VadOptions(**vad_parameters)
             speech_chunks = get_speech_timestamps(audio, vad_parameters)
-            audio = collect_chunks(audio, speech_chunks)
+            audio_chunks, chunks_metadata = collect_chunks(audio, speech_chunks)
+            audio = torch.cat(audio_chunks, dim=0)
             duration_after_vad = audio.shape[0] / sampling_rate
 
             self.logger.info(
@@ -1844,7 +1824,8 @@ class WhisperModel:
             # get chunks of audio that contain speech
             speech_chunks = get_speech_timestamps(audio, vad_params)
             # merge chunks of audio that contain speech into a single array
-            audio = collect_chunks(audio, speech_chunks)
+            audio_chunks, chunks_metadata = collect_chunks(audio, speech_chunks)
+            audio = torch.cat(audio_chunks, dim=0)
 
             # calculate new duration of audio without silence
             duration_vad = audio.shape[0] / sampling_rate
