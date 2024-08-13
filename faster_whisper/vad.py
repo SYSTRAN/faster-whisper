@@ -174,12 +174,23 @@ def get_speech_timestamps(
     return speeches
 
 
-def collect_chunks(audio: torch.Tensor, chunks: List[dict]) -> torch.Tensor:
+def collect_chunks(
+    audio: torch.Tensor, chunks: List[dict], sampling_rate: int = 16000
+) -> torch.Tensor:
     """Collects and concatenates audio chunks."""
     if not chunks:
         return torch.tensor([], dtype=torch.float32)
 
-    return torch.cat([audio[chunk["start"] : chunk["end"]] for chunk in chunks])
+    audio_chunks = []
+    chunks_metadata = []
+    for chunk in chunks:
+        chunk_metadata = {
+            "start_time": chunk["start"] / sampling_rate,
+            "end_time": chunk["end"] / sampling_rate,
+        }
+        audio_chunks.append(audio[chunk["start"] : chunk["end"]])
+        chunks_metadata.append(chunk_metadata)
+    return audio_chunks, chunks_metadata
 
 
 class SpeechTimestampsMap:
@@ -223,8 +234,8 @@ class SpeechTimestampsMap:
 @functools.lru_cache
 def get_vad_model():
     """Returns the VAD model instance."""
-    encoder_path = os.path.join(get_assets_path(), "silero_encoder.onnx")
-    decoder_path = os.path.join(get_assets_path(), "silero_decoder.onnx")
+    encoder_path = os.path.join(get_assets_path(), "silero_encoder_v5.onnx")
+    decoder_path = os.path.join(get_assets_path(), "silero_decoder_v5.onnx")
     return SileroVADModel(encoder_path, decoder_path)
 
 
@@ -293,42 +304,13 @@ class SileroVADModel:
         return out
 
 
-# BSD 2-Clause License
-
-# Copyright (c) 2024, Max Bain
-
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-
-# 1. Redistributions of source code must retain the above copyright notice, this
-#    list of conditions and the following disclaimer.
-
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-#    this list of conditions and the following disclaimer in the documentation
-#    and/or other materials provided with the distribution.
-
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-
-# The code below is copied from whisper-x (https://github.com/m-bain/whisperX)
-# and adapted for faster_whisper.
-
-
 def merge_segments(segments_list, vad_options: VadOptions):
     curr_end = 0
     seg_idxs = []
     merged_segments = []
-    edge_padding = vad_options.speech_pad_ms / 1000
-    chunk_length = vad_options.max_speech_duration_s
+    sampling_rate = 16000
+    edge_padding = vad_options.speech_pad_ms * sampling_rate // 1000
+    chunk_length = vad_options.max_speech_duration_s * sampling_rate
 
     curr_start = segments_list[0]["start"]
 
