@@ -1,6 +1,7 @@
 import itertools
 import json
 import logging
+import multiprocessing
 import os
 import random
 import zlib
@@ -512,7 +513,7 @@ class WhisperModel:
         device: str = "auto",
         device_index: Union[int, List[int]] = 0,
         compute_type: str = "default",
-        cpu_threads: int = 16,
+        cpu_threads: int = multiprocessing.cpu_count() // 2,
         num_workers: int = 1,
         download_root: Optional[str] = None,
         local_files_only: bool = False,
@@ -535,8 +536,8 @@ class WhisperModel:
             when transcribe() is called from multiple Python threads (see also num_workers).
           compute_type: Type to use for computation.
             See https://opennmt.net/CTranslate2/quantization.html.
-          cpu_threads: Number of threads to use when running on CPU (4 by default).
-            A non zero value overrides the OMP_NUM_THREADS environment variable.
+          cpu_threads: Number of threads to use when running on CPU (number of physical
+            cores by default). A non zero value overrides the OMP_NUM_THREADS environment variable.
           num_workers: When transcribe() is called from multiple Python threads,
             having multiple workers enables true parallelism when running the model
             (concurrent calls to self.model.generate() will run in parallel).
