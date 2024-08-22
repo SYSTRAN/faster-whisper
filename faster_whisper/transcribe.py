@@ -456,6 +456,12 @@ class BatchedInferencePipeline:
                 )
             language = "en"
 
+        if len(vad_segments) == 0:
+            def empty_gen():
+                return
+                yield
+            return empty_gen(), TranscriptionInfo()
+
         (
             language,
             language_probability,
