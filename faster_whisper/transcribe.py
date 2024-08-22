@@ -456,12 +456,6 @@ class BatchedInferencePipeline:
                 )
             language = "en"
 
-        if len(vad_segments) == 0:
-            def empty_gen():
-                return
-                yield
-            return empty_gen(), TranscriptionInfo()
-
         (
             language,
             language_probability,
@@ -516,6 +510,13 @@ class BatchedInferencePipeline:
             vad_options=None,
             all_language_probs=all_language_probs,
         )
+
+        # Handle for when there is no active speech
+        if len(vad_segments) == 0:
+            def empty_gen():
+                return
+                yield
+            return empty_gen(), info
 
         audio_segments, segments_metadata = self.audio_split(
             audio, vad_segments, sampling_rate
