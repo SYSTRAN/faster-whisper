@@ -513,9 +513,11 @@ class BatchedInferencePipeline:
 
         # Handle for when there is no active speech
         if len(vad_segments) == 0:
+
             def empty_gen():
                 return
                 yield
+
             return empty_gen(), info
 
         audio_segments, segments_metadata = self.audio_split(
