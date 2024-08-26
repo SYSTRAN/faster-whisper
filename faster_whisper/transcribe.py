@@ -385,9 +385,9 @@ class BatchedInferencePipeline:
             all_language_probs,
         ) = self.get_language_and_tokenizer(audio, task, language)
 
-        duration_after_vad = sum(
-            (segment["end"] - segment["start"]) / sampling_rate
-            for segment in clip_timestamps
+        duration_after_vad = (
+            sum((segment["end"] - segment["start"]) for segment in clip_timestamps)
+            / sampling_rate
         )
 
         # batched options: see the difference with default options in WhisperModel
@@ -438,13 +438,17 @@ class BatchedInferencePipeline:
         to_cpu = (
             self.model.model.device == "cuda" and len(self.model.model.device_index) > 1
         )
-        features = torch.stack(
-            [
-                self.model.feature_extractor(chunk, to_cpu=to_cpu)[
-                    ..., : self.model.feature_extractor.nb_max_frames
+        features = (
+            torch.stack(
+                [
+                    self.model.feature_extractor(chunk, to_cpu=to_cpu)[
+                        ..., : self.model.feature_extractor.nb_max_frames
+                    ]
+                    for chunk in audio_chunks
                 ]
-                for chunk in audio_chunks
-            ]
+            )
+            if duration_after_vad
+            else []
         )
 
         segments = self._batched_segments_generator(
