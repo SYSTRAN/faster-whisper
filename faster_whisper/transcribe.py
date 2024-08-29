@@ -2085,9 +2085,11 @@ def restore_speech_timestamps(
             )
 
         else:
+            middle = (segment.start + segment.end) / 2
+            chunk_index = ts_map.get_chunk_index(middle)
             segment = segment._replace(
-                start=ts_map.get_original_time(segment.start),
-                end=ts_map.get_original_time(segment.end),
+                start=ts_map.get_original_time(segment.start, chunk_index),
+                end=ts_map.get_original_time(segment.end, chunk_index),
             )
 
         yield segment
