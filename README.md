@@ -69,7 +69,6 @@ segments, info = model.transcribe("audio.mp3", beam_size=5, language="en")
 
 * Python 3.8 or greater
 
-Unlike openai-whisper, FFmpeg does **not** need to be installed on the system. The audio is decoded with the Python library [PyAV](https://github.com/PyAV-Org/PyAV) which bundles the FFmpeg libraries in its package.
 
 ### GPU
 
@@ -166,6 +165,35 @@ for segment in segments:
 segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
+
+### multi-segment language detection
+
+To directly use the model for improved language detection, the following code snippet can be used:
+
+```python
+from faster_whisper import WhisperModel
+model = WhisperModel("medium", device="cuda", compute_type="float16")
+language_info = model.detect_language_multi_segment("audio.mp3")
+```
+
+### Batched faster-whisper
+
+
+The batched version of faster-whisper is inspired by [whisper-x](https://github.com/m-bain/whisperX) licensed under the BSD-2 Clause license and integrates its VAD model to this library. We modify this implementation and also replaced the feature extraction with a faster torch-based implementation. Batched version improves the speed upto 10-12x compared to openAI implementation and 3-4x compared to the sequential faster_whisper version. It works by transcribing semantically meaningful audio chunks as batches leading to faster inference. 
+
+The following code snippet illustrates how to run inference with batched version on an example audio file. Please also refer to the test scripts of batched faster whisper.
+
+```python
+from faster_whisper import WhisperModel, BatchedInferencePipeline
+
+model = WhisperModel("medium", device="cuda", compute_type="float16")
+batched_model = BatchedInferencePipeline(model=model)
+segments, info = batched_model.transcribe("audio.mp3", batch_size=16)
+
+for segment in segments:
+    print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+```
+
 ### Faster Distil-Whisper
 
 The Distil-Whisper checkpoints are compatible with the Faster-Whisper package. In particular, the latest [distil-large-v3](https://huggingface.co/distil-whisper/distil-large-v3)
