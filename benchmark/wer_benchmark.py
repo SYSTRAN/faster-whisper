@@ -1,6 +1,5 @@
 import argparse
 import json
-import os
 
 from datasets import load_dataset
 from evaluate import load
@@ -27,9 +26,7 @@ dataset = load_dataset("librispeech_asr", "clean", split="validation", streaming
 
 # define the evaluation metric
 wer_metric = load("wer")
-
-with open(os.path.join(os.path.dirname(__file__), "normalizer.json"), "r") as f:
-    normalizer = EnglishTextNormalizer(json.load(f))
+normalizer = EnglishTextNormalizer(json.load(open("normalizer.json")))
 
 
 def inference(batch):
