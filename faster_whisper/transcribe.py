@@ -610,7 +610,7 @@ class WhisperModel:
             when transcribe() is called from multiple Python threads (see also num_workers).
           compute_type: Type to use for computation.
             See https://opennmt.net/CTranslate2/quantization.html.
-          cpu_threads: Number of threads to use when running on CPU (4 by default).
+          cpu_threads: Number of threads to use when running on CPU (16 by default).
             A non zero value overrides the OMP_NUM_THREADS environment variable.
           num_workers: When transcribe() is called from multiple Python threads,
             having multiple workers enables true parallelism when running the model
