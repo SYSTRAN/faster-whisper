@@ -511,6 +511,10 @@ class BatchedInferencePipeline:
             all_language_probs=all_language_probs,
         )
 
+        # Exit if no activity if found
+        if duration_after_vad==0:
+            return [], info
+
         audio_segments, segments_metadata = self.audio_split(
             audio, vad_segments, sampling_rate
         )
