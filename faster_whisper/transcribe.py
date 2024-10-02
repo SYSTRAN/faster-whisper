@@ -2124,7 +2124,7 @@ class WhisperModel:
                 all_language_probabilities[language]
             )
 
-            return (frequency, prob_avg)
+            return frequency, prob_avg
 
         max_language = None
 

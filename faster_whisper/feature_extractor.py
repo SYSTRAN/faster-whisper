@@ -26,16 +26,14 @@ class FeatureExtractor:
         self.mel_filters = self.get_mel_filters(
             sampling_rate, n_fft, n_mels=feature_size
         )
-        self.n_mels = feature_size
 
     @staticmethod
-    def get_mel_filters(sr, n_fft, n_mels=128, dtype=torch.float32):
+    def get_mel_filters(sr, n_fft, n_mels=128):
         """
         Implementation of librosa.filters.mel in Pytorch
         """
         # Initialize the weights
         n_mels = int(n_mels)
-        weights = torch.zeros((n_mels, int(1 + n_fft // 2)), dtype=dtype)
 
         # Center freqs of each FFT bin
         fftfreqs = torch.fft.rfftfreq(n=n_fft, d=1.0 / sr)

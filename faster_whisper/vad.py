@@ -537,10 +537,10 @@ def merge_chunks(
         # reset the edge padding. Similarly for end timing.
         if idx > 0:
             if seg.start < segments_list[idx - 1].end:
-                seg.start = seg.start + edge_padding
+                seg.start += edge_padding
         if idx < len(segments_list) - 1:
             if seg.end > segments_list[idx + 1].start:
-                seg.end = seg.end - edge_padding
+                seg.end -= edge_padding
 
         if seg.end - curr_start > chunk_size and curr_end - curr_start > 0:
             merged_segments.append(
