@@ -314,8 +314,10 @@ class BatchedInferencePipeline:
         prefix: Optional[str] = None,
         suppress_blank: bool = True,
         suppress_tokens: Optional[List[int]] = [-1],
+        # fmt: off
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
+        # fmt: on
         max_new_tokens: Optional[int] = None,
         hotwords: Optional[str] = None,
         word_timestamps: bool = False,
@@ -738,7 +740,9 @@ class WhisperModel:
         without_timestamps: bool = False,
         max_initial_timestamp: float = 1.0,
         word_timestamps: bool = False,
+        # fmt: off
         prepend_punctuations: str = "\"'“¿([{-",
+        # fmt: on
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         multilingual: bool = False,
         output_language: Optional[str] = None,
