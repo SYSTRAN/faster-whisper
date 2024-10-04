@@ -1860,7 +1860,7 @@ class WhisperModel:
         Detect language based on N highly-confident segments of a language.
         """
         # The threshold is used to decide if the audio is silence or not.
-        # The default is 0.02 (2.0%) i.e, if more than 2.0% of the audio is silent,
+        # The default is 0.02 (2.0%) i.e, if more than 98.0% of the audio is silent,
         # the audio is considered as silence.
         if not params:
             params = {
