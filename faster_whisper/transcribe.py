@@ -314,8 +314,9 @@ class BatchedInferencePipeline:
         prefix: Optional[str] = None,
         suppress_blank: bool = True,
         suppress_tokens: Optional[List[int]] = [-1],
+        # Unicode characters: ¿ (00BF), 。(3002), ， (FF0C), ！ (FF01), ？ (FF1F), ： (FF1A), 、 (3001)
         prepend_punctuations: str = "\"'\u00BF([{-"
-        append_punctuations: str = "\"'.。,，!！?？:：")]}、"
+        append_punctuations: str = "\"\'.\u3002,\uFF0C!\uFF01?\uFF1F:\uFF1A\")]}、"
         max_new_tokens: Optional[int] = None,
         hotwords: Optional[str] = None,
         word_timestamps: bool = False,
@@ -738,8 +739,10 @@ class WhisperModel:
         without_timestamps: bool = False,
         max_initial_timestamp: float = 1.0,
         word_timestamps: bool = False,
-        punctuation = "\"'\u00BF([{-\"'.。,，!！?？:：")]}、"
-        append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
+        # Unicode characters: ¿ (00BF), 。(3002), ， (FF0C), ！ (FF01), ？ (FF1F), ： (FF1A), 、 (3001)
+        punctuation = "\"\'\u00BF([{-\"\'.\u3002,\uFF0C!\uFF01?\uFF1F:\uFF1A\")]}、"
+        # Unicode characters: 。(3002), ， (FF0C), ！ (FF01), ？ (FF1F), ： (FF1A), 、 (3001)
+        append_punctuations: str = "\"\'.\u3002,\uFF0C!\uFF01?\uFF1F:\uFF1A\")]}、"
         multilingual: bool = False,
         output_language: Optional[str] = None,
         vad_filter: bool = False,
@@ -1650,7 +1653,8 @@ class WhisperModel:
             # hack: truncate long words at sentence boundaries.
             # a better segmentation algorithm based on VAD should be able to replace this.
             if len(word_durations) > 0:
-                sentence_end_marks = ".。!！?？"
+                # Unicode characters: 。(3002), ！ (FF01), ？ (FF1F)
+                sentence_end_marks = ".\u3002!\uFF01?\uFF1F"
                 # ensure words at sentence boundaries
                 # are not longer than twice the median word duration.
                 for i in range(1, len(alignment)):
