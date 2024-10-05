@@ -70,14 +70,13 @@ def download_model(
     Raises:
       ValueError: if the model size is invalid.
     """
-    if re.match(r".*/.*", size_or_id):
+    if '/' in size_or_id:
         repo_id = size_or_id
     else:
         repo_id = _MODELS.get(size_or_id)
         if repo_id is None:
             raise ValueError(
-                "Invalid model size '%s', expected one of: %s"
-                % (size_or_id, ", ".join(_MODELS.keys()))
+                f"Invalid model size '{size_or_id}', expected one of: {', '.join(_MODELS.keys())}"
             )
 
     allow_patterns = [
