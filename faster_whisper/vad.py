@@ -77,16 +77,20 @@ def get_speech_timestamps(
     min_silence_samples = sampling_rate * min_silence_duration_ms / 1000
     min_silence_samples_at_max_speech = sampling_rate * 98 / 1000
 
-    audio_length_samples = len(audio)
+    # Convert audio to NumPy array once and pad it to avoid padding in the loop
+    audio_np = audio.numpy()
+    pad_length = (window_size_samples - len(audio_np) % window_size_samples) % window_size_samples
+    if pad_length > 0:
+        audio_np = np.pad(audio_np, (0, pad_length))
+    audio_length_samples = len(audio_np)
 
     model = get_vad_model()
     state, context = model.get_initial_states(batch_size=1)
 
     speech_probs = []
     for current_start_sample in range(0, audio_length_samples, window_size_samples):
-        chunk = audio[current_start_sample : current_start_sample + window_size_samples]
-        if len(chunk) < window_size_samples:
-            chunk = np.pad(chunk, (0, int(window_size_samples - len(chunk))))
+        chunk = audio_np[current_start_sample : current_start_sample + window_size_samples]
+        # No need to pad inside the loop as audio_np is already padded
         speech_prob, state, context = model(chunk, state, context, sampling_rate)
         speech_probs.append(speech_prob)
 
