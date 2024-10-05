@@ -315,8 +315,8 @@ class BatchedInferencePipeline:
         suppress_blank: bool = True,
         suppress_tokens: Optional[List[int]] = [-1],
         # Unicode characters: ¿ (00BF), 。(3002), ， (FF0C), ！ (FF01), ？ (FF1F), ： (FF1A), 、 (3001)
-        prepend_punctuations: str = "\"'\u00BF([{-"
-        append_punctuations: str = "\"\'.\u3002,\uFF0C!\uFF01?\uFF1F:\uFF1A\")]}、"
+        prepend_punctuations: str = '"\'\u00BF([{-'
+        append_punctuations: str = '"\'.\u3002,\uFF0C!\uFF01?\uFF1F:\uFF1A")]}、'
         max_new_tokens: Optional[int] = None,
         hotwords: Optional[str] = None,
         word_timestamps: bool = False,
@@ -740,9 +740,9 @@ class WhisperModel:
         max_initial_timestamp: float = 1.0,
         word_timestamps: bool = False,
         # Unicode characters: ¿ (00BF), 。(3002), ， (FF0C), ！ (FF01), ？ (FF1F), ： (FF1A), 、 (3001)
-        punctuation = "\"\'\u00BF([{-\"\'.\u3002,\uFF0C!\uFF01?\uFF1F:\uFF1A\")]}、"
+        punctuation = '"\'\u00BF([{-"\'.\u3002,\uFF0C!\uFF01?\uFF1F:\uFF1A")]}、'
         # Unicode characters: 。(3002), ， (FF0C), ！ (FF01), ？ (FF1F), ： (FF1A), 、 (3001)
-        append_punctuations: str = "\"\'.\u3002,\uFF0C!\uFF01?\uFF1F:\uFF1A\")]}、"
+        append_punctuations: str = '"\'\u3002,\uFF0C!\uFF01?\uFF1F:\uFF1A")]}、'
         multilingual: bool = False,
         output_language: Optional[str] = None,
         vad_filter: bool = False,
