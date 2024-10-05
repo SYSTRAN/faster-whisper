@@ -150,7 +150,9 @@ class disabled_tqdm(tqdm):
 
 
 def get_end(segments: List[dict]) -> Optional[float]:
-    return next(
-        (w["end"] for s in reversed(segments) for w in reversed(s["words"])),
-        segments[-1]["end"] if segments else None,
-    )
+    if not segments:
+        return None
+    last_segment = segments[-1]
+    if "words" in last_segment and last_segment["words"]:
+        return last_segment["words"][-1].get("end")
+    return last_segment.get("end")
