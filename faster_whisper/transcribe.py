@@ -953,9 +953,9 @@ class WhisperModel:
                         )
                         language_probability = max(detected_language_info[language])
                     else:
-                        # It's possible VAD removes all segments due to no voice, 
+                        # It's possible VAD removes all segments due to no voice,
                         # then it doesn't matter which language
-                        language = 'en'
+                        language = "en"
                         language_probability = 0
 
                 self.logger.info(
