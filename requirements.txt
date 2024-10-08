@@ -3,6 +3,6 @@ huggingface_hub>=0.13
 tokenizers>=0.13,<1
 onnxruntime>=1.14,<2 
 pyannote-audio>=3.1.1
-torch>=2.1.1 
-torchaudio>=2.1.2
+torch>=2.1.1,<2.4.0
+torchaudio>=2.1.2,<2.4.0
 tqdm
