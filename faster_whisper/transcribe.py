@@ -944,13 +944,19 @@ class WhisperModel:
                     )
                     seek += segment.shape[-1]
                 else:
-                    # If no language detected for all segments, the majority vote of the highest
-                    # projected languages for all segments is used to determine the language.
-                    language = max(
-                        detected_language_info,
-                        key=lambda lang: len(detected_language_info[lang]),
-                    )
-                    language_probability = max(detected_language_info[language])
+                    if detected_language_info:
+                        # If no language detected for all segments, the majority vote of the highest
+                        # projected languages for all segments is used to determine the language.
+                        language = max(
+                            detected_language_info,
+                            key=lambda lang: len(detected_language_info[lang]),
+                        )
+                        language_probability = max(detected_language_info[language])
+                    else:
+                        # It's possible VAD removes all segments due to no voice, 
+                        # then it doesn't matter which language
+                        language = 'en'
+                        language_probability = 0
 
                 self.logger.info(
                     "Detected language '%s' with probability %.2f",
