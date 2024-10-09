@@ -747,6 +747,7 @@ class WhisperModel:
         hotwords: Optional[str] = None,
         language_detection_threshold: Optional[float] = None,
         language_detection_segments: int = 1,
+        language_detection_only: bool = False,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
@@ -823,6 +824,7 @@ class WhisperModel:
           language_detection_threshold: If the maximum probability of the language tokens is higher
            than this value, the language is detected.
           language_detection_segments: Number of segments to consider for the language detection.
+          language_detection_only: Return the detected language probabilities without transcribing.
         Returns:
           A tuple with:
 
@@ -1011,10 +1013,17 @@ class WhisperModel:
             hotwords=hotwords,
         )
 
-        segments = self.generate_segments(features, tokenizer, options, encoder_output)
+        if language_detection_only:
+            segments = []
+        else:
+            segments = self.generate_segments(
+                features, tokenizer, options, encoder_output
+            )
 
-        if speech_chunks:
-            segments = restore_speech_timestamps(segments, speech_chunks, sampling_rate)
+            if speech_chunks:
+                segments = restore_speech_timestamps(
+                    segments, speech_chunks, sampling_rate
+                )
 
         info = TranscriptionInfo(
             language=language,
