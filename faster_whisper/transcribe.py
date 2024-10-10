@@ -1025,7 +1025,7 @@ class WhisperModel:
             transcription_options=options,
             vad_options=vad_parameters,
             all_language_probs=all_language_probs,
-            num_segments=len(list(segments))
+            num_segments=len(list(segments)),
         )
         return segments, info
 
