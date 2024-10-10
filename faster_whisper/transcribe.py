@@ -98,7 +98,7 @@ class TranscriptionInfo(NamedTuple):
     all_language_probs: Optional[List[Tuple[str, float]]]
     transcription_options: TranscriptionOptions
     vad_options: VadOptions
-    num_segments: int
+    num_of_segments: int
 
 
 # The code below is originally from HF pipeline and is used in whisper-x
@@ -1017,7 +1017,7 @@ class WhisperModel:
         if speech_chunks:
             segments = restore_speech_timestamps(segments, speech_chunks, sampling_rate)
 
-        num_segments=len(list(segments))
+        num_of_segments = len(list(segments))
 
         info = TranscriptionInfo(
             language=language,
@@ -1027,7 +1027,7 @@ class WhisperModel:
             transcription_options=options,
             vad_options=vad_parameters,
             all_language_probs=all_language_probs,
-            num_segments=num_segments,
+            num_of_segments=num_of_segments,
         )
         return segments, info
 
