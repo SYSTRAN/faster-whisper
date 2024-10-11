@@ -1027,6 +1027,351 @@ class WhisperModel:
         )
         return segments, info
 
+
+    # transcribe_after_detect_language拷贝自transcribe
+    def transcribe_after_detect_language(
+        self,
+        audio: Union[str, BinaryIO, torch.Tensor, np.ndarray],
+        target_language,
+        target_language_probability_threshold,
+        language: Optional[str] = None,
+        task: str = "transcribe",
+        beam_size: int = 5,
+        best_of: int = 5,
+        patience: float = 1,
+        length_penalty: float = 1,
+        repetition_penalty: float = 1,
+        no_repeat_ngram_size: int = 0,
+        temperature: Union[float, List[float], Tuple[float, ...]] = [
+            0.0,
+            0.2,
+            0.4,
+            0.6,
+            0.8,
+            1.0,
+        ],
+        compression_ratio_threshold: Optional[float] = 2.4,
+        log_prob_threshold: Optional[float] = -1.0,
+        log_prob_low_threshold: Optional[float] = None,
+        no_speech_threshold: Optional[float] = 0.6,
+        condition_on_previous_text: bool = True,
+        prompt_reset_on_temperature: float = 0.5,
+        initial_prompt: Optional[Union[str, Iterable[int]]] = None,
+        prefix: Optional[str] = None,
+        suppress_blank: bool = True,
+        suppress_tokens: Optional[List[int]] = [-1],
+        without_timestamps: bool = False,
+        max_initial_timestamp: float = 1.0,
+        word_timestamps: bool = False,
+        prepend_punctuations: str = "\"'“¿([{-",
+        append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
+        multilingual: bool = False,
+        output_language: Optional[str] = None,
+        vad_filter: bool = False,
+        vad_parameters: Optional[Union[dict, VadOptions]] = None,
+        max_new_tokens: Optional[int] = None,
+        chunk_length: Optional[int] = None,
+        clip_timestamps: Union[str, List[float]] = "0",
+        hallucination_silence_threshold: Optional[float] = None,
+        hotwords: Optional[str] = None,
+        language_detection_threshold: Optional[float] = None,
+        language_detection_segments: int = 1,
+    ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
+        """Transcribes an input file.
+
+        Arguments:
+          audio: Path to the input file (or a file-like object), or the audio waveform.
+          language: The language spoken in the audio. It should be a language code such
+            as "en" or "fr". If not set, the language will be detected in the first 30 seconds
+            of audio.
+          task: Task to execute (transcribe or translate).
+          beam_size: Beam size to use for decoding.
+          best_of: Number of candidates when sampling with non-zero temperature.
+          patience: Beam search patience factor.
+          length_penalty: Exponential length penalty constant.
+          repetition_penalty: Penalty applied to the score of previously generated tokens
+            (set > 1 to penalize).
+          no_repeat_ngram_size: Prevent repetitions of ngrams with this size (set 0 to disable).
+          temperature: Temperature for sampling. It can be a tuple of temperatures,
+            which will be successively used upon failures according to either
+            `compression_ratio_threshold` or `log_prob_threshold`.
+          compression_ratio_threshold: If the gzip compression ratio is above this value,
+            treat as failed.
+          log_prob_threshold: If the average log probability over sampled tokens is
+            below this value, treat as failed.
+          log_prob_low_threshold: This parameter alone is sufficient to skip an output text,
+          wheras log_prob_threshold also looks for appropriate no_speech_threshold value.
+          This value should be less than log_prob_threshold.
+          no_speech_threshold: If the no_speech probability is higher than this value AND
+            the average log probability over sampled tokens is below `log_prob_threshold`,
+            consider the segment as silent.
+          condition_on_previous_text: If True, the previous output of the model is provided
+            as a prompt for the next window; disabling may make the text inconsistent across
+            windows, but the model becomes less prone to getting stuck in a failure loop,
+            such as repetition looping or timestamps going out of sync.
+          prompt_reset_on_temperature: Resets prompt if temperature is above this value.
+            Arg has effect only if condition_on_previous_text is True.
+          initial_prompt: Optional text string or iterable of token ids to provide as a
+            prompt for the first window.
+          prefix: Optional text to provide as a prefix for the first window.
+          suppress_blank: Suppress blank outputs at the beginning of the sampling.
+          suppress_tokens: List of token IDs to suppress. -1 will suppress a default set
+            of symbols as defined in `tokenizer.non_speech_tokens()`.
+          without_timestamps: Only sample text tokens.
+          max_initial_timestamp: The initial timestamp cannot be later than this.
+          word_timestamps: Extract word-level timestamps using the cross-attention pattern
+            and dynamic time warping, and include the timestamps for each word in each segment.
+          prepend_punctuations: If word_timestamps is True, merge these punctuation symbols
+            with the next word
+          append_punctuations: If word_timestamps is True, merge these punctuation symbols
+            with the previous word
+          multilingual: If True, perform transcription on multilingual videos
+            and return the transcript based
+            on the 'output_language' flag.
+          output_language: Valid only if multilingual is set to True.
+            Specifies the string representing the output language. One of
+            'en' (English) or 'hybrid' (code-switched transcription).
+          vad_filter: Enable the voice activity detection (VAD) to filter out parts of the audio
+            without speech. This step is using the Silero VAD model
+            https://github.com/snakers4/silero-vad.
+          vad_parameters: Dictionary of Silero VAD parameters or VadOptions class (see available
+            parameters and default values in the class `VadOptions`).
+          max_new_tokens: Maximum number of new tokens to generate per-chunk. If not set,
+            the maximum will be set by the default max_length.
+          chunk_length: The length of audio segments. If it is not None, it will overwrite the
+            default chunk_length of the FeatureExtractor.
+          clip_timestamps:
+            Comma-separated list start,end,start,end,... timestamps (in seconds) of clips to
+             process. The last end timestamp defaults to the end of the file.
+             vad_filter will be ignored if clip_timestamps is used.
+          hallucination_silence_threshold:
+            When word_timestamps is True, skip silent periods longer than this threshold
+             (in seconds) when a possible hallucination is detected
+          hotwords:
+            Hotwords/hint phrases to provide the model with. Has no effect if prefix is not None.
+          language_detection_threshold: If the maximum probability of the language tokens is higher
+           than this value, the language is detected.
+          language_detection_segments: Number of segments to consider for the language detection.
+        Returns:
+          A tuple with:
+
+            - a generator over transcribed segments
+            - an instance of TranscriptionInfo
+        """
+
+        if target_language is None or target_language_probability_threshold is None:
+            raise ValueError("Please provide target_language, language and target_language_probability_threshold")
+
+        sampling_rate = self.feature_extractor.sampling_rate
+
+        if isinstance(audio, np.ndarray):
+            audio = torch.from_numpy(audio)
+        elif not isinstance(audio, torch.Tensor):
+            audio = decode_audio(audio, sampling_rate=sampling_rate)
+
+        duration = audio.shape[0] / sampling_rate
+        duration_after_vad = duration
+
+        self.logger.info(
+            "Processing audio with duration %s", format_timestamp(duration)
+        )
+
+        if vad_filter and clip_timestamps == "0":
+            if vad_parameters is None:
+                vad_parameters = VadOptions()
+            elif isinstance(vad_parameters, dict):
+                vad_parameters = VadOptions(**vad_parameters)
+            speech_chunks = get_speech_timestamps(audio, vad_parameters)
+            audio = collect_chunks(audio, speech_chunks)
+            duration_after_vad = audio.shape[0] / sampling_rate
+
+            self.logger.info(
+                "VAD filter removed %s of audio",
+                format_timestamp(duration - duration_after_vad),
+            )
+
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug(
+                    "VAD filter kept the following audio segments: %s",
+                    ", ".join(
+                        "[%s -> %s]"
+                        % (
+                            format_timestamp(chunk["start"] / sampling_rate),
+                            format_timestamp(chunk["end"] / sampling_rate),
+                        )
+                        for chunk in speech_chunks
+                    ),
+                )
+
+        else:
+            speech_chunks = None
+
+        to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
+        features = self.feature_extractor(
+            audio, chunk_length=chunk_length, to_cpu=to_cpu
+        )
+
+        encoder_output = None
+        all_language_probs = None
+
+        # setting output_language for multilingual videos
+        if multilingual:
+            if output_language is None:
+                output_language = "en"
+            elif output_language not in ["en", "hybrid"]:
+                raise ValueError("Output language needs to be one of 'en'/'hybrid'.")
+
+        # detecting the language if not provided
+        if language is None:
+            if not self.model.is_multilingual:
+                language = "en"
+                language_probability = 1
+            else:
+                if (
+                    language_detection_segments is None
+                    or language_detection_segments < 1
+                ):
+                    language_detection_segments = 1
+                start_timestamp = (
+                    float(clip_timestamps.split(",")[0])
+                    if isinstance(clip_timestamps, str)
+                    else clip_timestamps[0]
+                )
+                content_frames = (
+                    features.shape[-1] - self.feature_extractor.nb_max_frames
+                )
+                seek = (
+                    int(start_timestamp * self.frames_per_second)
+                    if start_timestamp * self.frames_per_second < content_frames
+                    else 0
+                )
+                end_frames = min(
+                    seek
+                    + self.feature_extractor.nb_max_frames
+                    * language_detection_segments,
+                    content_frames,
+                )
+                detected_language_info = {}
+                while seek <= end_frames:
+                    segment = features[
+                        :, seek : seek + self.feature_extractor.nb_max_frames
+                    ]
+                    encoder_output = self.encode(segment)
+                    # results is a list of tuple[str, float] with language names and
+                    # probabilities.
+                    results = self.model.detect_language(encoder_output)[0]
+                    # Parse language names to strip out markers
+                    all_language_probs = [
+                        (token[2:-2], prob) for (token, prob) in results
+                    ]
+                    # Get top language token and probability
+                    language, language_probability = all_language_probs[0]
+                    if (
+                        language_detection_threshold is None
+                        or language_probability > language_detection_threshold
+                    ):
+                        break
+                    detected_language_info.setdefault(language, []).append(
+                        language_probability
+                    )
+                    seek += segment.shape[-1]
+                else:
+                    # If no language detected for all segments, the majority vote of the highest
+                    # projected languages for all segments is used to determine the language.
+                    language = max(
+                        detected_language_info,
+                        key=lambda lang: len(detected_language_info[lang]),
+                    )
+                    language_probability = max(detected_language_info[language])
+
+                self.logger.info(
+                    "Detected language '%s' with probability %.2f",
+                    language,
+                    language_probability,
+                )
+        else:
+            if not self.model.is_multilingual and language != "en":
+                self.logger.warning(
+                    "The current model is English-only but the language parameter is set to '%s'; "
+                    "using 'en' instead." % language
+                )
+                language = "en"
+
+            language_probability = 1
+
+        # 这段逻辑是新增的，先进行语种检测，如果是目标语言target_language并且概率大于阈值target_language_probability_threshold，才继续进行文本识别，否则返回
+        if language != target_language or language_probability < target_language_probability_threshold:
+            info = TranscriptionInfo(
+                language=language,
+                language_probability=language_probability,
+                duration=duration,
+                duration_after_vad=duration_after_vad,
+                transcription_options=None,
+                vad_options=vad_parameters,
+                all_language_probs=all_language_probs,
+            )
+            return None, info
+
+        tokenizer = Tokenizer(
+            self.hf_tokenizer,
+            self.model.is_multilingual,
+            task=task,
+            language=language,
+        )
+
+        options = TranscriptionOptions(
+            beam_size=beam_size,
+            best_of=best_of,
+            patience=patience,
+            length_penalty=length_penalty,
+            repetition_penalty=repetition_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            log_prob_threshold=log_prob_threshold,
+            log_prob_low_threshold=log_prob_low_threshold,
+            no_speech_threshold=no_speech_threshold,
+            compression_ratio_threshold=compression_ratio_threshold,
+            condition_on_previous_text=condition_on_previous_text,
+            prompt_reset_on_temperature=prompt_reset_on_temperature,
+            temperatures=(
+                temperature if isinstance(temperature, (list, tuple)) else [temperature]
+            ),
+            initial_prompt=initial_prompt,
+            prefix=prefix,
+            suppress_blank=suppress_blank,
+            suppress_tokens=(
+                get_suppressed_tokens(tokenizer, suppress_tokens)
+                if suppress_tokens
+                else suppress_tokens
+            ),
+            without_timestamps=without_timestamps,
+            max_initial_timestamp=max_initial_timestamp,
+            word_timestamps=word_timestamps,
+            prepend_punctuations=prepend_punctuations,
+            append_punctuations=append_punctuations,
+            multilingual=multilingual,
+            output_language=output_language,
+            max_new_tokens=max_new_tokens,
+            clip_timestamps=clip_timestamps,
+            hallucination_silence_threshold=hallucination_silence_threshold,
+            hotwords=hotwords,
+        )
+
+        segments = self.generate_segments(features, tokenizer, options, encoder_output)
+
+        if speech_chunks:
+            segments = restore_speech_timestamps(segments, speech_chunks, sampling_rate)
+
+        info = TranscriptionInfo(
+            language=language,
+            language_probability=language_probability,
+            duration=duration,
+            duration_after_vad=duration_after_vad,
+            transcription_options=options,
+            vad_options=vad_parameters,
+            all_language_probs=all_language_probs,
+        )
+        return segments, info
+
     def _split_segments_by_timestamps(
         self,
         tokenizer: Tokenizer,
