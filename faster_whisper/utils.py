@@ -29,6 +29,12 @@ _MODELS = {
 }
 
 
+def add_model(model_dict) -> dict:
+    """Adds a dictionary of custom Models to existing Model"""
+    _MODELS.update(model_dict)
+    return _MODELS
+
+
 def available_models() -> List[str]:
     """Returns the names of available models."""
     return list(_MODELS.keys())
