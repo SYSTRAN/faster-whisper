@@ -1027,8 +1027,7 @@ class WhisperModel:
         )
         return segments, info
 
-
-    # transcribe_after_detect_language拷贝自transcribe
+    # transcribe_after_detect_language is copied from transcribe
     def transcribe_after_detect_language(
         self,
         audio: Union[str, BinaryIO, torch.Tensor, np.ndarray],
@@ -1299,7 +1298,7 @@ class WhisperModel:
 
             language_probability = 1
 
-        # 这段逻辑是新增的，先进行语种检测，如果是目标语言target_language并且概率大于阈值target_language_probability_threshold，才继续进行文本识别，否则返回
+        # This logic is newly added. First, perform language detection. If the detected language is the target_language and the probability is greater than the target_language_probability_threshold, continue with text recognition; otherwise, return.
         if language != target_language or language_probability < target_language_probability_threshold:
             info = TranscriptionInfo(
                 language=language,
