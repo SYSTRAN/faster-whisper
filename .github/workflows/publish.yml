@@ -31,10 +31,10 @@ jobs:
       run: pip3 install setuptools wheel twine
 
     - name: Install build dependencies
-      run: pip3 install -r requirements.txt
+      run: pip3 install wheel
 
     - name: Build the package
-      run: python3 -m build
+      run: python3 setup.py sdist bdist_wheel
 
     - name: Publish to PyPI
       if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi')
