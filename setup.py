@@ -30,14 +30,14 @@ conversion_requires = get_requirements(
 )
 
 setup(
-    name="faster-whisper",
+    name="mobius-faster-whisper",
     version=get_project_version(),
     license="MIT",
-    description="Faster Whisper transcription with CTranslate2",
+    description="Mobius Version of Faster Whisper transcription with CTranslate2",
     long_description=get_long_description(),
     long_description_content_type="text/markdown",
-    author="Guillaume Klein",
-    url="https://github.com/SYSTRAN/faster-whisper",
+    author="Guillaume Klein and Jilt Sebastian",
+    url="https://github.com/mobiusml/faster-whisper",
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -51,7 +51,7 @@ setup(
         "Programming Language :: Python :: 3.11",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
-    keywords="openai whisper speech ctranslate2 inference quantization transformer",
+    keywords="openai whisper speech ctranslate2 inference quantization transformer mobiuslabs",
     python_requires=">=3.8",
     install_requires=install_requires,
     extras_require={

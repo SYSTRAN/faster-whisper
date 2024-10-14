@@ -2,7 +2,7 @@
 
 # Faster Whisper transcription with CTranslate2
 
-**faster-whisper** is a reimplementation of OpenAI's Whisper model using [CTranslate2](https://github.com/OpenNMT/CTranslate2/), which is a fast inference engine for Transformer models.
+**mobius-faster-whisper** is a fork with updates and fixes on top of **faster-whisper**. **Faster-whisper** is a reimplementation of OpenAI's Whisper model using [CTranslate2](https://github.com/OpenNMT/CTranslate2/), which is a fast inference engine for Transformer models.
 
 This implementation is up to 4 times faster than [openai/whisper](https://github.com/openai/whisper) for the same accuracy while using less memory. The efficiency can be further improved with 8-bit quantization on both CPU and GPU.
 
@@ -111,10 +111,10 @@ Purfview's [whisper-standalone-win](https://github.com/Purfview/whisper-standalo
 
 ## Installation
 
-The module can be installed from [PyPI](https://pypi.org/project/faster-whisper/):
+The module can be installed from [PyPI](https://pypi.org/project/mobius-faster-whisper/):
 
 ```bash
-pip install faster-whisper
+pip install mobius-faster-whisper
 ```
 
 <details>
@@ -123,13 +123,13 @@ pip install faster-whisper
 ### Install the master branch
 
 ```bash
-pip install --force-reinstall "faster-whisper @ https://github.com/SYSTRAN/faster-whisper/archive/refs/heads/master.tar.gz"
+pip install --force-reinstall "mobius-faster-whisper @ https://github.com/mobiusml/faster-whisper/archive/refs/heads/master.tar.gz"
 ```
 
 ### Install a specific commit
 
 ```bash
-pip install --force-reinstall "faster-whisper @ https://github.com/SYSTRAN/faster-whisper/archive/a4f1cc8f11433e454c3934442b5e1a4ed5e865c3.tar.gz"
+pip install --force-reinstall "mobius-faster-whisper @ https://github.com/mobiusml/faster-whisper/archive/a4f1cc8f11433e454c3934442b5e1a4ed5e865c3.tar.gz"
 ```
 
 </details>
@@ -232,7 +232,7 @@ The library integrates the [Silero VAD](https://github.com/snakers4/silero-vad) 
 segments, _ = model.transcribe("audio.mp3", vad_filter=True)
 ```
 
-The default behavior is conservative and only removes silence longer than 2 seconds. See the available VAD parameters and default values in the [source code](https://github.com/SYSTRAN/faster-whisper/blob/master/faster_whisper/vad.py). They can be customized with the dictionary argument `vad_parameters`:
+The default behavior is conservative and only removes silence longer than 2 seconds. See the available VAD parameters and default values in the [source code](https://github.com/mobiusml/faster-whisper/blob/master/faster_whisper/vad.py). They can be customized with the dictionary argument `vad_parameters`:
 
 ```python
 segments, _ = model.transcribe(
@@ -255,7 +255,7 @@ logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
 
 ### Going further
 
-See more model and transcription options in the [`WhisperModel`](https://github.com/SYSTRAN/faster-whisper/blob/master/faster_whisper/transcribe.py) class implementation.
+See more model and transcription options in the [`WhisperModel`](https://github.com/mobiusml/faster-whisper/blob/master/faster_whisper/transcribe.py) class implementation.
 
 ## Community integrations
 
