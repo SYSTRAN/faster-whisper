@@ -68,7 +68,7 @@ def test_batched_transcribe(physcisworks_path):
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
     # number of near 30 sec segments
-    assert len(segments) == 7
+    assert len(segments) == 8
 
     result, info = batched_model.transcribe(
         physcisworks_path,
@@ -82,7 +82,7 @@ def test_batched_transcribe(physcisworks_path):
         segments.append(
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
-    assert len(segments) > 7
+    assert len(segments) > 8
 
 
 def test_prefix_with_timestamps(jfk_path):
