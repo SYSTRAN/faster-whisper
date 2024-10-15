@@ -32,8 +32,8 @@ class VadOptions(NamedTuple):
     offset: float = onset - 0.15
     min_speech_duration_ms: int = 0
     max_speech_duration_s: float = float("inf")
-    min_silence_duration_ms: int = 2000
-    speech_pad_ms: int = 400
+    min_silence_duration_ms: int = 500
+    speech_pad_ms: int = 200
 
 
 def get_vad_scores(
