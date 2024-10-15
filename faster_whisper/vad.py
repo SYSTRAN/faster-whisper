@@ -42,37 +42,6 @@ class VadOptions(NamedTuple):
     speech_pad_ms: int = 400
 
 
-def get_vad_scores(
-    audio: torch.Tensor, sampling_rate: int = 16000, window_size_samples: int = 512
-):
-    model = get_vad_model()
-    state, context = model.get_initial_states(batch_size=1)
-
-    speech_probs = []
-    for current_start_sample in range(0, len(audio), window_size_samples):
-        chunk = audio[current_start_sample : current_start_sample + window_size_samples]
-        if len(chunk) < window_size_samples:
-            chunk = np.pad(chunk, (0, int(window_size_samples - len(chunk))))
-        speech_prob, state, context = model(chunk, state, context, sampling_rate)
-        speech_probs.append(speech_prob)
-
-    starts = np.asarray(range(0, len(audio), window_size_samples))
-    ends = starts + window_size_samples
-    ends[-1] = len(audio)
-    middle = (starts + ends) / 2
-    timestamps = [
-        {
-            "start": s / sampling_rate,
-            "end": e / sampling_rate,
-            "middle": m / sampling_rate,
-        }
-        for s, e, m in zip(starts, ends, middle)
-    ]
-
-    scores = np.stack(speech_probs).squeeze(-1)
-    return scores, timestamps
-
-
 def get_speech_timestamps(
     audio: torch.Tensor,
     vad_options: Optional[VadOptions] = None,
@@ -110,7 +79,16 @@ def get_speech_timestamps(
 
     audio_length_samples = len(audio)
 
-    speech_probs, timestamps = get_vad_scores(audio)
+    model = get_vad_model()
+    state, context = model.get_initial_states(batch_size=1)
+
+    speech_probs = []
+    for current_start_sample in range(0, audio_length_samples, window_size_samples):
+        chunk = audio[current_start_sample : current_start_sample + window_size_samples]
+        if len(chunk) < window_size_samples:
+            chunk = np.pad(chunk, (0, int(window_size_samples - len(chunk))))
+        speech_prob, state, context = model(chunk, state, context, sampling_rate)
+        speech_probs.append(speech_prob)
 
     triggered = False
     speeches = []
@@ -594,136 +572,6 @@ def merge_chunks(
                 seg.end -= edge_padding
 
         if seg.end - curr_start > chunk_length and curr_end - curr_start > 0:
-            merged_segments.append(
-                {
-                    "start": curr_start,
-                    "end": curr_end,
-                    "segments": seg_idxs,
-                }
-            )
-            curr_start = seg.start
-            seg_idxs = []
-            speaker_idxs = []
-        curr_end = seg.end
-        seg_idxs.append((seg.start, seg.end))
-        speaker_idxs.append(seg.speaker)
-    # add final
-    merged_segments.append(
-        {
-            "start": curr_start,
-            "end": curr_end,
-            "segments": seg_idxs,
-        }
-    )
-    return merged_segments
-
-
-def _new_get_active_regions(
-    scores, timestamps, max_duration, onset, offset=None, pad_onset=0.0, pad_offset=0.0
-) -> Annotation:
-    """Extract active regions from VAD scores.
-
-    Args:
-        scores (SlidingWindowFeature): Detection scores.
-
-    Returns:
-        active (Annotation): Active regions.
-    """
-
-    offset = offset or onset
-
-    #####################################################
-    timestamps = [ts["middle"] for ts in timestamps]
-    # annotation meant to store 'active' regions
-    active = Annotation()
-    for k, k_scores in enumerate(scores.T):
-        label = k  # if scores.labels is None else scores.labels[k]
-
-        # initial state
-        start = timestamps[0]
-        is_active = k_scores[0] > onset
-        curr_scores = [k_scores[0]]
-        curr_timestamps = [start]
-        t = start
-        # optionally add `strict=False` for python 3.10 or later
-        for t, y in zip(timestamps[1:], k_scores[1:]):
-            # currently active
-            if is_active:
-                curr_duration = t - start
-                if curr_duration > max_duration:
-                    search_after = len(curr_scores) // 2
-                    # divide segment
-                    min_score_div_idx = search_after + np.argmin(
-                        curr_scores[search_after:]
-                    )
-                    min_score_t = curr_timestamps[min_score_div_idx]
-                    region = Segment(start - pad_onset, min_score_t + pad_offset)
-                    active[region, k] = label
-                    start = curr_timestamps[min_score_div_idx]
-                    curr_scores = curr_scores[min_score_div_idx + 1 :]
-                    curr_timestamps = curr_timestamps[min_score_div_idx + 1 :]
-                # switching from active to inactive
-                elif y < offset:
-                    region = Segment(start - pad_onset, t + pad_offset)
-                    active[region, k] = label
-                    start = t
-                    is_active = False
-                    curr_scores = []
-                    curr_timestamps = []
-                curr_scores.append(y)
-                curr_timestamps.append(t)
-            # currently inactive
-            else:
-                # switching from inactive to active
-                if y > onset:
-                    start = t
-                    is_active = True
-
-        # if active at the end, add final region
-        if is_active:
-            region = Segment(start - pad_onset, t + pad_offset)
-            active[region, k] = label
-
-    return active
-
-
-def _silero_vad_full(waveform, chunk_size, onset, offset):
-
-    scores, timestamps = get_vad_scores(waveform)
-
-    active = _new_get_active_regions(scores, timestamps, chunk_size, onset, offset)
-
-    curr_end = 0
-    merged_segments = []
-    seg_idxs = []
-    speaker_idxs = []
-    segments_list = []
-    segments = active
-    edge_padding = 0.1
-    for speech_turn in segments.get_timeline():
-        segments_list.append(
-            SegmentX(
-                max(0.0, speech_turn.start - edge_padding),
-                speech_turn.end + edge_padding,
-                "UNKNOWN",
-            )
-        )  # 100ms edge padding to account for edge errors
-
-    assert len(segments_list) != 0, "No active speech found in audio"
-    # Make sur the starting point is the start of the segment.
-    curr_start = segments_list[0].start
-
-    for idx, seg in enumerate(segments_list):
-        # if any segment start timing is less than previous segment end timing,
-        # reset the edge padding. Similarly for end timing.
-        if idx > 0:
-            if seg.start < segments_list[idx - 1].end:
-                seg.start += edge_padding
-        if idx < len(segments_list) - 1:
-            if seg.end > segments_list[idx + 1].start:
-                seg.end -= edge_padding
-
-        if seg.end - curr_start > chunk_size and curr_end - curr_start > 0:
             merged_segments.append(
                 {
                     "start": curr_start,
