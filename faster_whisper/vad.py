@@ -288,8 +288,6 @@ def get_active_regions(
                 start = timestamp["start"]
                 is_active = True
                 silence_counter = 0
-                curr_scores.append(score)
-                curr_timestamps.append(timestamp)
 
     # if active at the end, add final region
     if is_active:
