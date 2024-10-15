@@ -365,8 +365,11 @@ class BatchedInferencePipeline:
             if vad_filter:
                 if vad_parameters is None:
                     vad_parameters = VadOptions(
+                        onset=0.500,
+                        offset=0.363,
                         max_speech_duration_s=chunk_length,
-                        min_silence_duration_ms=160,
+                        speech_pad_ms=100,
+                        min_silence_duration_ms=0,
                     )
                 elif isinstance(vad_parameters, dict):
                     if "max_speech_duration_s" in vad_parameters.keys():
