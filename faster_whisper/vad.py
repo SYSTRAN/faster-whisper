@@ -2,7 +2,7 @@ import bisect
 import functools
 import os
 
-from typing import Dict, List, NamedTuple, Optional, Tuple
+from typing import List, NamedTuple, Optional
 
 import numpy as np
 import torch
@@ -176,14 +176,10 @@ def get_speech_timestamps(
 
 def collect_chunks(
     audio: torch.Tensor, chunks: List[dict], sampling_rate: int = 16000
-) -> Tuple[List[torch.Tensor], List[Dict[str, int]]]:
+) -> torch.Tensor:
     """Collects and concatenates audio chunks."""
     if not chunks:
-        chunk_metadata = {
-            "start_time": 0,
-            "end_time": 0,
-        }
-        return [torch.tensor([], dtype=torch.float32)], [chunk_metadata]
+        return torch.tensor([], dtype=torch.float32)
 
     audio_chunks = []
     chunks_metadata = []
@@ -309,9 +305,6 @@ class SileroVADModel:
 
 
 def merge_segments(segments_list, vad_options: VadOptions):
-    if not segments_list:
-        return []
-
     curr_end = 0
     seg_idxs = []
     merged_segments = []
