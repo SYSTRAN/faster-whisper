@@ -6,7 +6,7 @@ from io import BytesIO
 
 from datasets import load_dataset
 from evaluate import load
-from pytubefix import YouTube
+from pytube import YouTube
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers.models.whisper.english_normalizer import EnglishTextNormalizer
