@@ -1028,11 +1028,15 @@ class WhisperModel:
         return segments, info
 
     # transcribe_after_detect_language is copied from transcribe
+    # 1. 首先进行语种识别，判断目标语言是否匹配
+    # 2. 其次，如果匹配则用目标语言进行识别；如果不匹配则再看是否需要继续asr，则用指定的语言进行识别，如果指定的语言没有设置，则用识别出的语言进行识别。
     def transcribe_after_detect_language(
         self,
         audio: Union[str, BinaryIO, torch.Tensor, np.ndarray],
-        target_language,
-        target_language_probability_threshold,
+        target_language: Optional[str] = None,
+        target_language_probability_threshold: Optional[float] = None,
+        continue_asr: bool = False,
+        continue_language: Optional[str] = None,
         language: Optional[str] = None,
         task: str = "transcribe",
         beam_size: int = 5,
@@ -1300,16 +1304,33 @@ class WhisperModel:
 
         # This logic is newly added. First, perform language detection. If the detected language is the target_language and the probability is greater than the target_language_probability_threshold, continue with text recognition; otherwise, return.
         if language != target_language or language_probability < target_language_probability_threshold:
-            info = TranscriptionInfo(
-                language=language,
-                language_probability=language_probability,
-                duration=duration,
-                duration_after_vad=duration_after_vad,
-                transcription_options=None,
-                vad_options=vad_parameters,
-                all_language_probs=all_language_probs,
-            )
-            return None, info
+            if not continue_asr:
+                self.logger.info(
+                    "Skipping transcription for language '%s' with probability %.2f. not match target language '%s' threshold %.2f",
+                    language,
+                    language_probability,
+                    target_language,
+                    target_language_probability_threshold
+                )
+                info = TranscriptionInfo(
+                    language=language,
+                    language_probability=language_probability,
+                    duration=duration,
+                    duration_after_vad=duration_after_vad,
+                    transcription_options=None,
+                    vad_options=vad_parameters,
+                    all_language_probs=all_language_probs,
+                )
+                return None, info
+            else:
+                if continue_language is not None:
+                    self.logger.info(
+                        "Continue transcription for language '%s' with probability %.2f. continue language '%s'",
+                        language,
+                        language_probability,
+                        continue_language
+                    )
+                    language = continue_language
 
         tokenizer = Tokenizer(
             self.hf_tokenizer,
