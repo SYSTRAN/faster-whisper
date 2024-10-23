@@ -39,6 +39,7 @@ class VadOptions(NamedTuple):
 def get_speech_timestamps(
     audio: torch.Tensor,
     vad_options: Optional[VadOptions] = None,
+    sampling_rate: int = 16000,
     **kwargs,
 ) -> List[dict]:
     """This method is used for splitting long audios into speech chunks using silero VAD.
@@ -60,7 +61,6 @@ def get_speech_timestamps(
     min_silence_duration_ms = vad_options.min_silence_duration_ms
     window_size_samples = 512
     speech_pad_ms = vad_options.speech_pad_ms
-    sampling_rate = 16000
     min_speech_samples = sampling_rate * min_speech_duration_ms / 1000
     speech_pad_samples = sampling_rate * speech_pad_ms / 1000
     max_speech_samples = (
