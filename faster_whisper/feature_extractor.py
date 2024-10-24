@@ -20,7 +20,7 @@ class FeatureExtractor:
         self.hop_length = hop_length
         self.chunk_length = chunk_length
         self.n_samples = chunk_length * sampling_rate
-        self.nb_max_frames = self.n_samples // hop_length
+        self.nb_max_frames = (30 * sampling_rate) // hop_length
         self.time_per_frame = hop_length / sampling_rate
         self.sampling_rate = sampling_rate
         self.mel_filters = self.get_mel_filters(
@@ -82,7 +82,6 @@ class FeatureExtractor:
 
         if chunk_length is not None:
             self.n_samples = chunk_length * self.sampling_rate
-            self.nb_max_frames = self.n_samples // self.hop_length
 
         if waveform.dtype is not torch.float32:
             waveform = waveform.to(torch.float32)
