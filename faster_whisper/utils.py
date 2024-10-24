@@ -70,14 +70,13 @@ def download_model(
     Raises:
       ValueError: if the model size is invalid.
     """
-    if re.match(r".*/.*", size_or_id):
+    if '/' in size_or_id:
         repo_id = size_or_id
     else:
         repo_id = _MODELS.get(size_or_id)
         if repo_id is None:
             raise ValueError(
-                "Invalid model size '%s', expected one of: %s"
-                % (size_or_id, ", ".join(_MODELS.keys()))
+                f"Invalid model size '{size_or_id}', expected one of: {', '.join(_MODELS.keys())}"
             )
 
     allow_patterns = [
@@ -127,16 +126,11 @@ def format_timestamp(
     decimal_marker: str = ".",
 ) -> str:
     assert seconds >= 0, "non-negative timestamp expected"
-    milliseconds = round(seconds * 1000.0)
+    milliseconds = round(seconds * 1000)
 
-    hours = milliseconds // 3_600_000
-    milliseconds -= hours * 3_600_000
-
-    minutes = milliseconds // 60_000
-    milliseconds -= minutes * 60_000
-
-    seconds = milliseconds // 1_000
-    milliseconds -= seconds * 1_000
+    hours, milliseconds = divmod(milliseconds, 3_600_000)
+    minutes, milliseconds = divmod(milliseconds, 60_000)
+    seconds, milliseconds = divmod(milliseconds, 1_000)
 
     hours_marker = f"{hours:02d}:" if always_include_hours or hours > 0 else ""
     return (
@@ -151,7 +145,9 @@ class disabled_tqdm(tqdm):
 
 
 def get_end(segments: List[dict]) -> Optional[float]:
-    return next(
-        (w["end"] for s in reversed(segments) for w in reversed(s["words"])),
-        segments[-1]["end"] if segments else None,
-    )
+    if not segments:
+        return None
+    last_segment = segments[-1]
+    if "words" in last_segment and last_segment["words"]:
+        return last_segment["words"][-1].get("end")
+    return last_segment.get("end")
