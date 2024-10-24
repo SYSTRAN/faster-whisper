@@ -15,9 +15,14 @@ class VadOptions(NamedTuple):
     """VAD options.
 
     Attributes:
-      threshold: Speech threshold. Silero VAD outputs speech probabilities for each audio chunk,
+      onset: Speech threshold. Silero VAD outputs speech probabilities for each audio chunk,
         probabilities ABOVE this value are considered as SPEECH. It is better to tune this
         parameter for each dataset separately, but "lazy" 0.5 is pretty good for most datasets.
+      offset: Silence threshold for determining the end of speech. If a probability is lower than
+        the offset, it is always considered silence. Values higher than offset are only considered
+        speech if the previous sample was classified as speech; otherwise, they are treated as
+        silence. This parameter helps refine the detection of speech transitions, ensuring smoother
+        segment boundaries.
       min_speech_duration_ms: Final speech chunks shorter min_speech_duration_ms are thrown out.
       max_speech_duration_s: Maximum duration of speech chunks in seconds. Chunks longer
         than max_speech_duration_s will be split at the timestamp of the last silence that
@@ -47,6 +52,7 @@ def get_speech_timestamps(
     Args:
       audio: One dimensional float array.
       vad_options: Options for VAD processing.
+      sampling rate: Sampling rate of the audio.
       kwargs: VAD options passed as keyword arguments for backward compatibility.
 
     Returns:
@@ -177,7 +183,7 @@ def get_speech_timestamps(
 def collect_chunks(
     audio: torch.Tensor, chunks: List[dict], sampling_rate: int = 16000
 ) -> Tuple[List[torch.Tensor], List[Dict[str, int]]]:
-    """Collects and concatenates audio chunks."""
+    """Collects audio chunks."""
     if not chunks:
         chunk_metadata = {
             "start_time": 0,
@@ -308,14 +314,13 @@ class SileroVADModel:
         return out
 
 
-def merge_segments(segments_list, vad_options: VadOptions):
+def merge_segments(segments_list, vad_options: VadOptions, sampling_rate: int = 16000):
     if not segments_list:
         return []
 
     curr_end = 0
     seg_idxs = []
     merged_segments = []
-    sampling_rate = 16000
     edge_padding = vad_options.speech_pad_ms * sampling_rate // 1000
     chunk_length = vad_options.max_speech_duration_s * sampling_rate
 
