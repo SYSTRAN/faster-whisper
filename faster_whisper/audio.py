@@ -107,26 +107,3 @@ def _resample_frames(frames, resampler):
     # Add None to flush the resampler.
     for frame in itertools.chain(frames, [None]):
         yield from resampler.resample(frame)
-
-
-def pad_or_trim(array, length: int, *, axis: int = -1):
-    """
-    Pad or trim the audio array to N_SAMPLES, as expected by the encoder.
-    """
-    axis = axis % array.ndim
-    if array.shape[axis] > length:
-        idx = [Ellipsis] * axis + [slice(length)] + [Ellipsis] * (array.ndim - axis - 1)
-        return array[idx]
-
-    if array.shape[axis] < length:
-        pad_widths = (
-            [
-                0,
-            ]
-            * array.ndim
-            * 2
-        )
-        pad_widths[2 * axis] = length - array.shape[axis]
-        array = torch.nn.functional.pad(array, tuple(pad_widths[::-1]))
-
-    return array
