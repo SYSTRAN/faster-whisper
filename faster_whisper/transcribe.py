@@ -7,6 +7,7 @@ import zlib
 
 from collections import Counter, defaultdict
 from inspect import signature
+from math import ceil
 from typing import BinaryIO, Iterable, List, NamedTuple, Optional, Tuple, Union
 
 import ctranslate2
@@ -14,26 +15,18 @@ import numpy as np
 import tokenizers
 import torch
 
-from pyannote.audio import Model
 from tqdm import tqdm
 
 from faster_whisper.audio import decode_audio, pad_or_trim
 from faster_whisper.feature_extractor import FeatureExtractor
 from faster_whisper.tokenizer import _LANGUAGE_CODES, Tokenizer
-from faster_whisper.utils import (
-    download_model,
-    format_timestamp,
-    get_assets_path,
-    get_end,
-    get_logger,
-)
+from faster_whisper.utils import download_model, format_timestamp, get_end, get_logger
 from faster_whisper.vad import (
     SpeechTimestampsMap,
     VadOptions,
-    VoiceActivitySegmentation,
     collect_chunks,
     get_speech_timestamps,
-    merge_chunks,
+    merge_segments,
 )
 
 
@@ -115,67 +108,26 @@ class BatchedInferencePipeline:
     def __init__(
         self,
         model,
-        use_vad_model: bool = True,
         options: Optional[NamedTuple] = None,
         tokenizer=None,
-        chunk_length: int = 30,
-        vad_device: Union[int, str, "torch.device"] = "auto",
-        vad_onset: float = 0.500,
-        vad_offset: float = 0.363,
         language: Optional[str] = None,
     ):
         self.model: WhisperModel = model
         self.tokenizer = tokenizer
         self.options = options
         self.preset_language = language
-        self.use_vad_model = use_vad_model
-        self.vad_onset = vad_onset
-        self.vad_offset = vad_offset
-        self.vad_model_path = os.path.join(get_assets_path(), "pyannote_vad_model.bin")
-        if self.use_vad_model:
-            self.vad_device = self.get_device(vad_device)
-            self.vad_model = self.load_vad_model(
-                vad_onset=self.vad_onset, vad_offset=self.vad_offset
-            )
-        else:
-            self.vad_model = None
-        self.chunk_length = chunk_length  # VAD merging size
         self.last_speech_timestamp = 0.0
 
-    def get_device(self, device: Union[int, str, "torch.device"]):
-        """
-        Converts the input device into a torch.device object.
-
-        The input can be an integer, a string, or a `torch.device` object.
-
-        The function handles a special case where the input device is "auto".
-        When "auto" is specified, the device will default to the
-        device of the model (self.model.device). If the model's device is also "auto",
-        it selects "cuda" if a CUDA-capable device is available; otherwise, it selects "cpu".
-        """
-        if isinstance(device, torch.device):
-            return device
-        elif isinstance(device, str):
-            if device == "auto" and self.model.device == "auto":
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-            elif device == "auto":
-                device = self.model.device
-            return torch.device(device)
-        elif device < 0:
-            return torch.device("cpu")
-        else:
-            return torch.device(f"cuda:{device}")
-
-    def forward(self, features, segments_metadata, **forward_params):
+    def forward(self, features, chunks_metadata, **forward_params):
         encoder_output, outputs = self.model.generate_segment_batched(
             features, self.tokenizer, forward_params
         )
 
         segmented_outputs = []
         segment_sizes = []
-        for segment_metadata, output in zip(segments_metadata, outputs):
-            duration = segment_metadata["end_time"] - segment_metadata["start_time"]
-            segment_size = int(duration * self.model.frames_per_second)
+        for chunk_metadata, output in zip(chunks_metadata, outputs):
+            duration = chunk_metadata["end_time"] - chunk_metadata["start_time"]
+            segment_size = int(ceil(duration) * self.model.frames_per_second)
             segment_sizes.append(segment_size)
             (
                 subsegments,
@@ -184,7 +136,7 @@ class BatchedInferencePipeline:
             ) = self.model._split_segments_by_timestamps(
                 tokenizer=self.tokenizer,
                 tokens=output["tokens"],
-                time_offset=segment_metadata["start_time"],
+                time_offset=chunk_metadata["start_time"],
                 segment_size=segment_size,
                 segment_duration=duration,
                 seek=0,
@@ -252,43 +204,9 @@ class BatchedInferencePipeline:
 
         return language, language_probability, task, all_language_probs
 
-    @staticmethod
-    def audio_split(audio, segments, sampling_rate):
-        """Returns splitted audio chunks as iterator"""
-        audio_segments = []
-        segments_metadata = []
-        for seg in segments:
-            f1 = int(seg["start"] * sampling_rate)
-            f2 = int(seg["end"] * sampling_rate)
-            seg_metadata = {
-                "start_time": seg["start"],
-                "end_time": seg["end"],
-                "stitched_seg": seg["segments"],
-            }
-            audio_segments.append(audio[f1:f2])
-            segments_metadata.append(seg_metadata)
-        return audio_segments, segments_metadata
-
-    def load_vad_model(self, vad_onset=0.500, vad_offset=0.363):
-        vad_model = Model.from_pretrained(self.vad_model_path)
-        hyperparameters = {
-            "onset": vad_onset,
-            "offset": vad_offset,
-            "min_duration_on": 0.1,
-            "min_duration_off": 0.1,
-        }
-
-        vad_pipeline = VoiceActivitySegmentation(
-            segmentation=vad_model, device=torch.device(self.vad_device)
-        )
-        vad_pipeline.instantiate(hyperparameters)
-        return vad_pipeline
-
     def transcribe(
         self,
-        audio: Union[str, torch.Tensor, np.ndarray],
-        vad_segments: Optional[List[dict]] = None,
-        batch_size: int = 16,
+        audio: Union[str, BinaryIO, torch.Tensor, np.ndarray],
         language: Optional[str] = None,
         task: str = None,
         log_progress: bool = False,
@@ -314,26 +232,26 @@ class BatchedInferencePipeline:
         prefix: Optional[str] = None,
         suppress_blank: bool = True,
         suppress_tokens: Optional[List[int]] = [-1],
+        without_timestamps: bool = True,
+        word_timestamps: bool = False,
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
+        vad_filter: bool = True,
+        vad_parameters: Optional[Union[dict, VadOptions]] = None,
         max_new_tokens: Optional[int] = None,
+        chunk_length: Optional[int] = None,
+        clip_timestamps: Optional[List[dict]] = None,
+        batch_size: int = 16,
         hotwords: Optional[str] = None,
-        word_timestamps: bool = False,
-        without_timestamps: bool = True,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """transcribe audio in chunks in batched fashion and return with language info.
 
         Arguments:
-            audio: audio file as numpy array/path for batched transcription.
-            vad_segments: Optionally provide list of dictionaries each containing "start", "end",
-                and "segments" keys.
-                "start" and "end" keys specify the start and end of the voiced region within
-                30 sec boundary. An additional key "segments" contains all the start
-                and end of voiced regions within that 30sec boundary as a list of tuples.
-                If no vad_segments specified, it uses internal vad model automatically segment them.
-            batch_size: the maximum number of parallel requests to model for decoding.
-            language: The language spoken in the audio.
-            task: either "transcribe" or "translate".
+            audio: Path to the input file (or a file-like object), or the audio waveform.
+            language: The language spoken in the audio. It should be a language code such
+                as "en" or "fr". If not set, the language will be detected in the first 30 seconds
+                of audio.
+            task: Task to execute (transcribe or translate).
             log_progress: whether to show progress bar or not.
             beam_size: Beam size to use for decoding.
             best_of: Number of candidates when sampling with non-zero temperature.
@@ -350,8 +268,8 @@ class BatchedInferencePipeline:
             log_prob_threshold: If the average log probability over sampled tokens is
                 below this value, treat as failed.
             log_prob_low_threshold: This parameter alone is sufficient to skip an output text,
-            whereas log_prob_threshold also looks for appropriate no_speech_threshold value.
-            This value should be less than log_prob_threshold.
+                whereas log_prob_threshold also looks for appropriate no_speech_threshold value.
+                This value should be less than log_prob_threshold.
             no_speech_threshold: If the no_speech probability is higher than this value AND
                 the average log probability over sampled tokens is below `log_prob_threshold`,
                 consider the segment as silent.
@@ -361,18 +279,29 @@ class BatchedInferencePipeline:
             suppress_blank: Suppress blank outputs at the beginning of the sampling.
             suppress_tokens: List of token IDs to suppress. -1 will suppress a default set
                 of symbols as defined in `tokenizer.non_speech_tokens()`.
+            without_timestamps: Only sample text tokens.
+            word_timestamps: Extract word-level timestamps using the cross-attention pattern
+                and dynamic time warping, and include the timestamps for each word in each segment.
+                Set as False.
             prepend_punctuations: If word_timestamps is True, merge these punctuation symbols
                 with the next word
             append_punctuations: If word_timestamps is True, merge these punctuation symbols
                 with the previous word
+            vad_filter: Enable the voice activity detection (VAD) to filter out parts of the audio
+                without speech. This step is using the Silero VAD model
+                https://github.com/snakers4/silero-vad.
+            vad_parameters: Dictionary of Silero VAD parameters or VadOptions class (see available
+                parameters and default values in the class `VadOptions`).
             max_new_tokens: Maximum number of new tokens to generate per-chunk. If not set,
                 the maximum will be set by the default max_length.
+            chunk_length: The length of audio segments. If it is not None, it will overwrite the
+                default chunk_length of the FeatureExtractor.
+            clip_timestamps: Optionally provide list of dictionaries each containing "start" and
+                "end" keys that specify the start and end of the voiced region within
+                `chunk_length` boundary. vad_filter will be ignored if clip_timestamps is used.
+            batch_size: the maximum number of parallel requests to model for decoding.
             hotwords:
                 Hotwords/hint phrases to the model. Has no effect if prefix is not None.
-            word_timestamps: Extract word-level timestamps using the cross-attention pattern
-                and dynamic time warping, and include the timestamps for each word in each segment.
-                Set as False.
-            without_timestamps: Only sample text tokens.
 
         Static params: (Fixed for batched version)
             max_initial_timestamp: The initial timestamp cannot be later than this, set at 0.0.
@@ -390,28 +319,18 @@ class BatchedInferencePipeline:
             hallucination_silence_threshold: Optional[float]
                 When word_timestamps is True, skip silent periods longer than this threshold
                 (in seconds) when a possible hallucination is detected. set as None.
-            clip_timestamps:
-                Comma-separated list start,end,start,end,... timestamps (in seconds) of clips to
-                process. The last end timestamp defaults to the end of the file. Set as "0".
 
         unused:
             language_detection_threshold: If the maximum probability of the language tokens is
                 higher than this value, the language is detected.
             language_detection_segments: Number of segments to consider for the language detection.
-            vad_filter: Enable the voice activity detection (VAD) to filter out parts of the audio
-                without speech. This step is using the Silero VAD model
-                https://github.com/snakers4/silero-vad.
-            vad_parameters: Dictionary of Silero VAD parameters or VadOptions class (see available
-                parameters and default values in the class `VadOptions`).
-            chunk_length: The length of audio segments. If it is not None, it will overwrite the
-                default chunk_length of the FeatureExtractor.
 
 
         Returns:
           A tuple with:
 
-            - a generator over transcribed batched segments.
-            - an instance of TranscriptionInfo.
+            - a generator over transcribed segments
+            - an instance of TranscriptionInfo
         """
 
         sampling_rate = self.model.feature_extractor.sampling_rate
@@ -422,29 +341,32 @@ class BatchedInferencePipeline:
             audio = decode_audio(audio, sampling_rate=sampling_rate)
         duration = audio.shape[0] / sampling_rate
 
+        chunk_length = chunk_length or self.model.feature_extractor.chunk_length
         # if no segment split is provided, use vad_model and generate segments
-        if not vad_segments:
-            # run the audio if it is less than 30 sec even without vad_segments
-            if self.use_vad_model:
-                vad_segments = self.vad_model(
-                    {
-                        "waveform": audio.unsqueeze(0),
-                        "sample_rate": 16000,
-                    }
-                )
-                vad_segments = merge_chunks(
-                    vad_segments,
-                    self.chunk_length,
-                    onset=self.vad_onset,
-                    offset=self.vad_offset,
-                )
-            elif duration < self.chunk_length:
-                vad_segments = [
-                    {"start": 0.0, "end": duration, "segments": [(0.0, duration)]}
-                ]
+        if not clip_timestamps:
+            if vad_filter:
+                if vad_parameters is None:
+                    vad_parameters = VadOptions(
+                        max_speech_duration_s=chunk_length,
+                        min_silence_duration_ms=160,
+                    )
+                elif isinstance(vad_parameters, dict):
+                    if "max_speech_duration_s" in vad_parameters.keys():
+                        vad_parameters.pop("max_speech_duration_s")
+
+                    vad_parameters = VadOptions(
+                        **vad_parameters, max_speech_duration_s=chunk_length
+                    )
+
+                active_segments = get_speech_timestamps(audio, vad_parameters)
+                clip_timestamps = merge_segments(active_segments, vad_parameters)
+            # run the audio if it is less than 30 sec even without clip_timestamps
+            elif duration < chunk_length:
+                clip_timestamps = [{"start": 0, "end": audio.shape[0]}]
             else:
                 raise RuntimeError(
-                    "No vad segments found. Set 'use_vad_model' to True while loading the model"
+                    "No clip timestamps found. "
+                    "Set 'vad_filter' to True or provide 'clip_timestamps'."
                 )
         if self.model.model.is_multilingual:
             language = language or self.preset_language
@@ -452,7 +374,7 @@ class BatchedInferencePipeline:
             if language is not None:
                 self.model.logger.warning(
                     f"English-only model is used, but {language} language is"
-                    "chosen, setting language to 'en'."
+                    " chosen, setting language to 'en'."
                 )
             language = "en"
 
@@ -463,8 +385,9 @@ class BatchedInferencePipeline:
             all_language_probs,
         ) = self.get_language_and_tokenizer(audio, task, language)
 
-        duration_after_vad = sum(
-            segment["end"] - segment["start"] for segment in vad_segments
+        duration_after_vad = (
+            sum((segment["end"] - segment["start"]) for segment in clip_timestamps)
+            / sampling_rate
         )
 
         # batched options: see the difference with default options in WhisperModel
@@ -511,27 +434,26 @@ class BatchedInferencePipeline:
             all_language_probs=all_language_probs,
         )
 
-        audio_segments, segments_metadata = self.audio_split(
-            audio, vad_segments, sampling_rate
-        )
+        audio_chunks, chunks_metadata = collect_chunks(audio, clip_timestamps)
         to_cpu = (
             self.model.model.device == "cuda" and len(self.model.model.device_index) > 1
         )
-        audio_segments = torch.nested.nested_tensor(audio_segments).to_padded_tensor(
-            padding=0
-        )
-        features = torch.stack(
-            [
-                self.model.feature_extractor(audio_segment, to_cpu=to_cpu)[
-                    ..., : self.model.feature_extractor.nb_max_frames
+        features = (
+            torch.stack(
+                [
+                    self.model.feature_extractor(chunk, to_cpu=to_cpu)[
+                        ..., : self.model.feature_extractor.nb_max_frames
+                    ]
+                    for chunk in audio_chunks
                 ]
-                for audio_segment in audio_segments
-            ]
+            )
+            if duration_after_vad
+            else []
         )
 
         segments = self._batched_segments_generator(
             features,
-            segments_metadata,
+            chunks_metadata,
             batch_size,
             batched_options,
             log_progress,
@@ -540,14 +462,14 @@ class BatchedInferencePipeline:
         return segments, info
 
     def _batched_segments_generator(
-        self, features, segments_metadata, batch_size, options, log_progress
+        self, features, chunks_metadata, batch_size, options, log_progress
     ):
         pbar = tqdm(total=len(features), disable=not log_progress, position=0)
         seg_idx = 0
         for i in range(0, len(features), batch_size):
             results = self.forward(
                 features[i : i + batch_size],
-                segments_metadata[i : i + batch_size],
+                chunks_metadata[i : i + batch_size],
                 **options._asdict(),
             )
 
@@ -850,7 +772,8 @@ class WhisperModel:
             elif isinstance(vad_parameters, dict):
                 vad_parameters = VadOptions(**vad_parameters)
             speech_chunks = get_speech_timestamps(audio, vad_parameters)
-            audio = collect_chunks(audio, speech_chunks)
+            audio_chunks, chunks_metadata = collect_chunks(audio, speech_chunks)
+            audio = torch.cat(audio_chunks, dim=0)
             duration_after_vad = audio.shape[0] / sampling_rate
 
             self.logger.info(
@@ -1905,7 +1828,8 @@ class WhisperModel:
             # get chunks of audio that contain speech
             speech_chunks = get_speech_timestamps(audio, vad_params)
             # merge chunks of audio that contain speech into a single array
-            audio = collect_chunks(audio, speech_chunks)
+            audio_chunks, chunks_metadata = collect_chunks(audio, speech_chunks)
+            audio = torch.cat(audio_chunks, dim=0)
 
             # calculate new duration of audio without silence
             duration_vad = audio.shape[0] / sampling_rate
