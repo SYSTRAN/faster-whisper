@@ -41,7 +41,7 @@ def decode_audio(
         rate=sampling_rate,
     )
 
-    raw_buffer = io.BytesIO()
+    audio_chunks = []  # Initialize a list to hold NumPy arrays
     dtype = None
 
     with av.open(input_file, mode="r", metadata_errors="ignore") as container:
@@ -53,7 +53,7 @@ def decode_audio(
         for frame in frames:
             array = frame.to_ndarray()
             dtype = array.dtype
-            raw_buffer.write(array)
+            audio_chunks.append(array)  # Append each chunk to the list
 
     # It appears that some objects related to the resampler are not freed
     # unless the garbage collector is manually run.
@@ -64,10 +64,8 @@ def decode_audio(
     del resampler
     gc.collect()
 
-    audio = np.frombuffer(raw_buffer.getbuffer(), dtype=dtype)
-
-    # Convert s16 back to f32.
-    audio = audio.astype(np.float32) / 32768.0
+    # Concatenate all audio chunks into a single NumPy array
+    audio = np.concatenate(audio_chunks).astype(np.float32) / 32768.0
 
     if split_stereo:
         left_channel = audio[0::2]
