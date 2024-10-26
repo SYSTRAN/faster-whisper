@@ -1,5 +1,6 @@
 import torch
 
+
 # Adapted from https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/feature_extraction_whisper.py  # noqa: E501
 class FeatureExtractor:
     def __init__(
