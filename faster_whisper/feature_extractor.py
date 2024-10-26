@@ -23,12 +23,9 @@ class FeatureExtractor:
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
         self.time_per_frame = hop_length / sampling_rate
-
-        self.window = torch.hann_window(self.n_fft).to(self.device)
-
         self.mel_filters = self.get_mel_filters(
             sampling_rate, n_fft, n_mels=feature_size
-        ).to(self.device)
+        )
 
     @staticmethod
     def get_mel_filters(sr: int, n_fft: int, n_mels: int = 128) -> torch.Tensor:
@@ -91,9 +88,12 @@ class FeatureExtractor:
         """
         Compute the log-Mel spectrogram of the provided audio.
         """
+        # Handle chunk_length as a local variable
         n_samples = (
             chunk_length * self.sampling_rate if chunk_length is not None else self.n_samples
         )
+        nb_max_frames = n_samples // self.hop_length
+        time_per_frame = self.hop_length / self.sampling_rate
 
         if waveform.dtype is not torch.float32:
             waveform = waveform.to(torch.float32)
@@ -104,17 +104,22 @@ class FeatureExtractor:
         if padding:
             waveform = torch.nn.functional.pad(waveform, (0, n_samples))
 
+        # Move window and mel_filters to waveform.device
+        window = torch.hann_window(self.n_fft).to(waveform.device)
+        mel_filters = self.mel_filters.to(waveform.device)
+
         stft = torch.stft(
             waveform,
             n_fft=self.n_fft,
             hop_length=self.hop_length,
-            window=self.window,
+            window=window,
             return_complex=True,
         )
 
-        magnitudes = stft.abs() ** 2
+        # Retain the original slicing to exclude the last frame
+        magnitudes = stft[..., :-1].abs() ** 2
 
-        mel_spec = self.mel_filters @ magnitudes
+        mel_spec = mel_filters @ magnitudes
 
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
