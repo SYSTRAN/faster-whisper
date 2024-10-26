@@ -107,7 +107,7 @@ class Tokenizer:
                 raise ValueError("Empty token sequence")
             if any(not isinstance(t, int) or t < 0 for t in tokens):
                 raise ValueError("Invalid token values detected")
-            
+
             outputs = [[]]
             for token in tokens:
                 if token >= self.timestamp_begin:
@@ -120,7 +120,7 @@ class Tokenizer:
             decoded = [s if isinstance(s, str) else self.tokenizer.decode(s) for s in outputs]
             if not any(decoded):
                 raise ValueError("Decoding produced no valid output")
-                
+
             return "".join(decoded)
         except Exception as e:
             raise TokenizationError(f"Failed to decode tokens with timestamps: {e}") from e
