@@ -1,5 +1,4 @@
 import string
-
 from functools import cached_property
 from typing import List, Optional, Tuple
 
@@ -117,13 +116,17 @@ class Tokenizer:
                 else:
                     outputs[-1].append(token)
 
-            decoded = [s if isinstance(s, str) else self.tokenizer.decode(s) for s in outputs]
+            decoded = [
+                s if isinstance(s, str) else self.tokenizer.decode(s) for s in outputs
+            ]
             if not any(decoded):
                 raise ValueError("Decoding produced no valid output")
 
             return "".join(decoded)
         except Exception as e:
-            raise TokenizationError(f"Failed to decode tokens with timestamps: {e}") from e
+            raise TokenizationError(
+                f"Failed to decode tokens with timestamps: {e}"
+            ) from e
 
     @cached_property
     def non_speech_tokens(self) -> Tuple[int]:
@@ -225,10 +228,7 @@ class Tokenizer:
         return words, word_tokens
 
 
-_TASKS = (
-    "transcribe",
-    "translate",
-)
+_TASKS = ("transcribe", "translate")
 
 _LANGUAGE_CODES = (
     "af",
