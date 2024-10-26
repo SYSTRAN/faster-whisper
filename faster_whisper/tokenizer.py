@@ -1,6 +1,6 @@
+import string
 from functools import cached_property
 from typing import List, Optional, Tuple
-import string
 
 import tokenizers
 
