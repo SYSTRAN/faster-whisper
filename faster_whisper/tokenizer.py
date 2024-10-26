@@ -94,20 +94,20 @@ class Tokenizer:
         try:
             text_tokens = [token for token in tokens if token < self.eot]
             if not text_tokens:
-                raise ValueError("No valid text tokens found")
+                return ""
             if any(not isinstance(t, int) or t < 0 for t in text_tokens):
                 raise ValueError("Invalid token values detected")
             return self.tokenizer.decode(text_tokens)
         except Exception as e:
             raise TokenizationError(f"Failed to decode tokens: {e}") from e
-
+    
     def decode_with_timestamps(self, tokens: List[int]) -> str:
         try:
             if not tokens:
                 raise ValueError("Empty token sequence")
             if any(not isinstance(t, int) or t < 0 for t in tokens):
                 raise ValueError("Invalid token values detected")
-
+    
             outputs = [[]]
             for token in tokens:
                 if token >= self.timestamp_begin:
@@ -116,13 +116,14 @@ class Tokenizer:
                     outputs.append([])
                 else:
                     outputs[-1].append(token)
-
+    
             decoded = [
                 s if isinstance(s, str) else self.tokenizer.decode(s) for s in outputs
             ]
-            if not any(decoded):
-                raise ValueError("Decoding produced no valid output")
-
+            
+            if not any(decoded) and not any(isinstance(s, str) for s in outputs):
+                return ""
+    
             return "".join(decoded)
         except Exception as e:
             raise TokenizationError(
