@@ -92,8 +92,6 @@ class FeatureExtractor:
         n_samples = (
             chunk_length * self.sampling_rate if chunk_length is not None else self.n_samples
         )
-        nb_max_frames = n_samples // self.hop_length
-        time_per_frame = self.hop_length / self.sampling_rate
 
         if waveform.dtype is not torch.float32:
             waveform = waveform.to(torch.float32)
