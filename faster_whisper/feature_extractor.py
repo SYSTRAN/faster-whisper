@@ -1,5 +1,6 @@
 import torch
 
+
 # Adapted from https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/feature_extraction_whisper.py  # noqa: E501
 class FeatureExtractor:
     def __init__(
@@ -11,17 +12,6 @@ class FeatureExtractor:
         chunk_length: int = 30,
         n_fft: int = 400,
     ):
-        """
-        Initializes the FeatureExtractor with the given parameters.
-
-        Args:
-            device (str): Device to perform computations on ("cuda", "cpu", or "auto").
-            feature_size (int): Number of Mel filter banks.
-            sampling_rate (int): Sampling rate of the input audio.
-            hop_length (int): Number of samples between successive frames.
-            chunk_length (int): Length of audio chunks in seconds.
-            n_fft (int): Number of FFT components.
-        """
         if device == "auto":
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
@@ -34,10 +24,8 @@ class FeatureExtractor:
         self.nb_max_frames = self.n_samples // hop_length
         self.time_per_frame = hop_length / sampling_rate
 
-        # Precompute and cache the Hann window on the appropriate device
         self.window = torch.hann_window(self.n_fft).to(self.device)
 
-        # Precompute mel filters and move them to the device
         self.mel_filters = self.get_mel_filters(
             sampling_rate, n_fft, n_mels=feature_size
         ).to(self.device)
@@ -46,14 +34,6 @@ class FeatureExtractor:
     def get_mel_filters(sr: int, n_fft: int, n_mels: int = 128) -> torch.Tensor:
         """
         Implementation of librosa.filters.mel in PyTorch.
-
-        Args:
-            sr (int): Sampling rate.
-            n_fft (int): Number of FFT components.
-            n_mels (int): Number of Mel filter banks.
-
-        Returns:
-            torch.Tensor: Mel filter matrix of shape (n_mels, 1 + n_fft // 2).
         """
         # Initialize the weights
         n_mels = int(n_mels)
@@ -109,38 +89,21 @@ class FeatureExtractor:
         to_cpu: bool = False,
     ) -> torch.Tensor:
         """
-        Compute the log-Mel spectrogram of the provided audio waveform.
-
-        Args:
-            waveform (torch.Tensor): Input audio waveform tensor of shape (..., n_samples).
-            padding (bool): Whether to pad the waveform to the required number of samples.
-            chunk_length (int, optional): Length of audio chunks in seconds. Overrides initialization if provided.
-            to_cpu (bool): Whether to move the output spectrogram to CPU.
-
-        Returns:
-            torch.Tensor: Log-Mel spectrogram tensor.
+        Compute the log-Mel spectrogram of the provided audio.
         """
-        # Use local variables instead of modifying instance attributes
-        if chunk_length is not None:
-            n_samples = chunk_length * self.sampling_rate
-            nb_max_frames = n_samples // self.hop_length
-        else:
-            n_samples = self.n_samples
-            nb_max_frames = self.nb_max_frames
+        n_samples = (
+            chunk_length * self.sampling_rate if chunk_length is not None else self.n_samples
+        )
 
-        # Ensure waveform is float32
         if waveform.dtype is not torch.float32:
             waveform = waveform.to(torch.float32)
 
-        # Move waveform to the target device if necessary
         if self.device == "cuda" and not waveform.is_cuda:
             waveform = waveform.to(self.device)
 
-        # Apply padding if required
         if padding:
             waveform = torch.nn.functional.pad(waveform, (0, n_samples))
 
-        # Perform Short-Time Fourier Transform (STFT) using the cached window
         stft = torch.stft(
             waveform,
             n_fft=self.n_fft,
@@ -149,16 +112,12 @@ class FeatureExtractor:
             return_complex=True,
         )
 
-        # Compute the power spectrogram
         magnitudes = stft.abs() ** 2
 
-        # Apply the precomputed mel filters
         mel_spec = self.mel_filters @ magnitudes
 
-        # Compute the log-Mel spectrogram
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
 
-        # Move the spectrogram to CPU if requested
         return log_spec.cpu() if to_cpu else log_spec
