@@ -2,6 +2,11 @@ ctranslate2>=4.0,<5
 huggingface_hub>=0.13
 tokenizers>=0.13,<1
 onnxruntime>=1.14,<2 
+pyannote-audio>=3.1.1
 torch>=2.1.1 
 av>=11
 tqdm
+fastapi==0.115.3
+faster-whisper==1.0.3
+uvicorn==0.32.0
+modal==0.64.222
