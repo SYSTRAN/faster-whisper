@@ -54,7 +54,7 @@ def decode_audio(
             array = frame.to_ndarray()
             dtype = array.dtype
             raw_buffer.write(array.tobytes())
-    
+
     # It appears that some objects related to the resampler are not freed
     # unless the garbage collector is manually run.
     # https://github.com/SYSTRAN/faster-whisper/issues/390
