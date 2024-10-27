@@ -1275,14 +1275,12 @@ class WhisperModel:
         all_language_probs = [(token[2:-2], prob) for (token, prob) in results[0]]
         return language, language_probability, all_language_probs
 
-    def detect_language_multi_segment(
-        self, audio: Union[str, BinaryIO, torch.Tensor]
-    ):
+    def detect_language_multi_segment(self, audio: Union[str, BinaryIO, torch.Tensor]):
         config = self.config
 
-        if config.multilingual:
+        if not config.multilingual:
             self.logger.warning(
-                "Language detection is not supported for multilingual audios; detecting the major language."
+                "Language detection is not supported for non-multilingual models; defaulting to the major language."
             )
 
         speech_percentage_threshold = config.speech_percentage_threshold
