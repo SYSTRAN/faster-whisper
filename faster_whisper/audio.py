@@ -109,9 +109,9 @@ def _resample_frames(frames, resampler):
         yield from resampler.resample(frame)
 
 
-def pad_or_trim(array, length: int, *, axis: int = -1):
+def pad_or_trim(array, length: int = 3000, *, axis: int = -1):
     """
-    Pad or trim the audio array to N_SAMPLES, as expected by the encoder.
+    Pad or trim the Mel features array to 3000, as expected by the encoder.
     """
     axis = axis % array.ndim
     if array.shape[axis] > length:

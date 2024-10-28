@@ -441,9 +441,11 @@ class BatchedInferencePipeline:
         features = (
             torch.stack(
                 [
-                    self.model.feature_extractor(chunk, to_cpu=to_cpu)[
-                        ..., : self.model.feature_extractor.nb_max_frames
-                    ]
+                    pad_or_trim(
+                        self.model.feature_extractor(chunk, to_cpu=to_cpu)[
+                            ..., : self.model.feature_extractor.nb_max_frames
+                        ]
+                    )
                     for chunk in audio_chunks
                 ]
             )
@@ -847,7 +849,7 @@ class WhisperModel:
                     segment = features[
                         :, seek : seek + self.feature_extractor.nb_max_frames
                     ]
-                    encoder_output = self.encode(segment)
+                    encoder_output = self.encode(pad_or_trim(segment))
                     # results is a list of tuple[str, float] with language names and
                     # probabilities.
                     results = self.model.detect_language(encoder_output)[0]
@@ -1105,7 +1107,7 @@ class WhisperModel:
             )
             segment = features[:, seek : seek + segment_size]
             segment_duration = segment_size * self.feature_extractor.time_per_frame
-            segment = pad_or_trim(segment, self.feature_extractor.nb_max_frames)
+            segment = pad_or_trim(segment)
 
             if self.logger.isEnabledFor(logging.DEBUG):
                 self.logger.debug(
@@ -1766,7 +1768,7 @@ class WhisperModel:
         segment = self.feature_extractor(audio, padding=True, to_cpu=to_cpu)[
             :, : self.feature_extractor.nb_max_frames
         ]
-        encoder_output = self.encode(segment)
+        encoder_output = self.encode(pad_or_trim(segment))
         results = self.model.detect_language(encoder_output)
         language_token, language_probability = results[0][0]
         language = language_token[2:-2]
@@ -1895,7 +1897,7 @@ class WhisperModel:
         for i in indices:
             segment_features = features[:, i * nb_max_frames : (i + 1) * nb_max_frames]
             try:
-                encoder_output = self.encode(segment_features)
+                encoder_output = self.encode(pad_or_trim(segment_features))
                 results = self.model.detect_language(encoder_output)[0]
 
             except ValueError as e:  # or RuntimeError
