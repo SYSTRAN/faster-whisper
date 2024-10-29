@@ -443,7 +443,8 @@ class BatchedInferencePipeline:
                 [
                     pad_or_trim(
                         self.model.feature_extractor(chunk, to_cpu=to_cpu)[
-                            ..., : self.model.feature_extractor.nb_max_frames
+                            ...,
+                            : chunk.shape[0] // self.model.feature_extractor.hop_length,
                         ]
                     )
                     for chunk in audio_chunks
