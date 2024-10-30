@@ -2,7 +2,11 @@ import os
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 from faster_whisper.tokenizer import Tokenizer
-from faster_whisper.transcribe import get_suppressed_tokens
+from faster_whisper.transcribe import (
+    BatchTranscriptionOptions,
+    WhisperModelTranscriptionOptions,
+    get_suppressed_tokens,
+)
 
 
 def test_supported_languages():
@@ -12,7 +16,9 @@ def test_supported_languages():
 
 def test_transcribe(jfk_path):
     model = WhisperModel("tiny")
-    segments, info = model.transcribe(jfk_path, word_timestamps=True)
+    segments, info = model.transcribe(
+        jfk_path, WhisperModelTranscriptionOptions(word_timestamps=True)
+    )
     assert info.all_language_probs is not None
 
     assert info.language == "en"
@@ -41,7 +47,7 @@ def test_transcribe(jfk_path):
     assert segment.end == segment.words[-1].end
     batched_model = BatchedInferencePipeline(model=model)
     result, info = batched_model.transcribe(
-        jfk_path, word_timestamps=True, vad_filter=False
+        jfk_path, BatchTranscriptionOptions(word_timestamps=True, vad_filter=False)
     )
     assert info.language == "en"
     assert info.language_probability > 0.7
@@ -61,7 +67,9 @@ def test_transcribe(jfk_path):
 def test_batched_transcribe(physcisworks_path):
     model = WhisperModel("tiny")
     batched_model = BatchedInferencePipeline(model=model)
-    result, info = batched_model.transcribe(physcisworks_path, batch_size=16)
+    result, info = batched_model.transcribe(
+        physcisworks_path, BatchTranscriptionOptions(batch_size=16)
+    )
     assert info.language == "en"
     assert info.language_probability > 0.7
     segments = []
@@ -74,9 +82,11 @@ def test_batched_transcribe(physcisworks_path):
 
     result, info = batched_model.transcribe(
         physcisworks_path,
-        batch_size=16,
-        without_timestamps=False,
-        word_timestamps=True,
+        BatchTranscriptionOptions(
+            batch_size=16,
+            without_timestamps=False,
+            word_timestamps=True,
+        ),
     )
     segments = []
     for segment in result:
@@ -89,7 +99,9 @@ def test_batched_transcribe(physcisworks_path):
 
 def test_prefix_with_timestamps(jfk_path):
     model = WhisperModel("tiny")
-    segments, _ = model.transcribe(jfk_path, prefix="And so my fellow Americans")
+    segments, _ = model.transcribe(
+        jfk_path, WhisperModelTranscriptionOptions(prefix="And so my fellow Americans")
+    )
     segments = list(segments)
 
     assert len(segments) == 1
@@ -109,8 +121,10 @@ def test_vad(jfk_path):
     model = WhisperModel("tiny")
     segments, info = model.transcribe(
         jfk_path,
-        vad_filter=True,
-        vad_parameters=dict(min_silence_duration_ms=500, speech_pad_ms=200),
+        WhisperModelTranscriptionOptions(
+            vad_filter=True,
+            vad_parameters=dict(min_silence_duration_ms=500, speech_pad_ms=200),
+        ),
     )
     segments = list(segments)
 
