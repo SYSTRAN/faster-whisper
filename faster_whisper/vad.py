@@ -2,7 +2,8 @@ import bisect
 import functools
 import os
 
-from typing import Dict, List, NamedTuple, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -11,7 +12,8 @@ from faster_whisper.utils import get_assets_path
 
 
 # The code below is adapted from https://github.com/snakers4/silero-vad.
-class VadOptions(NamedTuple):
+@dataclass
+class VadOptions:
     """VAD options.
 
     Attributes:
