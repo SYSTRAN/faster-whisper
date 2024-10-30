@@ -512,7 +512,7 @@ class WhisperModel:
         device: str = "auto",
         device_index: Union[int, List[int]] = 0,
         compute_type: str = "default",
-        cpu_threads: int = 4,
+        cpu_threads: int = 0,
         num_workers: int = 1,
         download_root: Optional[str] = None,
         local_files_only: bool = False,
