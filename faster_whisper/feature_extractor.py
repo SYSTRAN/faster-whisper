@@ -142,11 +142,11 @@ def stft(
     hop_length: int = None,
     win_length: int = None,
     window: np.ndarray = None,
-    center=True,
-    mode="reflect",
-    normalized=False,
-    onesided=None,
-    return_complex=None,
+    center: bool = True,
+    mode: str = "reflect",
+    normalized: bool = False,
+    onesided: bool = None,
+    return_complex: bool = None,
 ):
     # Default initialization for hop_length and win_length
     hop_length = hop_length if hop_length is not None else n_fft // 4
