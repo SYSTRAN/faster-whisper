@@ -11,6 +11,7 @@ from math import ceil
 from typing import BinaryIO, Iterable, List, NamedTuple, Optional, Tuple, Union
 
 import ctranslate2
+import cupy as cp
 import numpy as np
 import tokenizers
 
@@ -433,7 +434,7 @@ class BatchedInferencePipeline:
 
         audio_chunks, chunks_metadata = collect_chunks(audio, clip_timestamps)
         features = (
-            np.stack(
+            cp.stack(
                 [
                     pad_or_trim(
                         self.model.feature_extractor(chunk)[
@@ -1333,7 +1334,7 @@ class WhisperModel:
         to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
 
         if features.ndim == 2:
-            features = np.expand_dims(features, 0)
+            features = cp.expand_dims(features, 0)
         features = get_ctranslate2_storage(features)
 
         return self.model.encode(features, to_cpu=to_cpu)
@@ -2008,7 +2009,7 @@ def restore_speech_timestamps(
 
 
 def get_ctranslate2_storage(segment: np.ndarray) -> ctranslate2.StorageView:
-    segment = np.ascontiguousarray(segment)
+    segment = cp.ascontiguousarray(segment)
     segment = ctranslate2.StorageView.from_array(segment)
     return segment
 
