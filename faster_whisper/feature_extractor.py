@@ -64,7 +64,7 @@ class FeatureExtractor:
 
         return weights
 
-    def __call__(self, waveform: np.ndarray, padding=480000, chunk_length=None):
+    def __call__(self, waveform: np.ndarray, padding=160, chunk_length=None):
         """
         Compute the log-Mel spectrogram of the provided audio.
         """
