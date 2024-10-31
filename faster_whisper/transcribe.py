@@ -840,9 +840,7 @@ class WhisperModel:
                     if isinstance(clip_timestamps, str)
                     else clip_timestamps[0]
                 )
-                content_frames = (
-                    features.shape[-1] - self.feature_extractor.nb_max_frames
-                )
+                content_frames = features.shape[-1] - 1
                 seek = (
                     int(start_timestamp * self.frames_per_second)
                     if start_timestamp * self.frames_per_second < content_frames
@@ -1045,7 +1043,7 @@ class WhisperModel:
         options: TranscriptionOptions,
         encoder_output: Optional[ctranslate2.StorageView] = None,
     ) -> Iterable[Segment]:
-        content_frames = features.shape[-1] - self.feature_extractor.nb_max_frames
+        content_frames = features.shape[-1] - 1
         content_duration = float(content_frames * self.feature_extractor.time_per_frame)
 
         if isinstance(options.clip_timestamps, str):
