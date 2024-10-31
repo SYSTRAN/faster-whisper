@@ -1,32 +1,15 @@
 import numpy as np
 
-try:
-    import cupy as cp
-
-    CUPY_AVAILABLE = True
-except ImportError:
-    CUPY_AVAILABLE = False
-
-
-def get_array_module(device: str = "auto"):
-    if device in ["auto", "cuda"] and CUPY_AVAILABLE and cp.cuda.is_available():
-        return cp, "cuda"
-    else:
-        return np, "cpu"
-
 
 class FeatureExtractor:
     def __init__(
         self,
-        device: str = "auto",
         feature_size=80,
         sampling_rate=16000,
         hop_length=160,
         chunk_length=30,
         n_fft=400,
     ):
-        self.array_module: np
-        self.array_module, self._device = get_array_module(device)
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.chunk_length = chunk_length
@@ -38,18 +21,19 @@ class FeatureExtractor:
             sampling_rate, n_fft, n_mels=feature_size
         ).astype("float32")
 
-    def get_mel_filters(self, sr, n_fft, n_mels=128):
+    @staticmethod
+    def get_mel_filters(sr, n_fft, n_mels=128):
         # Initialize the weights
         n_mels = int(n_mels)
 
         # Center freqs of each FFT bin
-        fftfreqs = self.array_module.fft.rfftfreq(n=n_fft, d=1.0 / sr)
+        fftfreqs = np.fft.rfftfreq(n=n_fft, d=1.0 / sr)
 
         # 'Center freqs' of mel bands - uniformly spaced between limits
         min_mel = 0.0
         max_mel = 45.245640471924965
 
-        mels = self.array_module.linspace(min_mel, max_mel, n_mels + 2)
+        mels = np.linspace(min_mel, max_mel, n_mels + 2)
 
         # Fill in the linear scale
         f_min = 0.0
@@ -59,32 +43,28 @@ class FeatureExtractor:
         # And now the nonlinear scale
         min_log_hz = 1000.0  # beginning of log region (Hz)
         min_log_mel = (min_log_hz - f_min) / f_sp  # same (Mels)
-        logstep = self.array_module.log(6.4) / 27.0  # step size for log region
+        logstep = np.log(6.4) / 27.0  # step size for log region
 
         # If we have vector data, vectorize
         log_t = mels >= min_log_mel
-        freqs[log_t] = min_log_hz * self.array_module.exp(
-            logstep * (mels[log_t] - min_log_mel)
-        )
+        freqs[log_t] = min_log_hz * np.exp(logstep * (mels[log_t] - min_log_mel))
 
-        fdiff = self.array_module.diff(freqs)
+        fdiff = np.diff(freqs)
         ramps = freqs.reshape(-1, 1) - fftfreqs.reshape(1, -1)
 
-        lower = -ramps[:-2] / self.array_module.expand_dims(fdiff[:-1], axis=1)
-        upper = ramps[2:] / self.array_module.expand_dims(fdiff[1:], axis=1)
+        lower = -ramps[:-2] / np.expand_dims(fdiff[:-1], axis=1)
+        upper = ramps[2:] / np.expand_dims(fdiff[1:], axis=1)
 
         # Intersect them with each other and zero, vectorized across all i
-        weights = self.array_module.maximum(
-            self.array_module.zeros_like(lower), self.array_module.minimum(lower, upper)
-        )
+        weights = np.maximum(np.zeros_like(lower), np.minimum(lower, upper))
 
         # Slaney-style mel is scaled to be approx constant energy per channel
         enorm = 2.0 / (freqs[2 : n_mels + 2] - freqs[:n_mels])
-        weights *= self.array_module.expand_dims(enorm, axis=1)
+        weights *= np.expand_dims(enorm, axis=1)
 
         return weights
 
-    def __call__(self, waveform: np.ndarray, padding=True, chunk_length=None):
+    def __call__(self, waveform: np.ndarray, padding=480000, chunk_length=None):
         """
         Compute the log-Mel spectrogram of the provided audio.
         """
@@ -97,46 +77,29 @@ class FeatureExtractor:
             waveform = waveform.astype(np.float32)
 
         if padding:
-            waveform = np.pad(waveform, (0, self.n_samples))
+            waveform = np.pad(waveform, (0, padding))
 
-        window = self.array_module.hanning(self.n_fft + 1)[:-1].astype("float32")
+        window = np.hanning(self.n_fft + 1)[:-1].astype("float32")
 
         stft_output = stft(
-            self.array_module,
             waveform,
             self.n_fft,
             self.hop_length,
             window=window,
             return_complex=True,
         ).astype("complex64")
-        magnitudes = self.array_module.abs(stft_output[..., :-1]) ** 2
+        magnitudes = np.abs(stft_output[..., :-1]) ** 2
 
         mel_spec = self.mel_filters @ magnitudes
 
-        log_spec = self.array_module.log10(
-            self.array_module.clip(mel_spec, a_min=1e-10, a_max=None)
-        )
-        log_spec = self.array_module.maximum(log_spec, log_spec.max() - 8.0)
+        log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
+        log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
 
-        return np.asarray(log_spec.tolist(), dtype=log_spec.dtype)
-
-    @property
-    def device(self):
-        return self._device
-
-    @device.setter
-    def device(self, device):
-        if device != self.device:
-            self.array_module, self._device = get_array_module(device)
-            feature_size = self.mel_filters.shape[0]
-            self.mel_filters = self.get_mel_filters(
-                self.sampling_rate, self.n_fft, feature_size
-            ).astype("float32")
+        return log_spec
 
 
 def stft(
-    array_module: np,
     input_tensor: np.ndarray,
     n_fft: int,
     hop_length: int = None,
@@ -214,7 +177,7 @@ def stft(
     # Handle padding of the window if necessary
     if win_length < n_fft:
         left = (n_fft - win_length) // 2
-        window_ = array_module.zeros(n_fft, dtype=window.dtype)
+        window_ = np.zeros(n_fft, dtype=window.dtype)
         window_[left : left + win_length] = window
     else:
         window_ = window
@@ -234,7 +197,7 @@ def stft(
     )
 
     if window_ is not None:
-        input_tensor = array_module.asarray(input_tensor) * window_
+        input_tensor = input_tensor * window_
 
     # FFT and transpose
     complex_fft = input_is_complex
@@ -250,13 +213,13 @@ def stft(
             raise ValueError(
                 "Cannot have onesided output if window or input is complex"
             )
-        output = array_module.fft.fft(input_tensor, n=n_fft, axis=-1, norm=norm)
+        output = np.fft.fft(input_tensor, n=n_fft, axis=-1, norm=norm)
     else:
-        output = array_module.fft.rfft(input_tensor, n=n_fft, axis=-1, norm=norm)
+        output = np.fft.rfft(input_tensor, n=n_fft, axis=-1, norm=norm)
 
     output = output.transpose((0, 2, 1))
 
     if input_tensor_1d:
         output = output.squeeze(0)
 
-    return output if return_complex else array_module.real(output)
+    return output if return_complex else np.real(output)
