@@ -108,7 +108,7 @@ class FeatureExtractor:
             self.hop_length,
             window=window,
             return_complex=True,
-        )
+        ).astype("complex64")
         magnitudes = self.array_module.abs(stft_output[..., :-1]) ** 2
 
         mel_spec = self.mel_filters @ magnitudes
@@ -129,6 +129,10 @@ class FeatureExtractor:
     def device(self, device):
         if device != self.device:
             self.array_module, self._device = get_array_module(device)
+            feature_size = self.mel_filters.shape[0]
+            self.mel_filters = self.get_mel_filters(
+                self.sampling_rate, self.n_fft, feature_size
+            ).astype("float32")
 
 
 def stft(
@@ -144,7 +148,6 @@ def stft(
     onesided=None,
     return_complex=None,
 ):
-
     # Default initialization for hop_length and win_length
     hop_length = hop_length if hop_length is not None else n_fft // 4
     win_length = win_length if win_length is not None else n_fft
