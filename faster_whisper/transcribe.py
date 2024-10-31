@@ -604,9 +604,7 @@ class WhisperModel:
                 "openai/whisper-tiny" + ("" if self.model.is_multilingual else ".en")
             )
         self.feat_kwargs = self._get_feature_kwargs(model_path, preprocessor_bytes)
-        self.feature_extractor = FeatureExtractor(
-            **self.feat_kwargs, device=self.device
-        )
+        self.feature_extractor = FeatureExtractor(**self.feat_kwargs)
         self.input_stride = 2
         self.num_samples_per_token = (
             self.feature_extractor.hop_length * self.input_stride
