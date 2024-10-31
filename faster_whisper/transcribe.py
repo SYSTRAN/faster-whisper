@@ -15,7 +15,6 @@ from warnings import warn
 import ctranslate2
 import numpy as np
 import tokenizers
-import torch
 
 from tqdm import tqdm
 
@@ -228,7 +227,7 @@ class BatchedInferencePipeline:
 
     def transcribe(
         self,
-        audio: Union[str, BinaryIO, torch.Tensor, np.ndarray],
+        audio: Union[str, BinaryIO, np.ndarray],
         language: Optional[str] = None,
         task: str = None,
         log_progress: bool = False,
@@ -357,9 +356,7 @@ class BatchedInferencePipeline:
 
         sampling_rate = self.model.feature_extractor.sampling_rate
 
-        if isinstance(audio, np.ndarray):
-            audio = torch.from_numpy(audio)
-        elif not isinstance(audio, torch.Tensor):
+        if not isinstance(audio, np.ndarray):
             audio = decode_audio(audio, sampling_rate=sampling_rate)
         duration = audio.shape[0] / sampling_rate
 
@@ -457,14 +454,11 @@ class BatchedInferencePipeline:
         )
 
         audio_chunks, chunks_metadata = collect_chunks(audio, clip_timestamps)
-        to_cpu = (
-            self.model.model.device == "cuda" and len(self.model.model.device_index) > 1
-        )
         features = (
-            torch.stack(
+            np.stack(
                 [
                     pad_or_trim(
-                        self.model.feature_extractor(chunk, to_cpu=to_cpu)[
+                        self.model.feature_extractor(chunk)[
                             ...,
                             : chunk.shape[0] // self.model.feature_extractor.hop_length,
                         ]
@@ -651,7 +645,7 @@ class WhisperModel:
 
     def transcribe(
         self,
-        audio: Union[str, BinaryIO, torch.Tensor, np.ndarray],
+        audio: Union[str, BinaryIO, np.ndarray],
         language: Optional[str] = None,
         task: str = "transcribe",
         beam_size: int = 5,
@@ -779,9 +773,7 @@ class WhisperModel:
 
         sampling_rate = self.feature_extractor.sampling_rate
 
-        if isinstance(audio, np.ndarray):
-            audio = torch.from_numpy(audio)
-        elif not isinstance(audio, torch.Tensor):
+        if not isinstance(audio, np.ndarray):
             audio = decode_audio(audio, sampling_rate=sampling_rate)
 
         duration = audio.shape[0] / sampling_rate
@@ -798,7 +790,7 @@ class WhisperModel:
                 vad_parameters = VadOptions(**vad_parameters)
             speech_chunks = get_speech_timestamps(audio, vad_parameters)
             audio_chunks, chunks_metadata = collect_chunks(audio, speech_chunks)
-            audio = torch.cat(audio_chunks, dim=0)
+            audio = np.concatenate(audio_chunks, axis=0)
             duration_after_vad = audio.shape[0] / sampling_rate
 
             self.logger.info(
@@ -822,10 +814,7 @@ class WhisperModel:
         else:
             speech_chunks = None
 
-        to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
-        features = self.feature_extractor(
-            audio, chunk_length=chunk_length, to_cpu=to_cpu
-        )
+        features = self.feature_extractor(audio, chunk_length=chunk_length)
 
         encoder_output = None
         all_language_probs = None
@@ -1053,7 +1042,7 @@ class WhisperModel:
 
     def generate_segments(
         self,
-        features: torch.Tensor,
+        features: np.ndarray,
         tokenizer: Tokenizer,
         options: TranscriptionOptions,
         encoder_output: Optional[ctranslate2.StorageView] = None,
@@ -1356,13 +1345,13 @@ class WhisperModel:
 
                 prompt_reset_since = len(all_tokens)
 
-    def encode(self, features: torch.Tensor) -> ctranslate2.StorageView:
+    def encode(self, features: np.ndarray) -> ctranslate2.StorageView:
         # When the model is running on multiple GPUs, the encoder output should be moved
         # to the CPU since we don't know which GPU will handle the next job.
         to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
 
         if features.ndim == 2:
-            features = features.unsqueeze(0)
+            features = np.expand_dims(features, 0)
         features = get_ctranslate2_storage(features)
 
         return self.model.encode(features, to_cpu=to_cpu)
@@ -1733,7 +1722,7 @@ class WhisperModel:
 
     def generate_segment_batched(
         self,
-        features: torch.Tensor,
+        features: np.ndarray,
         tokenizer: Tokenizer,
         options: dict,
     ):
@@ -1782,9 +1771,8 @@ class WhisperModel:
 
         return encoder_output, output
 
-    def detect_language(self, audio: torch.Tensor):
-        to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
-        segment = self.feature_extractor(audio, padding=True, to_cpu=to_cpu)[
+    def detect_language(self, audio: np.ndarray):
+        segment = self.feature_extractor(audio)[
             :, : self.feature_extractor.nb_max_frames
         ]
         encoder_output = self.encode(pad_or_trim(segment))
@@ -1798,7 +1786,7 @@ class WhisperModel:
         return language, language_probability, all_language_probs
 
     def detect_language_multi_segment(
-        self, audio: Union[str, BinaryIO, torch.Tensor], params: Optional[dict] = None
+        self, audio: Union[str, BinaryIO, np.ndarray], params: Optional[dict] = None
     ):
         """
         Detect language based on N highly-confident segments of a language.
@@ -1834,8 +1822,8 @@ class WhisperModel:
 
         # decode audio if it is not decoded already
         sampling_rate = self.feature_extractor.sampling_rate
-        if not isinstance(audio, torch.Tensor):
-            audio: torch.Tensor = decode_audio(audio, sampling_rate=sampling_rate)
+        if not isinstance(audio, np.ndarray):
+            audio: np.ndarray = decode_audio(audio, sampling_rate=sampling_rate)
 
         # calculate duration of audio as number of seconds
         # audio.shape[0] is the number of samples in the audio
@@ -1850,7 +1838,7 @@ class WhisperModel:
             speech_chunks = get_speech_timestamps(audio, vad_params)
             # merge chunks of audio that contain speech into a single array
             audio_chunks, chunks_metadata = collect_chunks(audio, speech_chunks)
-            audio = torch.cat(audio_chunks, dim=0)
+            audio = np.concatenate(audio_chunks, axis=0)
 
             # calculate new duration of audio without silence
             duration_vad = audio.shape[0] / sampling_rate
@@ -1874,8 +1862,7 @@ class WhisperModel:
         nb_max_frames = self.feature_extractor.nb_max_frames
 
         # extract features from audio with padding (default)
-        to_cpu = self.model.device == "cuda" and len(self.model.device_index) > 1
-        features = self.feature_extractor(audio, to_cpu=to_cpu)
+        features = self.feature_extractor(audio)
 
         # number of segments in the audio
         num_segments = features.shape[-1] // nb_max_frames
@@ -1987,8 +1974,8 @@ class WhisperModel:
             dc_offset = audio.mean()
             audio_minus_dc_offset = audio - dc_offset
             is_silent = (
-                torch.all(audio.abs() < 0.01)
-                or torch.sqrt(torch.mean(audio_minus_dc_offset**2)) < 0.01
+                all(np.abs(audio) < 0.1)
+                or np.sqrt(np.mean(audio_minus_dc_offset**2)) < 0.01
             )
 
             if is_silent:
@@ -2032,12 +2019,9 @@ def restore_speech_timestamps(
         yield segment
 
 
-def get_ctranslate2_storage(segment: torch.Tensor) -> ctranslate2.StorageView:
-    segment = segment.contiguous()
-    segment = ctranslate2.StorageView.from_array(
-        segment if segment.is_cuda else segment.numpy()
-    )  # torch cpu tensors don't implement __array_interface__
-    # https://github.com/pytorch/pytorch/issues/51156
+def get_ctranslate2_storage(segment: np.ndarray) -> ctranslate2.StorageView:
+    segment = np.ascontiguousarray(segment)
+    segment = ctranslate2.StorageView.from_array(segment)
     return segment
 
 
