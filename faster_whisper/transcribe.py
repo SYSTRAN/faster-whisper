@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass
 from inspect import signature
 from math import ceil
 from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
+from warnings import warn
 
 import ctranslate2
 import numpy as np
@@ -39,6 +40,11 @@ class Word:
     probability: float
 
     def _asdict(self):
+        warn(
+            "Word._asdict() method is deprecated, use dataclasses.asdict(Word) instead",
+            DeprecationWarning,
+            2,
+        )
         return asdict(self)
 
 
@@ -57,6 +63,11 @@ class Segment:
     temperature: Optional[float] = 1.0
 
     def _asdict(self):
+        warn(
+            "Segment._asdict() method is deprecated, use dataclasses.asdict(Segment) instead",
+            DeprecationWarning,
+            2,
+        )
         return asdict(self)
 
 
