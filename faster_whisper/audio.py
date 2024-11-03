@@ -82,7 +82,7 @@ def decode_audio(
     if is_ffmpeg_available():
         try:
             return decode_audio_ffmpeg(input_file, sampling_rate, split_stereo)
-        except:
+        except (subprocess.SubprocessError, RuntimeError):
             pass
 
     resampler = av.audio.resampler.AudioResampler(
