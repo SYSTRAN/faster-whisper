@@ -4,13 +4,11 @@ If FFmpeg is installed on the system, we use it directly for optimal performance
 If FFmpeg is not available, PyAV provides the advantage of bundled FFmpeg libraries,
 though its low-level API requires direct frame manipulation.
 """
-
 import gc
 import io
 import itertools
 import subprocess
 import tempfile
-
 from typing import BinaryIO, Union
 
 import av
