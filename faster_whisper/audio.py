@@ -14,7 +14,6 @@ from typing import BinaryIO, Union
 
 import av
 import numpy as np
-import torch
 
 
 def decode_audio(
@@ -72,9 +71,9 @@ def decode_audio(
     if split_stereo:
         left_channel = audio[0::2]
         right_channel = audio[1::2]
-        return torch.from_numpy(left_channel), torch.from_numpy(right_channel)
+        return left_channel, right_channel
 
-    return torch.from_numpy(audio)
+    return audio
 
 
 def _ignore_invalid_frames(frames):
@@ -113,20 +112,12 @@ def pad_or_trim(array, length: int = 3000, *, axis: int = -1):
     """
     Pad or trim the Mel features array to 3000, as expected by the encoder.
     """
-    axis = axis % array.ndim
     if array.shape[axis] > length:
-        idx = [Ellipsis] * axis + [slice(length)] + [Ellipsis] * (array.ndim - axis - 1)
-        return array[idx]
+        array = array.take(indices=range(length), axis=axis)
 
     if array.shape[axis] < length:
-        pad_widths = (
-            [
-                0,
-            ]
-            * array.ndim
-            * 2
-        )
-        pad_widths[2 * axis] = length - array.shape[axis]
-        array = torch.nn.functional.pad(array, tuple(pad_widths[::-1]))
+        pad_widths = [(0, 0)] * array.ndim
+        pad_widths[axis] = (0, length - array.shape[axis])
+        array = np.pad(array, pad_widths)
 
     return array

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-import torch
 
 from faster_whisper.utils import get_assets_path
 
@@ -44,7 +43,7 @@ class VadOptions:
 
 
 def get_speech_timestamps(
-    audio: torch.Tensor,
+    audio: np.ndarray,
     vad_options: Optional[VadOptions] = None,
     sampling_rate: int = 16000,
     **kwargs,
@@ -84,7 +83,7 @@ def get_speech_timestamps(
     model = get_vad_model()
 
     padded_audio = np.pad(
-        audio.numpy(), (0, window_size_samples - audio.shape[0] % window_size_samples)
+        audio, (0, window_size_samples - audio.shape[0] % window_size_samples)
     )
     speech_probs = model(padded_audio.reshape(1, -1)).squeeze(0)
 
@@ -183,15 +182,15 @@ def get_speech_timestamps(
 
 
 def collect_chunks(
-    audio: torch.Tensor, chunks: List[dict], sampling_rate: int = 16000
-) -> Tuple[List[torch.Tensor], List[Dict[str, int]]]:
+    audio: np.ndarray, chunks: List[dict], sampling_rate: int = 16000
+) -> Tuple[List[np.ndarray], List[Dict[str, int]]]:
     """Collects audio chunks."""
     if not chunks:
         chunk_metadata = {
             "start_time": 0,
             "end_time": 0,
         }
-        return [torch.tensor([], dtype=torch.float32)], [chunk_metadata]
+        return [np.array([], dtype=np.float32)], [chunk_metadata]
 
     audio_chunks = []
     chunks_metadata = []
