@@ -133,6 +133,7 @@ class BatchedInferencePipeline:
         tokenizer=None,
         language: Optional[str] = None,
     ):
+        self.logger = get_logger()
         self.model: WhisperModel = model
         self.tokenizer = tokenizer
         self.options = options
