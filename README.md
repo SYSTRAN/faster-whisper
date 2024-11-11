@@ -77,7 +77,7 @@ GPU execution requires the following NVIDIA libraries to be installed:
 * [cuBLAS for CUDA 12](https://developer.nvidia.com/cublas)
 * [cuDNN 9 for CUDA 12](https://developer.nvidia.com/cudnn)
 
-**Note**: The latest versions of `ctranslate2` only support CUDA 12 and cuDNN 9. For CUDA 11, the current workaround is downgrading to the `3.24.0` version of `ctranslate2`, for cuDNN 8, downgrade to the `4.4.0` version of `ctranslate2`, (This can be done with `pip install --force-reinstall ctranslate2==4.4.0` or specifying the version in a `requirements.txt`).
+**Note**: The latest versions of `ctranslate2` only support CUDA 12 and cuDNN 9. For CUDA 11 and cuDNN 8, the current workaround is downgrading to the `3.24.0` version of `ctranslate2`, for CUDA 12 and cuDNN 8, downgrade to the `4.4.0` version of `ctranslate2`, (This can be done with `pip install --force-reinstall ctranslate2==4.4.0` or specifying the version in a `requirements.txt`).
 
 There are multiple ways to install the NVIDIA libraries mentioned above. The recommended way is described in the official NVIDIA documentation, but we also suggest other installation methods below. 
 
