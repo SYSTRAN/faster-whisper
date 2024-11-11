@@ -170,6 +170,7 @@ To directly use the model for improved language detection, the following code sn
 
 ```python
 from faster_whisper import WhisperModel
+
 model = WhisperModel("turbo", device="cuda", compute_type="float16")
 language_info = model.detect_language_multi_segment("audio.mp3")
 ```
