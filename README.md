@@ -164,24 +164,23 @@ segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
 
-### multi-segment language detection
+### Multi-segment language detection
 
 To directly use the model for improved language detection, the following code snippet can be used:
 
 ```python
 from faster_whisper import WhisperModel
-model = WhisperModel("medium", device="cuda", compute_type="float16")
+model = WhisperModel("turbo", device="cuda", compute_type="float16")
 language_info = model.detect_language_multi_segment("audio.mp3")
 ```
 
-### Batched faster-whisper
-
-The following code snippet illustrates how to run inference with batched version on an example audio file. Please also refer to the test scripts of batched faster whisper.
+### Batched Transcription
+The following code snippet illustrates how to run batched transcription on an example audio file. `BatchedInferencePipeline.transcribe` is a drop-in replacement for `WhisperModel.transcribe`
 
 ```python
 from faster_whisper import WhisperModel, BatchedInferencePipeline
 
-model = WhisperModel("medium", device="cuda", compute_type="float16")
+model = WhisperModel("turbo", device="cuda", compute_type="float16")
 batched_model = BatchedInferencePipeline(model=model)
 segments, info = batched_model.transcribe("audio.mp3", batch_size=16)
 
@@ -308,6 +307,7 @@ model = faster_whisper.WhisperModel("username/whisper-large-v3-ct2")
 If you are comparing the performance against other Whisper implementations, you should make sure to run the comparison with similar settings. In particular:
 
 * Verify that the same transcription options are used, especially the same beam size. For example in openai/whisper, `model.transcribe` uses a default beam size of 1 but here we use a default beam size of 5.
+* Transcription speed is directly related to number of words in a transcript, ensure that the other implementation has similar WER to this implementation.
 * When running on CPU, make sure to set the same number of threads. Many frameworks will read the environment variable `OMP_NUM_THREADS`, which can be set when running your script:
 
 ```bash
