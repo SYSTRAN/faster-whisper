@@ -77,7 +77,7 @@ GPU execution requires the following NVIDIA libraries to be installed:
 * [cuBLAS for CUDA 12](https://developer.nvidia.com/cublas)
 * [cuDNN 9 for CUDA 12](https://developer.nvidia.com/cudnn)
 
-**Note**: Latest versions of `ctranslate2` support CUDA 12 / cuDNN 9 only. For CUDA 11, the current workaround is downgrading to the `3.24.0` version of `ctranslate2`, for cuDNN 8, downgrade to the `4.4.0` version of `ctranslate2`, (This can be done with `pip install --force-reinstall ctranslate2==4.4.0` or specifying the version in a `requirements.txt`).
+**Note**: The latest versions of `ctranslate2` only support CUDA 12 and cuDNN 9. For CUDA 11, the current workaround is downgrading to the `3.24.0` version of `ctranslate2`, for cuDNN 8, downgrade to the `4.4.0` version of `ctranslate2`, (This can be done with `pip install --force-reinstall ctranslate2==4.4.0` or specifying the version in a `requirements.txt`).
 
 There are multiple ways to install the NVIDIA libraries mentioned above. The recommended way is described in the official NVIDIA documentation, but we also suggest other installation methods below. 
 
@@ -164,7 +164,7 @@ segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
 
-### Multi-segment language detection
+### Multi-Segment Language Detection
 
 To directly use the model for improved language detection, the following code snippet can be used:
 
@@ -307,7 +307,7 @@ model = faster_whisper.WhisperModel("username/whisper-large-v3-ct2")
 If you are comparing the performance against other Whisper implementations, you should make sure to run the comparison with similar settings. In particular:
 
 * Verify that the same transcription options are used, especially the same beam size. For example in openai/whisper, `model.transcribe` uses a default beam size of 1 but here we use a default beam size of 5.
-* Transcription speed is directly related to number of words in a transcript, ensure that the other implementation has similar WER to this implementation.
+* Transcription speed is closely affected by the number of words in the transcript, so ensure that other implementations have a similar WER (Word Error Rate) to this one.
 * When running on CPU, make sure to set the same number of threads. Many frameworks will read the environment variable `OMP_NUM_THREADS`, which can be set when running your script:
 
 ```bash
