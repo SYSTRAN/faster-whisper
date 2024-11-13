@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from inspect import signature
 from math import ceil
-from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
+from typing import BinaryIO, Iterable, List, Optional, Tuple, Union, Any
 from warnings import warn
 
 import ctranslate2
@@ -114,6 +114,20 @@ class TranscriptionInfo:
     transcription_options: TranscriptionOptions
     vad_options: VadOptions
 
+@dataclass
+class TranscriptionResult:
+    segments: Iterable["Segment"]
+    info: "TranscriptionInfo"
+    encoder_output: Any
+
+    def __iter__(self) -> Iterable:
+        # Only include the original values for backwards compatibility
+        yield self.segments
+        yield self.info
+
+    def all(self) -> Tuple[Iterable["Segment"], "TranscriptionInfo", Any]:
+        # Access all three components
+        return self.segments, self.info, self.encoder_output
 
 # The code below is originally from HF pipeline and is used in whisper-x
 # (https://github.com/m-bain/whisperX) and adapted for faster_whisper
@@ -694,7 +708,7 @@ class WhisperModel:
         hotwords: Optional[str] = None,
         language_detection_threshold: Optional[float] = None,
         language_detection_segments: int = 1,
-    ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
+    ) -> TranscriptionResult:
         """Transcribes an input file.
 
         Arguments:
@@ -973,7 +987,7 @@ class WhisperModel:
             vad_options=vad_parameters,
             all_language_probs=all_language_probs,
         )
-        return segments, info
+        return TranscriptionResult(segments=segments, info=info, encoder_output=encoder_output)
 
     def _split_segments_by_timestamps(
         self,
