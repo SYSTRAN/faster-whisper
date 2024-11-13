@@ -114,6 +114,7 @@ class TranscriptionInfo:
     transcription_options: TranscriptionOptions
     vad_options: VadOptions
 
+
 @dataclass
 class TranscriptionResult:
     segments: Iterable["Segment"]
