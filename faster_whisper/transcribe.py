@@ -57,7 +57,7 @@ class Segment:
     compression_ratio: float
     no_speech_prob: float
     words: Optional[List[Word]]
-    temperature: Optional[float] = 1.0
+    temperature: Optional[float]
 
     def _asdict(self):
         warn(
@@ -552,6 +552,7 @@ class BatchedInferencePipeline:
                         avg_logprob=segment["avg_logprob"],
                         no_speech_prob=segment["no_speech_prob"],
                         compression_ratio=segment["compression_ratio"],
+                        temperature=options.temperatures[0],
                     )
 
                 pbar.update(1)
