@@ -115,19 +115,83 @@ class BatchedInferencePipeline:
     def __init__(
         self,
         model,
-        options: Optional[TranscriptionOptions] = None,
-        tokenizer=None,
-        language: Optional[str] = None,
     ):
         self.model: WhisperModel = model
-        self.tokenizer = tokenizer
-        self.options = options
-        self.preset_language = language
         self.last_speech_timestamp = 0.0
 
-    def forward(self, features, chunks_metadata, options):
-        encoder_output, outputs = self.model.generate_segment_batched(
-            features, self.tokenizer, options
+    def generate_segment_batched(
+        self,
+        features: np.ndarray,
+        tokenizer: Tokenizer,
+        options: TranscriptionOptions,
+    ):
+        batch_size = features.shape[0]
+
+        prompt = self.model.get_prompt(
+            tokenizer,
+            previous_tokens=(
+                tokenizer.encode(options.initial_prompt)
+                if options.initial_prompt is not None
+                else []
+            ),
+            without_timestamps=options.without_timestamps,
+            prefix=options.prefix,
+            hotwords=options.hotwords,
+        )
+
+        if options.max_new_tokens is not None:
+            max_length = len(prompt) + options.max_new_tokens
+        else:
+            max_length = self.model.max_length
+
+        if max_length > self.model.max_length:
+            raise ValueError(
+                f"The length of the prompt is {len(prompt)}, and the `max_new_tokens` "
+                f"{max_length - len(prompt)}. Thus, the combined length of the prompt "
+                f"and `max_new_tokens` is: {max_length}. This exceeds the "
+                f"`max_length` of the Whisper model: {self.model.max_length}. "
+                "You should either reduce the length of your prompt, or "
+                "reduce the value of `max_new_tokens`, "
+                f"so that their combined length is less that {self.model.max_length}."
+            )
+
+        encoder_output = self.model.encode(features)
+
+        results = self.model.model.generate(
+            encoder_output,
+            [prompt] * batch_size,
+            beam_size=options.beam_size,
+            patience=options.patience,
+            length_penalty=options.length_penalty,
+            max_length=max_length,
+            suppress_blank=options.suppress_blank,
+            suppress_tokens=options.suppress_tokens,
+            return_scores=True,
+            return_no_speech_prob=True,
+            sampling_temperature=options.temperatures[0],
+            repetition_penalty=options.repetition_penalty,
+            no_repeat_ngram_size=options.no_repeat_ngram_size,
+        )
+
+        output = []
+        for result in results:
+            # return scores
+            seq_len = len(result.sequences_ids[0])
+            cum_logprob = result.scores[0] * (seq_len**options.length_penalty)
+
+            output.append(
+                dict(
+                    avg_logprob=cum_logprob / (seq_len + 1),
+                    no_speech_prob=result.no_speech_prob,
+                    tokens=result.sequences_ids[0],
+                )
+            )
+
+        return encoder_output, output
+
+    def forward(self, features, tokenizer, chunks_metadata, options):
+        encoder_output, outputs = self.generate_segment_batched(
+            features, tokenizer, options
         )
 
         segmented_outputs = []
@@ -141,7 +205,7 @@ class BatchedInferencePipeline:
                 seek,
                 single_timestamp_ending,
             ) = self.model._split_segments_by_timestamps(
-                tokenizer=self.tokenizer,
+                tokenizer=tokenizer,
                 tokens=output["tokens"],
                 time_offset=chunk_metadata["start_time"],
                 segment_size=segment_size,
@@ -151,14 +215,14 @@ class BatchedInferencePipeline:
             segmented_outputs.append(
                 [
                     dict(
-                        text=self.tokenizer.decode(subsegment["tokens"]),
+                        text=tokenizer.decode(subsegment["tokens"]),
                         avg_logprob=output["avg_logprob"],
                         no_speech_prob=output["no_speech_prob"],
                         tokens=subsegment["tokens"],
                         start=subsegment["start"],
                         end=subsegment["end"],
                         compression_ratio=get_compression_ratio(
-                            self.tokenizer.decode(subsegment["tokens"])
+                            tokenizer.decode(subsegment["tokens"])
                         ),
                         seek=int(
                             chunk_metadata["start_time"] * self.model.frames_per_second
@@ -170,7 +234,7 @@ class BatchedInferencePipeline:
         if options.word_timestamps:
             self.last_speech_timestamp = self.model.add_word_timestamps(
                 segmented_outputs,
-                self.tokenizer,
+                tokenizer,
                 encoder_output,
                 segment_sizes,
                 options.prepend_punctuations,
@@ -279,9 +343,6 @@ class BatchedInferencePipeline:
             output_language: Valid only if multilingual is set to True.
                 Specifies the string representing the output language. One of
                 'en' (English) or 'hybrid' (code-switched transcription). set as None.
-            language_detection_threshold: If the maximum probability of the language tokens is
-                higher than this value, the language is detected.
-            language_detection_segments: Number of segments to consider for the language detection.
             compression_ratio_threshold: If the gzip compression ratio is above this value,
                 treat as failed.
             log_prob_threshold: If the average log probability over sampled tokens is
@@ -423,7 +484,7 @@ class BatchedInferencePipeline:
             initial_prompt=initial_prompt,
             prefix=prefix,
             suppress_blank=suppress_blank,
-            suppress_tokens=get_suppressed_tokens(self.tokenizer, suppress_tokens),
+            suppress_tokens=get_suppressed_tokens(tokenizer, suppress_tokens),
             prepend_punctuations=prepend_punctuations,
             append_punctuations=append_punctuations,
             max_new_tokens=max_new_tokens,
@@ -445,12 +506,13 @@ class BatchedInferencePipeline:
             duration=duration,
             duration_after_vad=duration_after_vad,
             transcription_options=options,
-            vad_options=None,
+            vad_options=vad_parameters,
             all_language_probs=all_language_probs,
         )
 
         segments = self._batched_segments_generator(
             features,
+            tokenizer,
             chunks_metadata,
             batch_size,
             options,
@@ -460,13 +522,14 @@ class BatchedInferencePipeline:
         return segments, info
 
     def _batched_segments_generator(
-        self, features, chunks_metadata, batch_size, options, log_progress
+        self, features, tokenizer, chunks_metadata, batch_size, options, log_progress
     ):
         pbar = tqdm(total=len(features), disable=not log_progress, position=0)
         seg_idx = 0
         for i in range(0, len(features), batch_size):
             results = self.forward(
                 features[i : i + batch_size],
+                tokenizer,
                 chunks_metadata[i : i + batch_size],
                 options,
             )
