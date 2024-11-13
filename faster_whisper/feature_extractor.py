@@ -97,7 +97,8 @@ class FeatureExtractor:
         # Input checks
         if not np.issubdtype(input_array.dtype, np.floating) and not input_is_complex:
             raise ValueError(
-                f"stft: expected an array of floating point or complex values, got {input_array.dtype}"
+                "stft: expected an array of floating point or complex values,"
+                f" got {input_array.dtype}"
             )
 
         if input_array.ndim > 2 or input_array.ndim < 1:
