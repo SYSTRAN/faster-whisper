@@ -64,6 +64,136 @@ class FeatureExtractor:
 
         return weights
 
+    @staticmethod
+    def stft(
+        input_array: np.ndarray,
+        n_fft: int,
+        hop_length: int = None,
+        win_length: int = None,
+        window: np.ndarray = None,
+        center: bool = True,
+        mode: str = "reflect",
+        normalized: bool = False,
+        onesided: bool = None,
+        return_complex: bool = None,
+    ):
+        # Default initialization for hop_length and win_length
+        hop_length = hop_length if hop_length is not None else n_fft // 4
+        win_length = win_length if win_length is not None else n_fft
+        input_is_complex = np.iscomplexobj(input_array)
+
+        # Determine if the output should be complex
+        return_complex = (
+            return_complex
+            if return_complex is not None
+            else (input_is_complex or (window is not None and np.iscomplexobj(window)))
+        )
+
+        if not return_complex and return_complex is None:
+            raise ValueError(
+                "stft requires the return_complex parameter for real inputs."
+            )
+
+        # Input checks
+        if not np.issubdtype(input_array.dtype, np.floating) and not input_is_complex:
+            raise ValueError(
+                f"stft: expected an array of floating point or complex values, got {input_array.dtype}"
+            )
+
+        if input_array.ndim > 2 or input_array.ndim < 1:
+            raise ValueError(
+                f"stft: expected a 1D or 2D array, but got {input_array.ndim}D array"
+            )
+
+        # Handle 1D input
+        if input_array.ndim == 1:
+            input_array = np.expand_dims(input_array, axis=0)
+            input_array_1d = True
+        else:
+            input_array_1d = False
+
+        # Center padding if required
+        if center:
+            pad_amount = n_fft // 2
+            input_array = np.pad(
+                input_array, ((0, 0), (pad_amount, pad_amount)), mode=mode
+            )
+
+        batch, length = input_array.shape
+
+        # Additional input checks
+        if n_fft <= 0 or n_fft > length:
+            raise ValueError(
+                f"stft: expected 0 < n_fft <= {length}, but got n_fft={n_fft}"
+            )
+
+        if hop_length <= 0:
+            raise ValueError(
+                f"stft: expected hop_length > 0, but got hop_length={hop_length}"
+            )
+
+        if win_length <= 0 or win_length > n_fft:
+            raise ValueError(
+                f"stft: expected 0 < win_length <= n_fft, but got win_length={win_length}"
+            )
+
+        if window is not None:
+            if window.ndim != 1 or window.shape[0] != win_length:
+                raise ValueError(
+                    f"stft: expected a 1D window array of size equal to win_length={win_length}, "
+                    f"but got window with size {window.shape}"
+                )
+
+        # Handle padding of the window if necessary
+        if win_length < n_fft:
+            left = (n_fft - win_length) // 2
+            window_ = np.zeros(n_fft, dtype=window.dtype)
+            window_[left : left + win_length] = window
+        else:
+            window_ = window
+
+        # Calculate the number of frames
+        n_frames = 1 + (length - n_fft) // hop_length
+
+        # Time to columns
+        input_array = np.lib.stride_tricks.as_strided(
+            input_array,
+            (batch, n_frames, n_fft),
+            (
+                input_array.strides[0],
+                hop_length * input_array.strides[1],
+                input_array.strides[1],
+            ),
+        )
+
+        if window_ is not None:
+            input_array = input_array * window_
+
+        # FFT and transpose
+        complex_fft = input_is_complex
+        onesided = onesided if onesided is not None else not complex_fft
+
+        if normalized:
+            norm = "ortho"
+        else:
+            norm = None
+
+        if complex_fft:
+            if onesided:
+                raise ValueError(
+                    "Cannot have onesided output if window or input is complex"
+                )
+            output = np.fft.fft(input_array, n=n_fft, axis=-1, norm=norm)
+        else:
+            output = np.fft.rfft(input_array, n=n_fft, axis=-1, norm=norm)
+
+        output = output.transpose((0, 2, 1))
+
+        if input_array_1d:
+            output = output.squeeze(0)
+
+        return output if return_complex else np.real(output)
+
     def __call__(self, waveform: np.ndarray, padding=160, chunk_length=None):
         """
         Compute the log-Mel spectrogram of the provided audio.
@@ -81,14 +211,14 @@ class FeatureExtractor:
 
         window = np.hanning(self.n_fft + 1)[:-1].astype("float32")
 
-        stft_output = stft(
+        stft = self.stft(
             waveform,
             self.n_fft,
             self.hop_length,
             window=window,
             return_complex=True,
         ).astype("complex64")
-        magnitudes = np.abs(stft_output[..., :-1]) ** 2
+        magnitudes = np.abs(stft[..., :-1]) ** 2
 
         mel_spec = self.mel_filters @ magnitudes
 
@@ -97,129 +227,3 @@ class FeatureExtractor:
         log_spec = (log_spec + 4.0) / 4.0
 
         return log_spec
-
-
-def stft(
-    input_tensor: np.ndarray,
-    n_fft: int,
-    hop_length: int = None,
-    win_length: int = None,
-    window: np.ndarray = None,
-    center: bool = True,
-    mode: str = "reflect",
-    normalized: bool = False,
-    onesided: bool = None,
-    return_complex: bool = None,
-):
-    # Default initialization for hop_length and win_length
-    hop_length = hop_length if hop_length is not None else n_fft // 4
-    win_length = win_length if win_length is not None else n_fft
-    input_is_complex = np.iscomplexobj(input_tensor)
-
-    # Determine if the output should be complex
-    return_complex = (
-        return_complex
-        if return_complex is not None
-        else (input_is_complex or (window is not None and np.iscomplexobj(window)))
-    )
-
-    if not return_complex and return_complex is None:
-        raise ValueError("stft requires the return_complex parameter for real inputs.")
-
-    # Input checks
-    if not np.issubdtype(input_tensor.dtype, np.floating) and not input_is_complex:
-        raise ValueError(
-            f"stft: expected a tensor of floating point or complex values, got {input_tensor.dtype}"
-        )
-
-    if input_tensor.ndim > 2 or input_tensor.ndim < 1:
-        raise ValueError(
-            f"stft: expected a 1D or 2D tensor, but got {input_tensor.ndim}D tensor"
-        )
-
-    # Handle 1D input
-    if input_tensor.ndim == 1:
-        input_tensor = np.expand_dims(input_tensor, axis=0)
-        input_tensor_1d = True
-    else:
-        input_tensor_1d = False
-
-    # Center padding if required
-    if center:
-        pad_amount = n_fft // 2
-        input_tensor = np.pad(
-            input_tensor, ((0, 0), (pad_amount, pad_amount)), mode=mode
-        )
-
-    batch, length = input_tensor.shape
-
-    # Additional input checks
-    if n_fft <= 0 or n_fft > length:
-        raise ValueError(f"stft: expected 0 < n_fft <= {length}, but got n_fft={n_fft}")
-
-    if hop_length <= 0:
-        raise ValueError(
-            f"stft: expected hop_length > 0, but got hop_length={hop_length}"
-        )
-
-    if win_length <= 0 or win_length > n_fft:
-        raise ValueError(
-            f"stft: expected 0 < win_length <= n_fft, but got win_length={win_length}"
-        )
-
-    if window is not None:
-        if window.ndim != 1 or window.shape[0] != win_length:
-            raise ValueError(
-                f"stft: expected a 1D window tensor of size equal to win_length={win_length}, "
-                f"but got window with size {window.shape}"
-            )
-
-    # Handle padding of the window if necessary
-    if win_length < n_fft:
-        left = (n_fft - win_length) // 2
-        window_ = np.zeros(n_fft, dtype=window.dtype)
-        window_[left : left + win_length] = window
-    else:
-        window_ = window
-
-    # Calculate the number of frames
-    n_frames = 1 + (length - n_fft) // hop_length
-
-    # Time to columns
-    input_tensor = np.lib.stride_tricks.as_strided(
-        input_tensor,
-        (batch, n_frames, n_fft),
-        (
-            input_tensor.strides[0],
-            hop_length * input_tensor.strides[1],
-            input_tensor.strides[1],
-        ),
-    )
-
-    if window_ is not None:
-        input_tensor = input_tensor * window_
-
-    # FFT and transpose
-    complex_fft = input_is_complex
-    onesided = onesided if onesided is not None else not complex_fft
-
-    if normalized:
-        norm = "ortho"
-    else:
-        norm = None
-
-    if complex_fft:
-        if onesided:
-            raise ValueError(
-                "Cannot have onesided output if window or input is complex"
-            )
-        output = np.fft.fft(input_tensor, n=n_fft, axis=-1, norm=norm)
-    else:
-        output = np.fft.rfft(input_tensor, n=n_fft, axis=-1, norm=norm)
-
-    output = output.transpose((0, 2, 1))
-
-    if input_tensor_1d:
-        output = output.squeeze(0)
-
-    return output if return_complex else np.real(output)
