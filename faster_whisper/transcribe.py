@@ -943,7 +943,9 @@ class WhisperModel:
             hotwords=hotwords,
         )
 
-        segments = self.generate_segments(features, tokenizer, options, encoder_output)
+        segments = self.generate_segments(
+            features, tokenizer, options, log_progress, encoder_output
+        )
 
         if speech_chunks:
             segments = restore_speech_timestamps(segments, speech_chunks, sampling_rate)
