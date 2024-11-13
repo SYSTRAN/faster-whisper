@@ -692,7 +692,7 @@ class WhisperModel:
         clip_timestamps: Union[str, List[float]] = "0",
         hallucination_silence_threshold: Optional[float] = None,
         hotwords: Optional[str] = None,
-        language_detection_threshold: Optional[float] = None,
+        language_detection_threshold: Optional[float] = 0.5,
         language_detection_segments: int = 1,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
@@ -882,10 +882,7 @@ class WhisperModel:
                     ]
                     # Get top language token and probability
                     language, language_probability = all_language_probs[0]
-                    if (
-                        language_detection_threshold is None
-                        or language_probability > language_detection_threshold
-                    ):
+                    if language_probability > language_detection_threshold:
                         break
                     detected_language_info.setdefault(language, []).append(
                         language_probability
