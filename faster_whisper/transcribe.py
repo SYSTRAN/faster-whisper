@@ -135,7 +135,6 @@ class BatchedInferencePipeline:
                 else []
             ),
             without_timestamps=options.without_timestamps,
-            prefix=options.prefix,
             hotwords=options.hotwords,
         )
 
@@ -268,19 +267,25 @@ class BatchedInferencePipeline:
         log_prob_threshold: Optional[float] = -1.0,
         log_prob_low_threshold: Optional[float] = None,
         no_speech_threshold: Optional[float] = 0.6,
+        condition_on_previous_text: bool = True,
+        prompt_reset_on_temperature: float = 0.5,
         initial_prompt: Optional[Union[str, Iterable[int]]] = None,
         prefix: Optional[str] = None,
         suppress_blank: bool = True,
         suppress_tokens: Optional[List[int]] = [-1],
         without_timestamps: bool = True,
+        max_initial_timestamp: float = 1.0,
         word_timestamps: bool = False,
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
+        multilingual: bool = False,
+        output_language: Optional[str] = None,
         vad_filter: bool = True,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
         max_new_tokens: Optional[int] = None,
         chunk_length: Optional[int] = None,
         clip_timestamps: Optional[List[dict]] = None,
+        hallucination_silence_threshold: Optional[float] = None,
         batch_size: int = 8,
         hotwords: Optional[str] = None,
         language_detection_threshold: Optional[float] = 0.5,
@@ -306,7 +311,6 @@ class BatchedInferencePipeline:
                 only the first value is used.
             initial_prompt: Optional text string or iterable of token ids to provide as a
                 prompt for the each window.
-            prefix: Optional text to provide as a prefix at the beginning of each window.
             suppress_blank: Suppress blank outputs at the beginning of the sampling.
             suppress_tokens: List of token IDs to suppress. -1 will suppress a default set
                 of symbols as defined in `tokenizer.non_speech_tokens()`.
@@ -338,11 +342,6 @@ class BatchedInferencePipeline:
             language_detection_segments: Number of segments to consider for the language detection.
 
         Unused Arguments
-            max_initial_timestamp: The initial timestamp cannot be later than this, set at 0.0.
-            multilingual: If True, perform transcription on multilingual videos. Set as False.
-            output_language: Valid only if multilingual is set to True.
-                Specifies the string representing the output language. One of
-                'en' (English) or 'hybrid' (code-switched transcription). set as None.
             compression_ratio_threshold: If the gzip compression ratio is above this value,
                 treat as failed.
             log_prob_threshold: If the average log probability over sampled tokens is
@@ -353,16 +352,21 @@ class BatchedInferencePipeline:
             no_speech_threshold: If the no_speech probability is higher than this value AND
                 the average log probability over sampled tokens is below `log_prob_threshold`,
                 consider the segment as silent.
-            hallucination_silence_threshold: Optional[float]
-                When word_timestamps is True, skip silent periods longer than this threshold
-                (in seconds) when a possible hallucination is detected. set as None.
             condition_on_previous_text: If True, the previous output of the model is provided
                 as a prompt for the next window; disabling may make the text inconsistent across
                 windows, but the model becomes less prone to getting stuck in a failure loop,
                 such as repetition looping or timestamps going out of sync. Set as False
             prompt_reset_on_temperature: Resets prompt if temperature is above this value.
                 Arg has effect only if condition_on_previous_text is True. Set at 0.5
-
+            prefix: Optional text to provide as a prefix at the beginning of each window.
+            max_initial_timestamp: The initial timestamp cannot be later than this, set at 0.0.
+            multilingual: If True, perform transcription on multilingual videos. Set as False.
+            output_language: Valid only if multilingual is set to True.
+                Specifies the string representing the output language. One of
+                'en' (English) or 'hybrid' (code-switched transcription). set as None.
+            hallucination_silence_threshold: Optional[float]
+                When word_timestamps is True, skip silent periods longer than this threshold
+                (in seconds) when a possible hallucination is detected. set as None.
         Returns:
           A tuple with:
 
