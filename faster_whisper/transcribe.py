@@ -174,6 +174,7 @@ class BatchedInferencePipeline:
                         compression_ratio=get_compression_ratio(
                             self.tokenizer.decode(subsegment["tokens"])
                         ),
+                        seek=seek,
                     )
                     for subsegment in subsegments
                 ]
