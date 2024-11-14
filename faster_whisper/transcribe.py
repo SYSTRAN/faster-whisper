@@ -1585,7 +1585,11 @@ class WhisperModel:
 
         for segment_idx, segment in enumerate(segments):
             word_index = 0
-            time_offset = segment[0]["start"]
+            time_offset = (
+                segment[0]["seek"]
+                * self.feature_extractor.hop_length
+                / self.feature_extractor.sampling_rate
+            )
             median_duration, max_duration = median_max_durations[segment_idx]
             for subsegment_idx, subsegment in enumerate(segment):
                 saved_tokens = 0
