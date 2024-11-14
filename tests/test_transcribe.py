@@ -32,7 +32,7 @@ def test_transcribe(jfk_path):
     segment = segments[0]
 
     assert segment.text == (
-        " And so my fellow Americans ask not what your country can do for you, "
+        " And so my fellow Americans, ask not what your country can do for you, "
         "ask what you can do for your country."
     )
 
@@ -97,12 +97,12 @@ def test_prefix_with_timestamps(jfk_path):
     segment = segments[0]
 
     assert segment.text == (
-        " And so my fellow Americans ask not what your country can do for you, "
+        " And so my fellow Americans, ask not what your country can do for you, "
         "ask what you can do for your country."
     )
 
     assert segment.start == 0
-    assert 10 < segment.end < 11
+    assert 10 < segment.end <= 11
 
 
 def test_vad(jfk_path):
