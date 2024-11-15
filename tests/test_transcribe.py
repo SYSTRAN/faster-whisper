@@ -1,5 +1,7 @@
 import os
 
+import numpy as np
+
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 from faster_whisper.tokenizer import Tokenizer
 from faster_whisper.transcribe import get_suppressed_tokens
@@ -85,6 +87,15 @@ def test_batched_transcribe(physcisworks_path):
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
     assert len(segments) > 7
+
+
+def test_empty_audio():
+    audio = np.asarray([], dtype="float32")
+    model = WhisperModel("tiny")
+    pipeline = BatchedInferencePipeline(model=model)
+    assert list(model.transcribe(audio)[0]) == []
+    assert list(pipeline.transcribe(audio)[0]) == []
+    model.detect_language(audio)
 
 
 def test_prefix_with_timestamps(jfk_path):
