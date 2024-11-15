@@ -147,13 +147,6 @@ def test_stereo_diarization(data_dir):
     assert transcription == "The horizon seems extremely distant."
 
 
-def test_multisegment_lang_id(physcisworks_path):
-    model = WhisperModel("tiny")
-    language_info = model.detect_language_multi_segment(physcisworks_path)
-    assert language_info["language_code"] == "en"
-    assert language_info["language_confidence"] > 0.8
-
-
 def test_suppressed_tokens_minus_1():
     model = WhisperModel("tiny.en")
 
