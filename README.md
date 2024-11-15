@@ -164,17 +164,6 @@ segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
 
-### Multi-Segment Language Detection
-
-To directly use the model for improved language detection, the following code snippet can be used:
-
-```python
-from faster_whisper import WhisperModel
-
-model = WhisperModel("turbo", device="cuda", compute_type="float16")
-language_info = model.detect_language_multi_segment("audio.mp3")
-```
-
 ### Batched Transcription
 The following code snippet illustrates how to run batched transcription on an example audio file. `BatchedInferencePipeline.transcribe` is a drop-in replacement for `WhisperModel.transcribe`
 
