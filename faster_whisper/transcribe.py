@@ -384,7 +384,7 @@ class BatchedInferencePipeline:
                     language_probability,
                     all_language_probs,
                 ) = self.model.detect_language(
-                    features=np.concatenate(list(features), axis=1),
+                    features=np.concatenate(features, axis=1),
                     language_detection_segments=language_detection_segments,
                     language_detection_threshold=language_detection_threshold,
                 )
