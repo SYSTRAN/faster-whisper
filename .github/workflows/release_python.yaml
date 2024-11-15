@@ -1,0 +1,72 @@
+name: Speech To Text Docker image
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**'
+      - '.github/workflows/release_python.yaml'
+      - '.github/actions/build-image-and-test/action.yaml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**'
+      - '.github/workflows/release_python.yaml'
+      - '.github/actions/build-image-and-test/action.yaml'
+  workflow_dispatch:
+    inputs:
+      push_docker:
+        description: Enable in order to push the Docker image for deployment
+        required: true
+        type: boolean
+
+jobs:
+  build_and_release:
+    env:
+      MAGEFILE_VERBOSE: true
+    name: Build docker container
+    runs-on: [self-hosted, cpu]
+    steps:
+
+      - name: Generate token
+        id: generate_token
+        uses: peter-murray/workflow-application-token-action@v2
+        with:
+          application_id: 122512
+          application_private_key: ${{ secrets.PR_CREATOR_PEM }}
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version-file: '.python-version-file'
+
+      - name: Format
+        uses: ./.github/actions/format
+
+      - name: Lint
+        uses: ./.github/actions/lint
+
+      - id: build-docker-image-and-test
+        uses: ./.github/actions/build-image-and-test
+        with:
+          add-shared-to-docker: "true"
+          use-pytest: "true"
+          github-token: ${{ steps.generate_token.outputs.token }}
+          docker-image-name: cresta-faster-whisper
+          docker-tag-prefix: ""
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+          s3-upload-role: ${{ secrets.S3_UPLOAD_ROLE_ARN }}
+          push-docker-image:  ${{ github.ref == 'refs/heads/main' || github.event.inputs.push_docker == 'true' }}

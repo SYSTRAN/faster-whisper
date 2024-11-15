@@ -30,7 +30,7 @@ conversion_requires = get_requirements(
 )
 
 setup(
-    name="faster-whisper",
+    name="cresta-faster-whisper",
     version=get_project_version(),
     license="MIT",
     description="Faster Whisper transcription with CTranslate2",

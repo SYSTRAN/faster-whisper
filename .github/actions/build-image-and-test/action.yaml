@@ -1,0 +1,479 @@
+# TODO: Use cresta/action-build-push-docker@v1 instead
+name: Build Docker Images & Test
+description: Update image tag in flux-deployment
+inputs:
+  github-token:
+    description: The token of github.
+    required: true
+
+  repository-base:
+    description: Base path for the upload repository
+    default: 242659714806.dkr.ecr.us-west-2.amazonaws.com
+    required: false
+
+  working-directory:
+    description: The directory of binary (Dockerfile)
+    required: true
+
+  docker-image-name:
+    description: 'Docker image name to be pushed to ECR.'
+    required: true
+
+  docker-file-name:
+    description: 'Name of the Dockerfile'
+    required: false
+
+  docker-tag-prefix:
+    description: 'Prefix of docker tag'
+    default: ''
+    required: true
+
+  aws-access-key-id:
+    description: 'Should come from secrets.AWS_ACCESS_KEY_ID'
+    required: true
+
+  aws-secret-access-key:
+    description: 'Should come from secrets.AWS_SECRET_ACCESS_KEY'
+    required: true
+
+  aws-region:
+    required: true
+    default: us-west-2
+
+  s3-upload-role:
+    description: 'Should come from secrets.S3_UPLOAD_ROLE_ARN'
+    required: true
+
+  add-shared-to-docker:
+    required: true
+    description: 'Whether to add the shared directory to the Docker image'
+    default: "false"
+
+  copy-ai-service-packages:
+    required: false
+    description: 'Whether to add the ai_service_packages directory to the Docker image'
+    default: "false"
+
+  test-after-build:
+    required: true
+    default: "true"
+
+  run-type-check:
+    required: true
+    default: "true"
+
+  push-docker-image:
+    required: true
+    default: "true"
+
+  python-binary:
+    required: true
+    default: /usr/bin/python
+
+  use-pytest:
+    required: true
+    description: "Whether to use pytest instead of unittest for testing."
+    default: "false"
+
+  test-user:
+    required: true
+    description: "User (in the Docker container) to run tests as."
+    default: "root"
+
+  install-batcher:
+    required: false
+    description: "Whether or not install batcher"
+    default: "false"
+
+  build-arm-image:
+    required: false
+    description: "Whether or not to build images for arm64 architecture. Only applicable when push-docker-images is true."
+    default: "false"
+
+  hf-token:
+    required: false
+    description: "secrets.HUGGING_FACE_HUB_TOKEN"
+    default: ""
+
+  download-s3-model:
+    required: false
+    description: "Whether to download ai model from S3"
+    default: "false"
+
+  model-s3-paths:
+    required: false
+    description: "S3 paths to download model from. The format is (s3_path, local_path) | (s3_path, local_path) | ..."
+    default: ""
+
+  model-unit-test-dir:
+    required: false
+    description: "Directory to models used in unit test"
+    default: ""
+
+outputs:
+  docker-tag:
+    description: "The Docker image tag for the released binary"
+    value: ${{ steps.docker-tag.outputs.tag }}
+
+  full-docker-tag:
+    description: "The Docker image tag with repository for the released binary"
+    value: ${{ steps.docker-tag.outputs.full-tag }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Do not rerun push
+      if: ${{ inputs.push-docker-image == 'true' && github.run_attempt != '1' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "Please do not rerun a build that pushes the image. This may result in building and pushing an old state of the branch to a new image. Instead trigger a new workflow."
+        exit 1
+
+    - name: Checkout config to working dir to package it into the image.
+      uses: actions/checkout@v4
+      with:
+        repository: cresta/config
+        path: ${{ inputs.working-directory }}/config
+        token: ${{ inputs.github-token }}
+
+    - name: Checkout envelope code
+      uses: actions/checkout@v4
+      with:
+        repository: cresta/service-envelope
+        path: service-envelope
+        token: ${{ inputs.github-token }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+        role-to-assume: ${{ inputs.s3-upload-role }}
+        role-duration-seconds: 1200
+
+    - name: Download model from S3
+      if: ${{ inputs.download-s3-model == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        mkdir -p ./models
+        # Split the input string by | to get the s3 path and local path.
+        IFS='|' read -ra S3_PATHS <<< "${{ inputs.model-s3-paths }}"
+        for path in "${S3_PATHS[@]}"; do
+          path=$(echo $path | tr -d ' ')  # Remove whitespace.
+          # Extract s3_path from (s3_path,local_path)
+          s3_path=$(echo $path | cut -d',' -f1 | cut -d'(' -f2)
+          # Extract local_path from (s3_path,local_path)
+          local_path=$(echo $path | cut -d',' -f2 | cut -d')' -f1)
+          echo "Downloading model from ${s3_path} to ./models/${local_path}"
+          aws s3 cp ${s3_path} ./models/${local_path} --recursive
+          echo "Model downloaded to ./models/${local_path}"
+        done
+        ls -alh ./models
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: "^1.21"
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Use private Go modules
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        git config --global url."https://x-oauth-basic:${GITHUB_TOKEN}@github.com/cresta".insteadOf "https://github.com/cresta"
+
+    - name: Calculate Docker tag
+      id: docker-tag
+      shell: bash
+      env:
+        ECR_REGISTRY: ${{ inputs.repository-base }}
+        IMAGE_NAME: ${{ inputs.docker-image-name }}
+        DOCKER_TAG_PREFIX: ${{ inputs.docker-tag-prefix }}
+      run: |
+        DATE_TIME="$(TZ=UTC date +'%Y%m%d')_$(TZ=UTC date +'%H%M%S')z"
+        SHA=${GITHUB_SHA::8}
+        if [ "${GITHUB_HEAD_REF}" == "" ];
+        then
+          echo "use GITHUB_REF to generate docker tag: ${GITHUB_REF}"
+          DOCKER_TAG="${GITHUB_REF#refs/heads/}-${DATE_TIME}-${SHA}"
+        else
+          echo "use GITHUB_HEAD_REF to generate docker tag: ${GITHUB_HEAD_REF}"
+          DOCKER_TAG="${GITHUB_HEAD_REF#refs/heads/}-${DATE_TIME}-${SHA}"
+        fi
+        DOCKER_TAG="${DOCKER_TAG_PREFIX}${DOCKER_TAG}"
+        # amd64/arm64 must prefix the tag name. If we append them to the tag name, the
+        # auto-image update logic in flux will not be able to pick the multi-arch image,
+        # as all of them satisfies the regex that matches the leading `main-` in the tagname.
+        DOCKER_TAG_AMD64="amd64-${DOCKER_TAG_PREFIX}${DOCKER_TAG}"
+        DOCKER_TAG_ARM64="arm64-${DOCKER_TAG_PREFIX}${DOCKER_TAG}"
+        FULL_DOCKER_TAG="${ECR_REGISTRY}/cresta/${IMAGE_NAME}:${DOCKER_TAG}"
+
+        echo -n "${DOCKER_TAG}" > .docker_tag
+        echo "tag=${DOCKER_TAG}" >> $GITHUB_OUTPUT
+        echo "tag-amd64=${DOCKER_TAG_AMD64}" >> $GITHUB_OUTPUT
+        echo "tag-arm64=${DOCKER_TAG_ARM64}" >> $GITHUB_OUTPUT
+        echo "full-tag=${FULL_DOCKER_TAG}" >> $GITHUB_OUTPUT
+      working-directory: ''
+
+    - name: Build amd64 envelope binary
+      shell: bash
+      run: |
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "../../../${{ inputs.working-directory }}/bin/service-envelope"
+      env:
+        GOPRIVATE: github.com/cresta/*
+      working-directory: service-envelope/cmd/service-envelope
+
+    - name: Checkout batcher code
+      if: ${{ inputs.install-batcher == 'true'}}
+      uses: actions/checkout@v4
+      with:
+        repository: cresta/go-servers
+        path: go-servers
+        token: ${{ inputs.github-token }}
+
+    - name: Build amd64 batcher binary
+      if: ${{ inputs.install-batcher == 'true'}}
+      shell: bash
+      run: |
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "../../${{ inputs.working-directory }}/bin/batcher"
+      env:
+        GOPRIVATE: github.com/cresta/*
+      working-directory: go-servers/batcher
+
+    - name: Copy shared
+      if: inputs.add-shared-to-docker == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        rm -rf shared tests/shared || true
+        cp -R ../shared shared
+        ln -s --no-target-directory ../shared/tests tests/shared
+        echo "Copied shared to Docker context"
+        ls -l shared/ tests/shared/
+
+        # Add a default pytest.ini if it doesn't exist to exclude shared/tests and shared/temporal.
+        if [ -f pytest.ini ]; then
+          echo "pytest.ini already exists"
+        else
+          echo "pytest.ini does not exist, adding a default pytest.ini"
+          echo "[pytest]" > pytest.ini
+          echo "addopts = --ignore=shared/tests --ignore=tests/shared/temporal --durations=0" >> pytest.ini
+        fi
+
+    - name: Copy ai_service_packages
+      if: inputs.copy-ai-service-packages == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        cp -R ../ai_service_packages ai_service_packages
+
+    - name: Build amd64 image
+      id: build-image
+      uses: cresta/action-build-push-docker@v1
+      with:
+        # Avoid specifying default platform of runner so qemu doesn't need to be installed. It takes a long time to install.
+        # platforms: linux/amd64
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        repository-base: ${{ inputs.repository-base }}
+        authenticate-private-pypi: true
+        github-token: ${{ inputs.github-token }}
+        name: cresta/${{ inputs.docker-image-name }}
+        file: ${{ inputs.working-directory }}/${{ inputs.docker-file-name || 'Dockerfile' }}
+        context: ${{ inputs.working-directory }}
+        push: false
+        load: true
+        skip-default-tags: true
+        tags: ${{ steps.docker-tag.outputs.tag-amd64 }}
+        build-args: |
+          HUGGING_FACE_HUB_TOKEN=${{ inputs.hf-token }}
+
+    - name: Run typecheck
+      if: ${{ inputs.run-type-check == 'true' }}
+      env:
+        AMD64_IMAGE: ${{ steps.build-image.outputs.image }}
+      working-directory: ${{ inputs.working-directory }}
+      shell: bash
+      # Note:
+      # * pyre 0.9.6 is the last pyre version that works with libc in Ubuntu 18.04 LTS.
+      # * pyre 0.9.19 is the last pyre version that works with libc in most other containers we use.
+      # When bumping the pyre version we need to carefully check whether it still runs.
+      run: |
+        docker run --rm \
+          "${AMD64_IMAGE}" /bin/bash -c 'if cat /etc/lsb-release | grep 18.04; then pip install pyre-check==0.9.6; else pip install pyre-check==0.9.19; fi && pyre --search-path $(python -c "import site; print(site.getsitepackages()[0])") --typeshed $(python -c "import site; print(site.getsitepackages()[0] + \"/../../pyre_check/typeshed\")") check'
+
+    - name: Test with unittest
+      if: ${{ inputs.test-after-build == 'true' && inputs.use-pytest == 'false' }}
+      env:
+        AMD64_IMAGE: ${{ steps.build-image.outputs.image }}
+        PYTHON_BINARY: ${{ inputs.python-binary }}
+        USE_MOCK_CONFIG_SERVICE: 'true'
+        HUGGING_FACE_HUB_TOKEN: ${{ inputs.hf-token }}
+        MODEL_LOCAL_DIR: ./models
+        MODEL_UNIT_TEST_DIR: ${{ inputs.model-unit-test-dir }}
+      working-directory: ${{ inputs.working-directory }}
+      shell: bash
+      # Note: GITHUB_WORKSPACE is set to "." so the test takes the config
+      # built into the image.
+      run: |
+        if [[ -n "${MODEL_LOCAL_DIR}" && -n "${MODEL_UNIT_TEST_DIR}" ]]; then
+          echo "Model local path: ${MODEL_LOCAL_DIR}"
+          echo "Model unit test path: ${MODEL_UNIT_TEST_DIR}"
+          VOLUME_OPTION="-v ${MODEL_LOCAL_DIR}:${MODEL_UNIT_TEST_DIR}"
+        else
+          VOLUME_OPTION=""
+        fi
+
+        docker run --rm \
+          -e USE_MOCK_CONFIG_SERVICE="${USE_MOCK_CONFIG_SERVICE}" \
+          -e GITHUB_WORKSPACE="." \
+          -e DISABLE_GPU_FOR_TEST="True" \
+          -e HUGGING_FACE_HUB_TOKEN="${HUGGING_FACE_HUB_TOKEN}" \
+          -e RAY_TQDM_PATCH_PRINT=0 \
+          -e RAY_IGNORE_UNHANDLED_ERRORS=1 \
+          -e RAY_verbose_spill_logs=0 \
+          --entrypoint ${PYTHON_BINARY} \
+          ${VOLUME_OPTION} \
+          "${AMD64_IMAGE}" -m unittest
+
+    - name: Test with pytest
+      if: ${{ inputs.test-after-build == 'true' && inputs.use-pytest != 'false' }}
+      env:
+        AMD64_IMAGE: ${{ steps.build-image.outputs.image }}
+        PYTHON_BINARY: ${{ inputs.python-binary }}
+        TEST_USER: ${{ inputs.test-user }}
+        USE_MOCK_CONFIG_SERVICE: 'true'
+        HUGGING_FACE_HUB_TOKEN: ${{ inputs.hf-token }}
+        MODEL_LOCAL_DIR: ./models
+        MODEL_UNIT_TEST_DIR: ${{ inputs.model-unit-test-dir }}
+      working-directory: ${{ inputs.working-directory }}
+      shell: bash
+      # Note: GITHUB_WORKSPACE is set to "." so the test takes the config
+      # built into the image.
+      # Note2: LD_LIBRARY_PATH is set to the location of libcuda.so.1
+      # that ships with the image because the action worker host doesn't have
+      # cuda installed. In production the host has cuda installed under
+      # /usr/lib/amd64_64-linux-gnu which is mapped to the container and loaded
+      # by default.
+      run: |
+        if [[ -n "${MODEL_LOCAL_DIR}" && -n "${MODEL_UNIT_TEST_DIR}" ]]; then
+          echo "Model local path: ${MODEL_LOCAL_DIR}"
+          echo "Model unit test path: ${MODEL_UNIT_TEST_DIR}"
+          VOLUME_OPTION="-v ${MODEL_LOCAL_DIR}:${MODEL_UNIT_TEST_DIR}"
+        else
+          VOLUME_OPTION=""
+        fi
+
+        docker run --rm \
+          -e USE_MOCK_CONFIG_SERVICE="${USE_MOCK_CONFIG_SERVICE}" \
+          -e GITHUB_WORKSPACE="." \
+          -e DISABLE_GPU_FOR_TEST="True" \
+          -e LD_LIBRARY_PATH=/usr/local/cuda-11.7/compat \
+          -e HUGGING_FACE_HUB_TOKEN="${HUGGING_FACE_HUB_TOKEN}" \
+          -e RAY_TQDM_PATCH_PRINT=0 \
+          -e RAY_IGNORE_UNHANDLED_ERRORS=1 \
+          -e RAY_verbose_spill_logs=0 \
+          ${VOLUME_OPTION} \
+          --entrypoint ${PYTHON_BINARY} \
+          --user "${TEST_USER}" \
+          "${AMD64_IMAGE}" -m pytest -o log_cli=true
+
+    - name: Check amd64 image size
+      env:
+        AMD64_IMAGE: ${{ steps.build-image.outputs.image }}
+      shell: bash
+      run: |
+        DOCKER_IMAGE_SIZE=$(docker inspect -f "{{ .Size }}" ${AMD64_IMAGE} | numfmt --to=si)
+        echo "::notice::AMD64 Image Size: ${DOCKER_IMAGE_SIZE}"
+
+    - name: Docker Push amd64 image
+      if: ${{ inputs.push-docker-image == 'true' && inputs.build-arm-image != 'true' }}
+      env:
+        DOCKER_TAG: ${{ steps.docker-tag.outputs.tag }}
+        FULL_DOCKER_TAG: ${{ steps.docker-tag.outputs.full-tag }}
+        AMD64_IMAGE: ${{ steps.build-image.outputs.image }}
+      shell: bash
+      run: |
+        docker image ls
+        docker tag ${AMD64_IMAGE} ${FULL_DOCKER_TAG}
+        docker push ${FULL_DOCKER_TAG}
+        echo "::notice::Docker Image Tag: ${DOCKER_TAG}"
+        echo "::notice::Full Docker Image Tag: ${FULL_DOCKER_TAG}"
+
+    - name: Build ARM envelope binary
+      if: ${{ inputs.build-arm-image == 'true' }}
+      shell: bash
+      run: |
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o "../../../${{ inputs.working-directory }}/bin/service-envelope"
+      env:
+        GOPRIVATE: github.com/cresta/*
+      working-directory: service-envelope/cmd/service-envelope
+
+    - name: Build ARM batcher binary
+      if: ${{ inputs.install-batcher == 'true' && inputs.build-arm-image == 'true' }}
+      shell: bash
+      run: |
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o "../../${{ inputs.working-directory }}/bin/batcher"
+      env:
+        GOPRIVATE: github.com/cresta/*
+      working-directory: go-servers/batcher
+
+    - name: Build ARM image
+      if: ${{ inputs.push-docker-image == 'true' && inputs.build-arm-image == 'true' }}
+      id: build-image-arm
+      uses: cresta/action-build-push-docker@v1
+      with:
+        platforms: linux/arm64
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        github-token: ${{ inputs.github-token }}
+        authenticate-private-pypi: true
+        repository-base: ${{ inputs.repository-base }}
+        name: cresta/${{ inputs.docker-image-name }}
+        file: ${{ inputs.working-directory }}/${{ inputs.docker-file-name || 'Dockerfile' }}
+        context: ${{ inputs.working-directory }}
+        push: false
+        load: true
+        skip-default-tags: true
+        tags: ${{ steps.docker-tag.outputs.tag-arm64 }}
+        build-args: |
+          HUGGING_FACE_HUB_TOKEN=${{ inputs.hf-token }}
+
+    - name: Check ARM image size
+      if: ${{ inputs.push-docker-image == 'true' && inputs.build-arm-image == 'true' }}
+      env:
+        ARM64_IMAGE: ${{ steps.build-image-arm.outputs.image }}
+      shell: bash
+      run: |
+        DOCKER_IMAGE_SIZE=$(docker inspect -f "{{ .Size }}" ${ARM64_IMAGE} | numfmt --to=si)
+        echo "::notice::ARM Docker Image Size: ${DOCKER_IMAGE_SIZE}"
+
+    - name: Docker Push multi-architecture image
+      if: ${{ inputs.push-docker-image == 'true' && inputs.build-arm-image == 'true' }}
+      env:
+        DOCKER_TAG: ${{ steps.docker-tag.outputs.tag }}
+        FULL_DOCKER_TAG: ${{ steps.docker-tag.outputs.full-tag }}
+        AMD64_IMAGE: ${{ steps.build-image.outputs.image }}
+        ARM64_IMAGE: ${{ steps.build-image-arm.outputs.image }}
+      shell: bash
+      run: |
+        docker image ls
+        echo Pushing amd64 image ${AMD64_IMAGE}
+        docker push ${AMD64_IMAGE}
+        echo Pushing ARM image ${ARM64_IMAGE}
+        docker push ${ARM64_IMAGE}
+
+        echo Building multi-arch manifest
+        docker manifest create ${FULL_DOCKER_TAG} ${AMD64_IMAGE} ${ARM64_IMAGE}
+        echo Pushing multi-arch manifest ${FULL_DOCKER_TAG}
+        docker manifest push ${FULL_DOCKER_TAG}
+
+        echo "::notice::Docker Image Tag: ${DOCKER_TAG}"
+        echo "::notice::Full Docker Image Tag: ${FULL_DOCKER_TAG}"
