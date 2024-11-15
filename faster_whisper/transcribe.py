@@ -384,7 +384,13 @@ class BatchedInferencePipeline:
                     language_probability,
                     all_language_probs,
                 ) = self.model.detect_language(
-                    features=np.concatenate(features, axis=1),
+                    features=np.concatenate(
+                        features
+                        + [
+                            np.full((self.model.model.n_mels, 1), -1.5, dtype="float32")
+                        ],
+                        axis=1,
+                    ),  # add a dummy feature to account for empty audio
                     language_detection_segments=language_detection_segments,
                     language_detection_threshold=language_detection_threshold,
                 )
@@ -411,7 +417,9 @@ class BatchedInferencePipeline:
             language=language,
         )
 
-        features = np.stack([pad_or_trim(feature) for feature in features])
+        features = (
+            np.stack([pad_or_trim(feature) for feature in features]) if features else []
+        )
 
         # batched options: see the difference with default options in WhisperModel
         batched_options = TranscriptionOptions(
@@ -816,12 +824,23 @@ class WhisperModel:
                 language = "en"
                 language_probability = 1
             else:
+                start_timestamp = (
+                    float(clip_timestamps.split(",")[0])
+                    if isinstance(clip_timestamps, str)
+                    else clip_timestamps[0]
+                )
+                content_frames = features.shape[-1] - 1
+                seek = (
+                    int(start_timestamp * self.frames_per_second)
+                    if start_timestamp * self.frames_per_second < content_frames
+                    else 0
+                )
                 (
                     language,
                     language_probability,
                     all_language_probs,
                 ) = self.detect_language(
-                    features=features,
+                    features=features[..., seek:],
                     language_detection_segments=language_detection_segments,
                     language_detection_threshold=language_detection_threshold,
                 )
@@ -1764,7 +1783,7 @@ class WhisperModel:
             audio = audio[
                 : language_detection_segments * self.feature_extractor.n_samples
             ]
-            features = self.feature_extractor(audio)[..., :-1]
+            features = self.feature_extractor(audio)
 
         features = features[
             ..., : language_detection_segments * self.feature_extractor.nb_max_frames
