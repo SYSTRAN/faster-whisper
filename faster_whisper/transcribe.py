@@ -174,7 +174,9 @@ class BatchedInferencePipeline:
                         compression_ratio=get_compression_ratio(
                             self.tokenizer.decode(subsegment["tokens"])
                         ),
-                        seek=seek,
+                        seek=int(
+                            chunk_metadata["start_time"] * self.model.frames_per_second
+                        ),
                     )
                     for subsegment in subsegments
                 ]
@@ -497,7 +499,7 @@ class BatchedInferencePipeline:
                 for segment in result:
                     seg_idx += 1
                     yield Segment(
-                        seek=int(result[-1]["end"] * self.model.frames_per_second),
+                        seek=segment["seek"],
                         id=seg_idx,
                         text=segment["text"],
                         start=round(segment["start"], 3),
@@ -1319,7 +1321,7 @@ class WhisperModel:
 
                 yield Segment(
                     id=idx,
-                    seek=seek,
+                    seek=previous_seek,
                     start=segment["start"],
                     end=segment["end"],
                     text=text,
@@ -1586,11 +1588,7 @@ class WhisperModel:
 
         for segment_idx, segment in enumerate(segments):
             word_index = 0
-            time_offset = (
-                segment[0]["seek"]
-                * self.feature_extractor.hop_length
-                / self.feature_extractor.sampling_rate
-            )
+            time_offset = segment[0]["seek"] / self.frames_per_second
             median_duration, max_duration = median_max_durations[segment_idx]
             for subsegment_idx, subsegment in enumerate(segment):
                 saved_tokens = 0
