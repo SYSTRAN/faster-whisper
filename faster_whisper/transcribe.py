@@ -154,6 +154,9 @@ class BatchedInferencePipeline:
                         compression_ratio=get_compression_ratio(
                             tokenizer.decode(subsegment["tokens"])
                         ),
+                        seek=int(
+                            chunk_metadata["start_time"] * self.model.frames_per_second
+                        ),
                     )
                     for subsegment in subsegments
                 ]
@@ -455,7 +458,7 @@ class BatchedInferencePipeline:
 
             language_probability = 1
 
-        self.tokenizer = Tokenizer(
+        tokenizer = Tokenizer(
             self.model.hf_tokenizer,
             self.model.model.is_multilingual,
             task=task,
@@ -485,7 +488,7 @@ class BatchedInferencePipeline:
             initial_prompt=initial_prompt,
             prefix=prefix,
             suppress_blank=suppress_blank,
-            suppress_tokens=get_suppressed_tokens(self.tokenizer, suppress_tokens),
+            suppress_tokens=get_suppressed_tokens(tokenizer, suppress_tokens),
             prepend_punctuations=prepend_punctuations,
             append_punctuations=append_punctuations,
             max_new_tokens=max_new_tokens,
@@ -513,7 +516,7 @@ class BatchedInferencePipeline:
 
         segments = self._batched_segments_generator(
             features,
-            self.tokenizer,
+            tokenizer,
             chunks_metadata,
             batch_size,
             options,
@@ -1737,60 +1740,6 @@ class WhisperModel:
                 ]
             )
         return return_list
-
-    def generate_segment_batched(
-        self,
-        features: np.ndarray,
-        tokenizer: Tokenizer,
-        options: TranscriptionOptions,
-    ):
-        batch_size = features.shape[0]
-
-        prompt = self.get_prompt(
-            tokenizer,
-            previous_tokens=(
-                tokenizer.encode(options.initial_prompt)
-                if options.initial_prompt is not None
-                else []
-            ),
-            without_timestamps=options.without_timestamps,
-            prefix=options.prefix,
-            hotwords=options.hotwords,
-        )
-
-        encoder_output = self.encode(features)
-
-        results = self.model.generate(
-            encoder_output,
-            [prompt] * batch_size,
-            beam_size=options.beam_size,
-            patience=options.patience,
-            length_penalty=options.length_penalty,
-            max_length=self.max_length,
-            suppress_blank=options.suppress_blank,
-            suppress_tokens=options.suppress_tokens,
-            return_scores=True,
-            return_no_speech_prob=True,
-            sampling_temperature=options.temperatures[0],
-            repetition_penalty=options.repetition_penalty,
-            no_repeat_ngram_size=options.no_repeat_ngram_size,
-        )
-
-        output = []
-        for result in results:
-            # return scores
-            seq_len = len(result.sequences_ids[0])
-            cum_logprob = result.scores[0] * (seq_len**options.length_penalty)
-
-            output.append(
-                dict(
-                    avg_logprob=cum_logprob / (seq_len + 1),
-                    no_speech_prob=result.no_speech_prob,
-                    tokens=result.sequences_ids[0],
-                )
-            )
-
-        return encoder_output, output
 
     def detect_language(
         self,
