@@ -1,5 +1,7 @@
 import os
 
+import numpy as np
+
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 from faster_whisper.tokenizer import Tokenizer
 from faster_whisper.transcribe import get_suppressed_tokens
@@ -87,6 +89,15 @@ def test_batched_transcribe(physcisworks_path):
     assert len(segments) > 7
 
 
+def test_empty_audio():
+    audio = np.asarray([], dtype="float32")
+    model = WhisperModel("tiny")
+    pipeline = BatchedInferencePipeline(model=model)
+    assert list(model.transcribe(audio)[0]) == []
+    assert list(pipeline.transcribe(audio)[0]) == []
+    model.detect_language(audio)
+
+
 def test_prefix_with_timestamps(jfk_path):
     model = WhisperModel("tiny")
     segments, _ = model.transcribe(jfk_path, prefix="And so my fellow Americans")
@@ -145,13 +156,6 @@ def test_stereo_diarization(data_dir):
     segments, _ = model.transcribe(right)
     transcription = "".join(segment.text for segment in segments).strip()
     assert transcription == "The horizon seems extremely distant."
-
-
-def test_multisegment_lang_id(physcisworks_path):
-    model = WhisperModel("tiny")
-    language_info = model.detect_language_multi_segment(physcisworks_path)
-    assert language_info["language_code"] == "en"
-    assert language_info["language_confidence"] > 0.8
 
 
 def test_suppressed_tokens_minus_1():
