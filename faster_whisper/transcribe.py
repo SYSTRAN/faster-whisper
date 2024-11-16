@@ -240,97 +240,11 @@ class BatchedInferencePipeline:
 
         return encoder_output, output
 
-    def forward(self, features, tokenizer, chunks_metadata, options):
-        encoder_output, outputs = self.generate_segment_batched(
-            features, tokenizer, options
-        )
-
-        segmented_outputs = []
-        segment_sizes = []
-        for chunk_metadata, output in zip(chunks_metadata, outputs):
-            duration = chunk_metadata["end_time"] - chunk_metadata["start_time"]
-            segment_size = int(ceil(duration) * self.model.frames_per_second)
-            segment_sizes.append(segment_size)
-            (
-                subsegments,
-                seek,
-                single_timestamp_ending,
-            ) = self.model._split_segments_by_timestamps(
-                tokenizer=tokenizer,
-                tokens=output["tokens"],
-                time_offset=chunk_metadata["start_time"],
-                segment_size=segment_size,
-                segment_duration=duration,
-                seek=0,
-            )
-            segmented_outputs.append(
-                [
-                    dict(
-                        text=tokenizer.decode(subsegment["tokens"]),
-                        avg_logprob=output["avg_logprob"],
-                        no_speech_prob=output["no_speech_prob"],
-                        tokens=subsegment["tokens"],
-                        start=subsegment["start"],
-                        end=subsegment["end"],
-                        compression_ratio=get_compression_ratio(
-                            tokenizer.decode(subsegment["tokens"])
-                        ),
-                    )
-                    for subsegment in subsegments
-                ]
-            )
-        if options.word_timestamps:
-            self.last_speech_timestamp = self.model.add_word_timestamps(
-                segmented_outputs,
-                tokenizer,
-                encoder_output,
-                segment_sizes,
-                options.prepend_punctuations,
-                options.append_punctuations,
-                self.last_speech_timestamp,
-            )
-
-        return segmented_outputs
-
-    def get_language_and_tokenizer(
-        self, audio, task: Optional[str] = None, language: Optional[str] = None
-    ):
-        all_language_probs = None
-        language_probability = 1.0
-
-        if self.tokenizer is None:
-            if not language:
-                (
-                    language,
-                    language_probability,
-                    all_language_probs,
-                ) = self.model.detect_language(audio)
-            task = task or "transcribe"
-            self.tokenizer = Tokenizer(
-                self.model.hf_tokenizer,
-                self.model.model.is_multilingual,
-                task=task,
-                language=language,
-            )
-        else:
-            if task is not None:
-                self.tokenizer.task = self.tokenizer.tokenizer.token_to_id(
-                    f"<|{task}|>"
-                )
-
-            if language is not None:
-                self.tokenizer.language = self.tokenizer.tokenizer.token_to_id(
-                    f"<|{language}|>"
-                )
-                self.tokenizer.language_code = language
-
-        return language, language_probability, task, all_language_probs
-
     def transcribe(
         self,
         audio: Union[str, BinaryIO, np.ndarray],
         language: Optional[str] = None,
-        task: str = None,
+        task: str = "transcribe",
         log_progress: bool = False,
         beam_size: int = 5,
         best_of: int = 5,
@@ -371,6 +285,8 @@ class BatchedInferencePipeline:
         hallucination_silence_threshold: Optional[float] = None,
         batch_size: int = 8,
         hotwords: Optional[str] = None,
+        language_detection_threshold: Optional[float] = 0.5,
+        language_detection_segments: int = 1,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """transcribe audio in chunks in batched fashion and return with language info.
 
@@ -418,6 +334,9 @@ class BatchedInferencePipeline:
             batch_size: the maximum number of parallel requests to model for decoding.
             hotwords:
                 Hotwords/hint phrases to the model. Has no effect if prefix is not None.
+            language_detection_threshold: If the maximum probability of the language tokens is
+                higher than this value, the language is detected.
+            language_detection_segments: Number of segments to consider for the language detection.
 
         Unused Arguments
             compression_ratio_threshold: If the gzip compression ratio is above this value,
@@ -592,23 +511,6 @@ class BatchedInferencePipeline:
             all_language_probs=all_language_probs,
         )
 
-        audio_chunks, chunks_metadata = collect_chunks(audio, clip_timestamps)
-        features = (
-            np.stack(
-                [
-                    pad_or_trim(
-                        self.model.feature_extractor(chunk)[
-                            ...,
-                            : chunk.shape[0] // self.model.feature_extractor.hop_length,
-                        ]
-                    )
-                    for chunk in audio_chunks
-                ]
-            )
-            if duration_after_vad
-            else []
-        )
-
         segments = self._batched_segments_generator(
             features,
             self.tokenizer,
@@ -657,9 +559,6 @@ class BatchedInferencePipeline:
                 pbar.update(1)
 
         pbar.close()
-        # revert the tokenizer if multilingual inference is enabled
-        if self.preset_language is None:
-            self.tokenizer = None
         self.last_speech_timestamp = 0.0
 
 
