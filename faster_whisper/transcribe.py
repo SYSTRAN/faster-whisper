@@ -93,7 +93,6 @@ class TranscriptionOptions:
     prepend_punctuations: str
     append_punctuations: str
     multilingual: bool
-    output_language: Optional[str]
     max_new_tokens: Optional[int]
     clip_timestamps: Union[str, List[float]]
     hallucination_silence_threshold: Optional[float]
@@ -499,7 +498,6 @@ class BatchedInferencePipeline:
             clip_timestamps=clip_timestamps,
             prompt_reset_on_temperature=0.5,
             multilingual=False,
-            output_language=None,
             without_timestamps=without_timestamps,
             max_initial_timestamp=0.0,
         )
@@ -721,7 +719,6 @@ class WhisperModel:
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         multilingual: bool = False,
-        output_language: Optional[str] = None,
         vad_filter: bool = False,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
         max_new_tokens: Optional[int] = None,
@@ -781,12 +778,7 @@ class WhisperModel:
             with the next word
           append_punctuations: If word_timestamps is True, merge these punctuation symbols
             with the previous word
-          multilingual: If True, perform transcription on multilingual videos
-            and return the transcript based
-            on the 'output_language' flag.
-          output_language: Valid only if multilingual is set to True.
-            Specifies the string representing the output language. One of
-            'en' (English) or 'hybrid' (code-switched transcription).
+          multilingual: Perform language detection on every segment.
           vad_filter: Enable the voice activity detection (VAD) to filter out parts of the audio
             without speech. This step is using the Silero VAD model
             https://github.com/snakers4/silero-vad.
@@ -862,13 +854,6 @@ class WhisperModel:
 
         encoder_output = None
         all_language_probs = None
-
-        # setting output_language for multilingual videos
-        if multilingual:
-            if output_language is None:
-                output_language = "en"
-            elif output_language not in ["en", "hybrid"]:
-                raise ValueError("Output language needs to be one of 'en'/'hybrid'.")
 
         # detecting the language if not provided
         if language is None:
@@ -949,7 +934,6 @@ class WhisperModel:
             prepend_punctuations=prepend_punctuations,
             append_punctuations=append_punctuations,
             multilingual=multilingual,
-            output_language=output_language,
             max_new_tokens=max_new_tokens,
             clip_timestamps=clip_timestamps,
             hallucination_silence_threshold=hallucination_silence_threshold,
@@ -1139,27 +1123,18 @@ class WhisperModel:
 
             previous_tokens = all_tokens[prompt_reset_since:]
 
-            if encoder_output is None:
+            if seek > 0 or encoder_output is None:
                 encoder_output = self.encode(segment)
 
-            # Perform language detection at every segment to update task based on output language,
-            # if the language is english, task is transcribe,
-            # else the task is translate to english (default)
-            # or transcribe if 'output_language' is 'hybrid'.
+            # Perform language detection at every segment,
             if options.multilingual:
                 results = self.model.detect_language(encoder_output)
                 language_token, language_probability = results[0][0]
                 language = language_token[2:-2]
-                if options.output_language == "en" and language != "en":
-                    task = "translate"
-                else:
-                    task = "transcribe"
 
-                # Update tokenizer based on task and language
-                tokenizer.task = tokenizer.tokenizer.token_to_id(f"<|{task}|>")
                 tokenizer.language = tokenizer.tokenizer.token_to_id(language_token)
                 tokenizer.language_code = language
-            # Update prompt based on task and language
+
             prompt = self.get_prompt(
                 tokenizer,
                 previous_tokens,
@@ -1167,9 +1142,6 @@ class WhisperModel:
                 prefix=options.prefix if seek == 0 else None,
                 hotwords=options.hotwords,
             )
-
-            if seek > 0 or encoder_output is None:
-                encoder_output = self.encode(segment)
 
             (
                 result,

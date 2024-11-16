@@ -167,7 +167,6 @@ def test_multilingual_transcription(data_dir):
     segments, info = model.transcribe(
         audio,
         multilingual=True,
-        output_language="hyprid",
         without_timestamps=True,
         condition_on_previous_text=False,
     )
