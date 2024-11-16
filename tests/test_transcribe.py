@@ -158,6 +158,42 @@ def test_stereo_diarization(data_dir):
     assert transcription == "The horizon seems extremely distant."
 
 
+def test_multilingual_transcription(data_dir):
+    model = WhisperModel("tiny")
+
+    audio_path = os.path.join(data_dir, "multilingual.mp3")
+    audio = decode_audio(audio_path)
+
+    segments, info = model.transcribe(
+        audio,
+        multilingual=True,
+        output_language="hyprid",
+        without_timestamps=True,
+        condition_on_previous_text=False,
+    )
+    segments = list(segments)
+    assert (
+        segments[0].text
+        == " Permission is hereby granted, free of charge, to any person obtaining a copy of the"
+        " software and associated documentation files to deal in the software without restriction,"
+        " including without limitation the rights to use, copy, modify, merge, publish, distribute"
+        ", sublicence, and or cell copies of the software, and to permit persons to whom the "
+        "software is furnished to do so, subject to the following conditions. The above copyright"
+        " notice and this permission notice, shall be included in all copies or substantial "
+        "portions of the software."
+    )
+
+    assert (
+        segments[1].text
+        == " Jedem, der dieses Software und die dazu gehöregen Dokumentationsdatein erhält, wird "
+        "hiermit unengeltlich die Genehmigung erteilt, wird der Software und eingeschränkt zu "
+        "verfahren. Dies umfasst insbesondere das Recht, die Software zu verwenden, zu "
+        "vervielfältigen, zu modifizieren, zu Samenzofügen, zu veröffentlichen, zu verteilen, "
+        "unterzulizenzieren und oder kopieren der Software zu verkaufen und diese Rechte "
+        "unterfolgen den Bedingungen anderen zu übertragen."
+    )
+
+
 def test_suppressed_tokens_minus_1():
     model = WhisperModel("tiny.en")
 
