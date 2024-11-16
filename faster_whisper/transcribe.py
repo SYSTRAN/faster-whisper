@@ -243,11 +243,45 @@ class BatchedInferencePipeline:
 
         return segmented_outputs
 
+    def get_language_and_tokenizer(
+        self, audio, task: Optional[str] = None, language: Optional[str] = None
+    ):
+        all_language_probs = None
+        language_probability = 1.0
+
+        if self.tokenizer is None:
+            if not language:
+                (
+                    language,
+                    language_probability,
+                    all_language_probs,
+                ) = self.model.detect_language(audio)
+            task = task or "transcribe"
+            self.tokenizer = Tokenizer(
+                self.model.hf_tokenizer,
+                self.model.model.is_multilingual,
+                task=task,
+                language=language,
+            )
+        else:
+            if task is not None:
+                self.tokenizer.task = self.tokenizer.tokenizer.token_to_id(
+                    f"<|{task}|>"
+                )
+
+            if language is not None:
+                self.tokenizer.language = self.tokenizer.tokenizer.token_to_id(
+                    f"<|{language}|>"
+                )
+                self.tokenizer.language_code = language
+
+        return language, language_probability, task, all_language_probs
+
     def transcribe(
         self,
         audio: Union[str, BinaryIO, np.ndarray],
         language: Optional[str] = None,
-        task: str = "transcribe",
+        task: str = None,
         log_progress: bool = False,
         beam_size: int = 5,
         best_of: int = 5,
@@ -288,8 +322,6 @@ class BatchedInferencePipeline:
         hallucination_silence_threshold: Optional[float] = None,
         batch_size: int = 8,
         hotwords: Optional[str] = None,
-        language_detection_threshold: Optional[float] = 0.5,
-        language_detection_segments: int = 1,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """transcribe audio in chunks in batched fashion and return with language info.
 
@@ -337,9 +369,6 @@ class BatchedInferencePipeline:
             batch_size: the maximum number of parallel requests to model for decoding.
             hotwords:
                 Hotwords/hint phrases to the model. Has no effect if prefix is not None.
-            language_detection_threshold: If the maximum probability of the language tokens is
-                higher than this value, the language is detected.
-            language_detection_segments: Number of segments to consider for the language detection.
 
         Unused Arguments
             compression_ratio_threshold: If the gzip compression ratio is above this value,
@@ -488,7 +517,7 @@ class BatchedInferencePipeline:
             initial_prompt=initial_prompt,
             prefix=prefix,
             suppress_blank=suppress_blank,
-            suppress_tokens=get_suppressed_tokens(tokenizer, suppress_tokens),
+            suppress_tokens=get_suppressed_tokens(self.tokenizer, suppress_tokens),
             prepend_punctuations=prepend_punctuations,
             append_punctuations=append_punctuations,
             max_new_tokens=max_new_tokens,
@@ -513,10 +542,27 @@ class BatchedInferencePipeline:
             vad_options=vad_parameters,
             all_language_probs=all_language_probs,
         )
+        
+        audio_chunks, chunks_metadata = collect_chunks(audio, clip_timestamps)
+        features = (
+            np.stack(
+                [
+                    pad_or_trim(
+                        self.model.feature_extractor(chunk)[
+                            ...,
+                            : chunk.shape[0] // self.model.feature_extractor.hop_length,
+                        ]
+                    )
+                    for chunk in audio_chunks
+                ]
+            )
+            if duration_after_vad
+            else []
+        )
 
         segments = self._batched_segments_generator(
             features,
-            tokenizer,
+            self.tokenizer,
             chunks_metadata,
             batch_size,
             options,
@@ -562,6 +608,9 @@ class BatchedInferencePipeline:
                 pbar.update(1)
 
         pbar.close()
+        # revert the tokenizer if multilingual inference is enabled
+        if self.preset_language is None:
+            self.tokenizer = None
         self.last_speech_timestamp = 0.0
 
 
