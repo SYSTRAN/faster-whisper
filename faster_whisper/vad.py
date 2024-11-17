@@ -3,7 +3,7 @@ import functools
 import os
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -44,7 +44,7 @@ class VadOptions:
 
 def get_speech_timestamps(
     audio: np.ndarray,
-    vad_options: Optional[VadOptions] = None,
+    vad_options: Optional[Union[dict, VadOptions]] = None,
     sampling_rate: int = 16000,
     **kwargs,
 ) -> List[dict]:
@@ -61,6 +61,9 @@ def get_speech_timestamps(
     """
     if vad_options is None:
         vad_options = VadOptions(**kwargs)
+
+    if isinstance(vad_options, dict):
+        vad_options = VadOptions(**vad_options)
 
     threshold = vad_options.threshold
     neg_threshold = vad_options.neg_threshold
