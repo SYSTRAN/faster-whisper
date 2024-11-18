@@ -75,9 +75,9 @@ segments, info = model.transcribe("audio.mp3", beam_size=5, language="en")
 GPU execution requires the following NVIDIA libraries to be installed:
 
 * [cuBLAS for CUDA 12](https://developer.nvidia.com/cublas)
-* [cuDNN 8 for CUDA 12](https://developer.nvidia.com/cudnn)
+* [cuDNN 9 for CUDA 12](https://developer.nvidia.com/cudnn)
 
-**Note**: Latest versions of `ctranslate2` support CUDA 12 only. For CUDA 11, the current workaround is downgrading to the `3.24.0` version of `ctranslate2` (This can be done with `pip install --force-reinstall ctranslate2==3.24.0` or specifying the version in a `requirements.txt`).
+**Note**: The latest versions of `ctranslate2` only support CUDA 12 and cuDNN 9. For CUDA 11 and cuDNN 8, the current workaround is downgrading to the `3.24.0` version of `ctranslate2`, for CUDA 12 and cuDNN 8, downgrade to the `4.4.0` version of `ctranslate2`, (This can be done with `pip install --force-reinstall ctranslate2==4.4.0` or specifying the version in a `requirements.txt`).
 
 There are multiple ways to install the NVIDIA libraries mentioned above. The recommended way is described in the official NVIDIA documentation, but we also suggest other installation methods below. 
 
@@ -89,19 +89,17 @@ There are multiple ways to install the NVIDIA libraries mentioned above. The rec
 
 #### Use Docker
 
-The libraries (cuBLAS, cuDNN) are installed in these official NVIDIA CUDA Docker images: `nvidia/cuda:12.0.0-runtime-ubuntu20.04` or `nvidia/cuda:12.0.0-runtime-ubuntu22.04`.
+The libraries (cuBLAS, cuDNN) are installed in this official NVIDIA CUDA Docker images: `nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04`.
 
 #### Install with `pip` (Linux only)
 
 On Linux these libraries can be installed with `pip`. Note that `LD_LIBRARY_PATH` must be set before launching Python.
 
 ```bash
-pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
+pip install nvidia-cublas-cu12 nvidia-cudnn-cu12==9.*
 
 export LD_LIBRARY_PATH=`python3 -c 'import os; import nvidia.cublas.lib; import nvidia.cudnn.lib; print(os.path.dirname(nvidia.cublas.lib.__file__) + ":" + os.path.dirname(nvidia.cudnn.lib.__file__))'`
 ```
-
-**Note**: Version 9+ of `nvidia-cudnn-cu12` appears to cause issues due its reliance on cuDNN 9 (Faster-Whisper does not currently support cuDNN 9). Ensure your version of the Python package is for cuDNN 8.
 
 #### Download the libraries from Purfview's repository (Windows & Linux)
 
@@ -166,24 +164,13 @@ segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
 
-### multi-segment language detection
-
-To directly use the model for improved language detection, the following code snippet can be used:
-
-```python
-from faster_whisper import WhisperModel
-model = WhisperModel("medium", device="cuda", compute_type="float16")
-language_info = model.detect_language_multi_segment("audio.mp3")
-```
-
-### Batched faster-whisper
-
-The following code snippet illustrates how to run inference with batched version on an example audio file. Please also refer to the test scripts of batched faster whisper.
+### Batched Transcription
+The following code snippet illustrates how to run batched transcription on an example audio file. `BatchedInferencePipeline.transcribe` is a drop-in replacement for `WhisperModel.transcribe`
 
 ```python
 from faster_whisper import WhisperModel, BatchedInferencePipeline
 
-model = WhisperModel("medium", device="cuda", compute_type="float16")
+model = WhisperModel("turbo", device="cuda", compute_type="float16")
 batched_model = BatchedInferencePipeline(model=model)
 segments, info = batched_model.transcribe("audio.mp3", batch_size=16)
 
@@ -238,6 +225,7 @@ segments, _ = model.transcribe(
     vad_parameters=dict(min_silence_duration_ms=500),
 )
 ```
+Vad filter is enabled by default for batched transcription.
 
 ### Logging
 
@@ -310,6 +298,7 @@ model = faster_whisper.WhisperModel("username/whisper-large-v3-ct2")
 If you are comparing the performance against other Whisper implementations, you should make sure to run the comparison with similar settings. In particular:
 
 * Verify that the same transcription options are used, especially the same beam size. For example in openai/whisper, `model.transcribe` uses a default beam size of 1 but here we use a default beam size of 5.
+* Transcription speed is closely affected by the number of words in the transcript, so ensure that other implementations have a similar WER (Word Error Rate) to this one.
 * When running on CPU, make sure to set the same number of threads. Many frameworks will read the environment variable `OMP_NUM_THREADS`, which can be set when running your script:
 
 ```bash
