@@ -382,6 +382,13 @@ class BatchedInferencePipeline:
 
         sampling_rate = self.model.feature_extractor.sampling_rate
 
+        if multilingual and not self.model.model.is_multilingual:
+            self.model.logger.warning(
+                "The current model is English-only but the multilingual parameter is set to"
+                "True; setting to False instead."
+            )
+            multilingual = False
+
         if not isinstance(audio, np.ndarray):
             audio = decode_audio(audio, sampling_rate=sampling_rate)
         duration = audio.shape[0] / sampling_rate
@@ -815,6 +822,13 @@ class WhisperModel:
         """
 
         sampling_rate = self.feature_extractor.sampling_rate
+
+        if multilingual and not self.model.is_multilingual:
+            self.logger.warning(
+                "The current model is English-only but the multilingual parameter is set to"
+                "True; setting to False instead."
+            )
+            multilingual = False
 
         if not isinstance(audio, np.ndarray):
             audio = decode_audio(audio, sampling_rate=sampling_rate)
