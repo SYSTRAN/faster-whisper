@@ -209,10 +209,21 @@ class BatchedInferencePipeline:
             )
 
         encoder_output = self.model.encode(features)
+        prompts = [prompt.copy() for _ in range(batch_size)]
+
+        if options.multilingual:
+            language_tokens = [
+                tokenizer.tokenizer.token_to_id(segment_langs[0][0])
+                for segment_langs in self.model.model.detect_language(encoder_output)
+            ]
+            language_token_index = prompt.index(tokenizer.language)
+
+            for i, language_token in enumerate(language_tokens):
+                prompts[i][language_token_index] = language_token
 
         results = self.model.model.generate(
             encoder_output,
-            [prompt] * batch_size,
+            prompts,
             beam_size=options.beam_size,
             patience=options.patience,
             length_penalty=options.length_penalty,
@@ -278,7 +289,6 @@ class BatchedInferencePipeline:
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         multilingual: bool = False,
-        output_language: Optional[str] = None,
         vad_filter: bool = True,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
         max_new_tokens: Optional[int] = None,
@@ -321,6 +331,7 @@ class BatchedInferencePipeline:
                 with the next word
             append_punctuations: If word_timestamps is True, merge these punctuation symbols
                 with the previous word
+            multilingual: If True, perform transcription on multilingual videos. Set as False.
             vad_filter: Enable the voice activity detection (VAD) to filter out parts of the audio
                 without speech. This step is using the Silero VAD model
                 https://github.com/snakers4/silero-vad.
@@ -359,10 +370,6 @@ class BatchedInferencePipeline:
                 Arg has effect only if condition_on_previous_text is True. Set at 0.5
             prefix: Optional text to provide as a prefix at the beginning of each window.
             max_initial_timestamp: The initial timestamp cannot be later than this, set at 0.0.
-            multilingual: If True, perform transcription on multilingual videos. Set as False.
-            output_language: Valid only if multilingual is set to True.
-                Specifies the string representing the output language. One of
-                'en' (English) or 'hybrid' (code-switched transcription). set as None.
             hallucination_silence_threshold: Optional[float]
                 When word_timestamps is True, skip silent periods longer than this threshold
                 (in seconds) when a possible hallucination is detected. set as None.
@@ -497,7 +504,7 @@ class BatchedInferencePipeline:
             condition_on_previous_text=False,
             clip_timestamps=clip_timestamps,
             prompt_reset_on_temperature=0.5,
-            multilingual=False,
+            multilingual=multilingual,
             without_timestamps=without_timestamps,
             max_initial_timestamp=0.0,
         )

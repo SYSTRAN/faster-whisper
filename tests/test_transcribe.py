@@ -160,6 +160,7 @@ def test_stereo_diarization(data_dir):
 
 def test_multilingual_transcription(data_dir):
     model = WhisperModel("tiny")
+    pipeline = BatchedInferencePipeline(model)
 
     audio_path = os.path.join(data_dir, "multilingual.mp3")
     audio = decode_audio(audio_path)
@@ -171,6 +172,7 @@ def test_multilingual_transcription(data_dir):
         condition_on_previous_text=False,
     )
     segments = list(segments)
+
     assert (
         segments[0].text
         == " Permission is hereby granted, free of charge, to any person obtaining a copy of the"
@@ -190,6 +192,26 @@ def test_multilingual_transcription(data_dir):
         "vervielfältigen, zu modifizieren, zu Samenzofügen, zu veröffentlichen, zu verteilen, "
         "unterzulizenzieren und oder kopieren der Software zu verkaufen und diese Rechte "
         "unterfolgen den Bedingungen anderen zu übertragen."
+    )
+
+    segments, info = pipeline.transcribe(audio, multilingual=True)
+    segments = list(segments)
+
+    assert (
+        segments[0].text
+        == " Permission is hereby granted, free of charge, to any person obtaining a copy of the"
+        " software and associated documentation files to deal in the software without restriction,"
+        " including without limitation the rights to use, copy, modify, merge, publish, distribute"
+        ", sublicence, and or cell copies of the software, and to permit persons to whom the "
+        "software is furnished to do so, subject to the following conditions. The above copyright"
+        " notice and this permission notice, shall be included in all copies or substantial "
+        "portions of the software."
+    )
+    assert (
+        "Dokumentationsdatein erhält, wird hiermit unengeltlich die Genehmigung erteilt,"
+        " wird der Software und eingeschränkt zu verfahren. Dies umfasst insbesondere das Recht,"
+        " die Software zu verwenden, zu vervielfältigen, zu modifizieren"
+        in segments[1].text
     )
 
 
