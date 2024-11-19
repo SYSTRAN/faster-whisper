@@ -331,7 +331,7 @@ class BatchedInferencePipeline:
                 with the next word
             append_punctuations: If word_timestamps is True, merge these punctuation symbols
                 with the previous word
-            multilingual: If True, perform transcription on multilingual videos. Set as False.
+            multilingual: Perform language detection on every segment.
             vad_filter: Enable the voice activity detection (VAD) to filter out parts of the audio
                 without speech. This step is using the Silero VAD model
                 https://github.com/snakers4/silero-vad.
@@ -1133,7 +1133,6 @@ class WhisperModel:
             if seek > 0 or encoder_output is None:
                 encoder_output = self.encode(segment)
 
-            # Perform language detection at every segment,
             if options.multilingual:
                 results = self.model.detect_language(encoder_output)
                 language_token, language_probability = results[0][0]
