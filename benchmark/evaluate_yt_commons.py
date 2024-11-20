@@ -7,6 +7,7 @@ from io import BytesIO
 from datasets import load_dataset
 from jiwer import wer
 from pytubefix import YouTube
+from pytubefix.exceptions import VideoUnavailable
 from tqdm import tqdm
 from transformers.models.whisper.english_normalizer import EnglishTextNormalizer
 
@@ -26,7 +27,7 @@ def url_to_audio(row):
         video.stream_to_buffer(buffer)
         buffer.seek(0)
         row["audio"] = decode_audio(buffer)
-    except:
+    except VideoUnavailable:
         print(f'Failed to download: {row["link"]}')
         row["audio"] = []
     return row
