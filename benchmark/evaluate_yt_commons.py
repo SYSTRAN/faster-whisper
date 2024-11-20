@@ -5,9 +5,8 @@ import os
 from io import BytesIO
 
 from datasets import load_dataset
-from evaluate import load
+from jiwer import wer
 from pytubefix import YouTube
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers.models.whisper.english_normalizer import EnglishTextNormalizer
 
@@ -39,19 +38,12 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-# define the evaluation metric
-wer_metric = load("wer")
-
 with open(os.path.join(os.path.dirname(__file__), "normalizer.json"), "r") as f:
     normalizer = EnglishTextNormalizer(json.load(f))
 
 dataset = load_dataset("mobiuslabsgmbh/youtube-commons-asr-eval", streaming=True).map(
     url_to_audio
 )
-dataset = iter(
-    DataLoader(dataset["test"], batch_size=1, prefetch_factor=4, num_workers=2)
-)
-
 model = WhisperModel("large-v3", device="cuda")
 pipeline = BatchedInferencePipeline(model, device="cuda")
 
@@ -59,7 +51,7 @@ pipeline = BatchedInferencePipeline(model, device="cuda")
 all_transcriptions = []
 all_references = []
 # iterate over the dataset and run inference
-for i, row in tqdm(enumerate(dataset), desc="Evaluating..."):
+for i, row in tqdm(enumerate(dataset["test"]), desc="Evaluating..."):
     result, info = pipeline.transcribe(
         row["audio"][0],
         batch_size=8,
@@ -77,7 +69,5 @@ all_transcriptions = [normalizer(transcription) for transcription in all_transcr
 all_references = [normalizer(reference) for reference in all_references]
 
 # compute the WER metric
-wer = 100 * wer_metric.compute(
-    predictions=all_transcriptions, references=all_references
-)
-print("WER: %.3f" % wer)
+word_error_rate = 100 * wer(hypothesis=all_transcriptions, reference=all_references)
+print("WER: %.3f" % word_error_rate)
