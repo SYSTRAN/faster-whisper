@@ -1699,12 +1699,14 @@ class WhisperModel:
                 # array([0.])
                 # This results in crashes when we lookup jump_times with float, like
                 # IndexError: arrays used as indices must be of integer (or boolean) type
-                return []
+                return_list.append([])
+                continue
             word_boundaries = np.pad(
                 np.cumsum([len(t) for t in word_tokens[:-1]]), (1, 0)
             )
             if len(word_boundaries) <= 1:
-                return []
+                return_list.append([])
+                continue
 
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(
                 bool
