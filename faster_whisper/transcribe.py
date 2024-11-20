@@ -1885,6 +1885,7 @@ def merge_punctuations(alignment: List[dict], prepended: str, appended: str) -> 
         following = alignment[j]
         if previous["word"].startswith(" ") and previous["word"].strip() in prepended:
             # prepend it to the following word
+            following["word"] = previous["word"] + following["word"]
             following["tokens"] = previous["tokens"] + following["tokens"]
             previous["word"] = ""
             previous["tokens"] = []
