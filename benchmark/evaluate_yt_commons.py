@@ -16,15 +16,19 @@ from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 def url_to_audio(row):
     buffer = BytesIO()
     yt = YouTube(row["link"])
-    video = (
-        yt.streams.filter(only_audio=True, mime_type="audio/mp4")
-        .order_by("bitrate")
-        .desc()
-        .first()
-    )
-    video.stream_to_buffer(buffer)
-    buffer.seek(0)
-    row["audio"] = decode_audio(buffer)
+    try:
+        video = (
+            yt.streams.filter(only_audio=True, mime_type="audio/mp4")
+            .order_by("bitrate")
+            .desc()
+            .last()
+        )
+        video.stream_to_buffer(buffer)
+        buffer.seek(0)
+        row["audio"] = decode_audio(buffer)
+    except:
+        print(f'Failed to download: {row["link"]}')
+        row["audio"] = []
     return row
 
 
@@ -52,6 +56,8 @@ all_transcriptions = []
 all_references = []
 # iterate over the dataset and run inference
 for i, row in tqdm(enumerate(dataset["test"]), desc="Evaluating..."):
+    if not row["audio"]:
+        continue
     result, info = pipeline.transcribe(
         row["audio"][0],
         batch_size=8,
