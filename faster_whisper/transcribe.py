@@ -1699,12 +1699,14 @@ class WhisperModel:
                 # array([0.])
                 # This results in crashes when we lookup jump_times with float, like
                 # IndexError: arrays used as indices must be of integer (or boolean) type
-                return []
+                return_list.append([])
+                continue
             word_boundaries = np.pad(
                 np.cumsum([len(t) for t in word_tokens[:-1]]), (1, 0)
             )
             if len(word_boundaries) <= 1:
-                return []
+                return_list.append([])
+                continue
 
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(
                 bool
@@ -1884,11 +1886,9 @@ def merge_punctuations(alignment: List[dict], prepended: str, appended: str) -> 
         if previous["word"].startswith(" ") and previous["word"].strip() in prepended:
             # prepend it to the following word
             following["word"] = previous["word"] + following["word"]
-            if "tokens" in alignment[0].keys():
-                following["tokens"] = previous["tokens"] + following["tokens"]
-                previous["tokens"] = []
+            following["tokens"] = previous["tokens"] + following["tokens"]
             previous["word"] = ""
-
+            previous["tokens"] = []
         else:
             j = i
         i -= 1
@@ -1902,11 +1902,9 @@ def merge_punctuations(alignment: List[dict], prepended: str, appended: str) -> 
         if not previous["word"].endswith(" ") and following["word"] in appended:
             # append it to the previous word
             previous["word"] = previous["word"] + following["word"]
-            if "tokens" in alignment[0].keys():
-                previous["tokens"] = previous["tokens"] + following["tokens"]
-                following["tokens"] = []
+            previous["tokens"] = previous["tokens"] + following["tokens"]
             following["word"] = ""
-
+            following["tokens"] = []
         else:
             i = j
         j += 1
