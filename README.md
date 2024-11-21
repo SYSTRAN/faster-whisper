@@ -34,12 +34,13 @@ For reference, here's the time and memory usage that are required to transcribe 
 | Implementation | Precision | Beam size | Time | Max. memory |
 | --- | --- | --- | --- | --- |
 | openai/whisper | fp32 | 5 | 6m58s | 2335MB |
-| whisper.cpp (OpenVINO) | fp32 | 5 | 1m45s | 1642MB |
 | whisper.cpp | fp32 | 5 | 2m05s | 1049MB |
+| whisper.cpp (OpenVINO) | fp32 | 5 | 1m45s | 1642MB |
 | faster-whisper | fp32 | 5 | 2m37s | 2257MB |
 | faster-whisper (`batch_size=8`) | fp32 | 5 | 1m06s | 4230MB |
 | faster-whisper | int8 | 5 | 1m42s | 1477MB |
 | faster-whisper (`batch_size=8`) | int8 | 5 | 51s | 3608MB |
+
 *Executed with 8 threads on an Intel Core i7-12700K.*
 
 
