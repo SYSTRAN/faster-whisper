@@ -14,24 +14,34 @@ For reference, here's the time and memory usage that are required to transcribe 
 
 * [openai/whisper](https://github.com/openai/whisper)@[v20240930](https://github.com/openai/whisper/tree/v20240930)
 * [whisper.cpp](https://github.com/ggerganov/whisper.cpp)@[v1.7.2](https://github.com/ggerganov/whisper.cpp/tree/v1.7.2)
+* [transformers](https://github.com/huggingface/transformers)@[v4.46.3](https://github.com/huggingface/transformers/tree/v4.46.3)
 * [faster-whisper](https://github.com/SYSTRAN/faster-whisper)@[v1.1.0](https://github.com/SYSTRAN/faster-whisper/tree/v1.1.0)
 
 ### Large-v2 model on GPU
 
-| Implementation | Precision | Beam size | Time | Max. GPU memory |
+| Implementation | Precision | Beam size | Time | VRAM Usage |
 | --- | --- | --- | --- | --- |
 | openai/whisper | fp16 | 5 | 2m23s | 4708MB |
 | whisper.cpp (Flash Attention) | fp16 | 5 | 1m05s | 4127MB |
+| transformers (SDPA)[^1] | fp16 | 5 | 1m52s | 4960MB |
 | faster-whisper | fp16 | 5 | 1m03s | 4525MB |
 | faster-whisper (`batch_size=8`) | fp16 | 5 | 17s | 6090MB |
 | faster-whisper | int8 | 5 | 59s | 2926MB |
 | faster-whisper (`batch_size=8`) | int8 | 5 | 16s | 4500MB |
 
-*Executed with CUDA 12.4 on a NVIDIA RTX 3070 Ti 8GB.*
+### distil-whisper-large-v3 model on GPU
+
+| Implementation | Precision | Beam size | Time | YT Commons WER |
+| --- | --- | --- | --- | --- |
+| transformers (SDPA) (`batch_size=16`) | fp16 | 5 | 46m12s | 14.801 |
+| faster-whisper (`batch_size=16`) | fp16 | 5 | 25m50s | 13.527 |
+
+*GPU Benchmarks are Executed with CUDA 12.4 on a NVIDIA RTX 3070 Ti 8GB.*
+[^1]: transformers OOM for any batch size > 1
 
 ### Small model on CPU
 
-| Implementation | Precision | Beam size | Time | Max. memory |
+| Implementation | Precision | Beam size | Time | RAM Usage |
 | --- | --- | --- | --- | --- |
 | openai/whisper | fp32 | 5 | 6m58s | 2335MB |
 | whisper.cpp | fp32 | 5 | 2m05s | 1049MB |
@@ -43,32 +53,6 @@ For reference, here's the time and memory usage that are required to transcribe 
 
 *Executed with 8 threads on an Intel Core i7-12700K.*
 
-
-### Distil-whisper
-
-| Implementation | Precision | Beam size | Time | Gigaspeech WER |
-| --- | --- | --- | --- | --- |
-| distil-whisper/distil-large-v2 | fp16 | 4 |- | 10.36 |
-| [faster-distil-large-v2](https://huggingface.co/Systran/faster-distil-whisper-large-v2) | fp16 | 5 | - | 10.28 |
-| distil-whisper/distil-medium.en | fp16 | 4 | - | 11.21 |
-| [faster-distil-medium.en](https://huggingface.co/Systran/faster-distil-whisper-medium.en) | fp16 | 5 | - | 11.21 |
-
-*Executed with CUDA 11.4 on a NVIDIA 3090.*
-
-<details>
-<summary>testing details (click to expand)</summary>
-
-For `distil-whisper/distil-large-v2`, the WER is tested with code sample from [link](https://huggingface.co/distil-whisper/distil-large-v2#evaluation). for `faster-distil-whisper`, the WER is tested with setting:
-```python
-from faster_whisper import WhisperModel
-
-model_size = "distil-large-v2"
-# model_size = "distil-medium.en"
-# Run on GPU with FP16
-model = WhisperModel(model_size, device="cuda", compute_type="float16")
-segments, info = model.transcribe("audio.mp3", beam_size=5, language="en")
-```
-</details>
 
 ## Requirements
 
