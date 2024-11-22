@@ -1,8 +1,9 @@
 import argparse
 import json
+import os
 
 from datasets import load_dataset
-from evaluate import load
+from jiwer import wer
 from tqdm import tqdm
 from transformers.models.whisper.english_normalizer import EnglishTextNormalizer
 
@@ -24,9 +25,8 @@ model = WhisperModel(model_path, device="cuda")
 # load the dataset with streaming mode
 dataset = load_dataset("librispeech_asr", "clean", split="validation", streaming=True)
 
-# define the evaluation metric
-wer_metric = load("wer")
-normalizer = EnglishTextNormalizer(json.load(open("normalizer.json")))
+with open(os.path.join(os.path.dirname(__file__), "normalizer.json"), "r") as f:
+    normalizer = EnglishTextNormalizer(json.load(f))
 
 
 def inference(batch):
@@ -55,7 +55,5 @@ all_transcriptions = [normalizer(transcription) for transcription in all_transcr
 all_references = [normalizer(reference) for reference in all_references]
 
 # compute the WER metric
-wer = 100 * wer_metric.compute(
-    predictions=all_transcriptions, references=all_references
-)
-print("WER: %.3f" % wer)
+word_error_rate = 100 * wer(hypothesis=all_transcriptions, reference=all_references)
+print("WER: %.3f" % word_error_rate)

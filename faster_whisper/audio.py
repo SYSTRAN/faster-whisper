@@ -56,6 +56,10 @@ def decode_audio(
 
     # It appears that some objects related to the resampler are not freed
     # unless the garbage collector is manually run.
+    # https://github.com/SYSTRAN/faster-whisper/issues/390
+    # note that this slows down loading the audio a little bit
+    # if that is a concern, please use ffmpeg directly as in here:
+    # https://github.com/openai/whisper/blob/25639fc/whisper/audio.py#L25-L62
     del resampler
     gc.collect()
 
@@ -104,9 +108,9 @@ def _resample_frames(frames, resampler):
         yield from resampler.resample(frame)
 
 
-def pad_or_trim(array, length: int, *, axis: int = -1):
+def pad_or_trim(array, length: int = 3000, *, axis: int = -1):
     """
-    Pad or trim the audio array to N_SAMPLES, as expected by the encoder.
+    Pad or trim the Mel features array to 3000, as expected by the encoder.
     """
     if array.shape[axis] > length:
         array = array.take(indices=range(length), axis=axis)
