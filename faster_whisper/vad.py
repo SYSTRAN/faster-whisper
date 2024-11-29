@@ -22,8 +22,8 @@ class VadOptions:
       neg_threshold: Silence threshold for determining the end of speech. If a probability is lower
         than neg_threshold, it is always considered silence. Values higher than neg_threshold
         are only considered speech if the previous sample was classified as speech; otherwise,
-        they are treated as silence. This parameter helps refine the detection of speech transitions,
-        ensuring smoother segment boundaries.
+        they are treated as silence. This parameter helps refine the detection of speech
+         transitions, ensuring smoother segment boundaries.
       min_speech_duration_ms: Final speech chunks shorter min_speech_duration_ms are thrown out.
       max_speech_duration_s: Maximum duration of speech chunks in seconds. Chunks longer
         than max_speech_duration_s will be split at the timestamp of the last silence that
