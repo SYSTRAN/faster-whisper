@@ -280,7 +280,7 @@ class SileroVADModel:
     ):
         assert (
             audio.ndim == 2
-        ), "Input should be a 2D tensor with size (batch_size, num_samples)"
+        ), "Input should be a 2D array with size (batch_size, num_samples)"
         assert (
             audio.shape[1] % num_samples == 0
         ), "Input size should be a multiple of num_samples"

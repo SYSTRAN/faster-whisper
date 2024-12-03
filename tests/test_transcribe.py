@@ -1,8 +1,9 @@
+import inspect
 import os
 
+import numpy as np
+
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
-from faster_whisper.tokenizer import Tokenizer
-from faster_whisper.transcribe import get_suppressed_tokens
 
 
 def test_supported_languages():
@@ -87,6 +88,15 @@ def test_batched_transcribe(physcisworks_path):
     assert len(segments) > 7
 
 
+def test_empty_audio():
+    audio = np.asarray([], dtype="float32")
+    model = WhisperModel("tiny")
+    pipeline = BatchedInferencePipeline(model=model)
+    assert list(model.transcribe(audio)[0]) == []
+    assert list(pipeline.transcribe(audio)[0]) == []
+    model.detect_language(audio)
+
+
 def test_prefix_with_timestamps(jfk_path):
     model = WhisperModel("tiny")
     segments, _ = model.transcribe(jfk_path, prefix="And so my fellow Americans")
@@ -147,114 +157,115 @@ def test_stereo_diarization(data_dir):
     assert transcription == "The horizon seems extremely distant."
 
 
-def test_multisegment_lang_id(physcisworks_path):
+def test_multilingual_transcription(data_dir):
     model = WhisperModel("tiny")
-    language_info = model.detect_language_multi_segment(physcisworks_path)
-    assert language_info["language_code"] == "en"
-    assert language_info["language_confidence"] > 0.8
+    pipeline = BatchedInferencePipeline(model)
 
+    audio_path = os.path.join(data_dir, "multilingual.mp3")
+    audio = decode_audio(audio_path)
 
-def test_suppressed_tokens_minus_1():
-    model = WhisperModel("tiny.en")
+    segments, info = model.transcribe(
+        audio,
+        multilingual=True,
+        without_timestamps=True,
+        condition_on_previous_text=False,
+    )
+    segments = list(segments)
 
-    tokenizer = Tokenizer(model.hf_tokenizer, False)
-    tokens = get_suppressed_tokens(tokenizer, [-1])
-    assert tokens == (
-        1,
-        2,
-        7,
-        8,
-        9,
-        10,
-        14,
-        25,
-        26,
-        27,
-        28,
-        29,
-        31,
-        58,
-        59,
-        60,
-        61,
-        62,
-        63,
-        90,
-        91,
-        92,
-        93,
-        357,
-        366,
-        438,
-        532,
-        685,
-        705,
-        796,
-        930,
-        1058,
-        1220,
-        1267,
-        1279,
-        1303,
-        1343,
-        1377,
-        1391,
-        1635,
-        1782,
-        1875,
-        2162,
-        2361,
-        2488,
-        3467,
-        4008,
-        4211,
-        4600,
-        4808,
-        5299,
-        5855,
-        6329,
-        7203,
-        9609,
-        9959,
-        10563,
-        10786,
-        11420,
-        11709,
-        11907,
-        13163,
-        13697,
-        13700,
-        14808,
-        15306,
-        16410,
-        16791,
-        17992,
-        19203,
-        19510,
-        20724,
-        22305,
-        22935,
-        27007,
-        30109,
-        30420,
-        33409,
-        34949,
-        40283,
-        40493,
-        40549,
-        47282,
-        49146,
-        50257,
-        50357,
-        50358,
-        50359,
-        50360,
+    assert (
+        segments[0].text
+        == " Permission is hereby granted, free of charge, to any person obtaining a copy of the"
+        " software and associated documentation files to deal in the software without restriction,"
+        " including without limitation the rights to use, copy, modify, merge, publish, distribute"
+        ", sublicence, and or cell copies of the software, and to permit persons to whom the "
+        "software is furnished to do so, subject to the following conditions. The above copyright"
+        " notice and this permission notice, shall be included in all copies or substantial "
+        "portions of the software."
+    )
+
+    assert (
+        segments[1].text
+        == " Jedem, der dieses Software und die dazu gehöregen Dokumentationsdatein erhält, wird "
+        "hiermit unengeltlich die Genehmigung erteilt, wird der Software und eingeschränkt zu "
+        "verfahren. Dies umfasst insbesondere das Recht, die Software zu verwenden, zu "
+        "vervielfältigen, zu modifizieren, zu Samenzofügen, zu veröffentlichen, zu verteilen, "
+        "unterzulizenzieren und oder kopieren der Software zu verkaufen und diese Rechte "
+        "unterfolgen den Bedingungen anderen zu übertragen."
+    )
+
+    segments, info = pipeline.transcribe(audio, multilingual=True)
+    segments = list(segments)
+
+    assert (
+        segments[0].text
+        == " Permission is hereby granted, free of charge, to any person obtaining a copy of the"
+        " software and associated documentation files to deal in the software without restriction,"
+        " including without limitation the rights to use, copy, modify, merge, publish, distribute"
+        ", sublicence, and or cell copies of the software, and to permit persons to whom the "
+        "software is furnished to do so, subject to the following conditions. The above copyright"
+        " notice and this permission notice, shall be included in all copies or substantial "
+        "portions of the software."
+    )
+    assert (
+        "Dokumentationsdatein erhält, wird hiermit unengeltlich die Genehmigung erteilt,"
+        " wird der Software und eingeschränkt zu verfahren. Dies umfasst insbesondere das Recht,"
+        " die Software zu verwenden, zu vervielfältigen, zu modifizieren"
+        in segments[1].text
     )
 
 
-def test_suppressed_tokens_minus_value():
-    model = WhisperModel("tiny.en")
+def test_hotwords(data_dir):
+    model = WhisperModel("tiny")
+    pipeline = BatchedInferencePipeline(model)
 
-    tokenizer = Tokenizer(model.hf_tokenizer, False)
-    tokens = get_suppressed_tokens(tokenizer, [13])
-    assert tokens == (13, 50257, 50357, 50358, 50359, 50360)
+    audio_path = os.path.join(data_dir, "hotwords.mp3")
+    audio = decode_audio(audio_path)
+
+    segments, info = model.transcribe(audio, hotwords="ComfyUI")
+    segments = list(segments)
+
+    assert "ComfyUI" in segments[0].text
+    assert info.transcription_options.hotwords == "ComfyUI"
+
+    segments, info = pipeline.transcribe(audio, hotwords="ComfyUI")
+    segments = list(segments)
+
+    assert "ComfyUI" in segments[0].text
+    assert info.transcription_options.hotwords == "ComfyUI"
+
+
+def test_transcribe_signature():
+    model_transcribe_args = set(inspect.getargs(WhisperModel.transcribe.__code__).args)
+    pipeline_transcribe_args = set(
+        inspect.getargs(BatchedInferencePipeline.transcribe.__code__).args
+    )
+    pipeline_transcribe_args.remove("batch_size")
+
+    assert model_transcribe_args == pipeline_transcribe_args
+
+
+def test_monotonic_timestamps(physcisworks_path):
+    model = WhisperModel("tiny")
+    pipeline = BatchedInferencePipeline(model=model)
+
+    segments, info = model.transcribe(physcisworks_path, word_timestamps=True)
+    segments = list(segments)
+
+    for i in range(len(segments) - 1):
+        assert segments[i].start <= segments[i].end
+        assert segments[i].end <= segments[i + 1].start
+        for word in segments[i].words:
+            assert word.start <= word.end
+            assert word.end <= segments[i].end
+    assert segments[-1].end <= info.duration
+
+    segments, info = pipeline.transcribe(physcisworks_path, word_timestamps=True)
+    segments = list(segments)
+
+    for i in range(len(segments) - 1):
+        assert segments[i].start <= segments[i].end
+        assert segments[i].end <= segments[i + 1].start
+        for word in segments[i].words:
+            assert word.start <= word.end
+            assert word.end <= segments[i].end
+    assert segments[-1].end <= info.duration
