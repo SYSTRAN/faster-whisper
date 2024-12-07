@@ -35,7 +35,7 @@ class VadOptions:
     """
 
     threshold: float = 0.5
-    neg_threshold: float = threshold - 0.15
+    neg_threshold: float = None
     min_speech_duration_ms: int = 0
     max_speech_duration_s: float = float("inf")
     min_silence_duration_ms: int = 2000
@@ -91,7 +91,8 @@ def get_speech_timestamps(
     triggered = False
     speeches = []
     current_speech = {}
-    neg_threshold = max(neg_threshold, 0.01)
+    if neg_threshold == None:
+        neg_threshold = max(threshold - 0.15, 0.01)
 
     # to save potential segment end (and tolerate some silence)
     temp_end = 0
