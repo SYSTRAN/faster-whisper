@@ -91,7 +91,7 @@ def get_speech_timestamps(
     triggered = False
     speeches = []
     current_speech = {}
-    if neg_threshold == None:
+    if neg_threshold is None:
         neg_threshold = max(threshold - 0.15, 0.01)
 
     # to save potential segment end (and tolerate some silence)
