@@ -260,8 +260,9 @@ class SileroVADModel:
             ) from e
 
         opts = onnxruntime.SessionOptions()
-        opts.inter_op_num_threads = 0
-        opts.intra_op_num_threads = 0
+        opts.inter_op_num_threads = 1
+        opts.intra_op_num_threads = 1
+        opts.enable_cpu_mem_arena = False
         opts.log_severity_level = 4
 
         self.encoder_session = onnxruntime.InferenceSession(
