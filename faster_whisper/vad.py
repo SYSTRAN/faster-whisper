@@ -2,27 +2,28 @@ import bisect
 import functools
 import os
 
-from typing import Dict, List, NamedTuple, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-import torch
 
 from faster_whisper.utils import get_assets_path
 
 
 # The code below is adapted from https://github.com/snakers4/silero-vad.
-class VadOptions(NamedTuple):
+@dataclass
+class VadOptions:
     """VAD options.
 
     Attributes:
-      onset: Speech threshold. Silero VAD outputs speech probabilities for each audio chunk,
+      threshold: Speech threshold. Silero VAD outputs speech probabilities for each audio chunk,
         probabilities ABOVE this value are considered as SPEECH. It is better to tune this
         parameter for each dataset separately, but "lazy" 0.5 is pretty good for most datasets.
-      offset: Silence threshold for determining the end of speech. If a probability is lower than
-        the offset, it is always considered silence. Values higher than offset are only considered
-        speech if the previous sample was classified as speech; otherwise, they are treated as
-        silence. This parameter helps refine the detection of speech transitions, ensuring smoother
-        segment boundaries.
+      neg_threshold: Silence threshold for determining the end of speech. If a probability is lower
+        than neg_threshold, it is always considered silence. Values higher than neg_threshold
+        are only considered speech if the previous sample was classified as speech; otherwise,
+        they are treated as silence. This parameter helps refine the detection of speech
+         transitions, ensuring smoother segment boundaries.
       min_speech_duration_ms: Final speech chunks shorter min_speech_duration_ms are thrown out.
       max_speech_duration_s: Maximum duration of speech chunks in seconds. Chunks longer
         than max_speech_duration_s will be split at the timestamp of the last silence that
@@ -33,8 +34,8 @@ class VadOptions(NamedTuple):
       speech_pad_ms: Final speech chunks are padded by speech_pad_ms each side
     """
 
-    onset: float = 0.5
-    offset: float = onset - 0.15
+    threshold: float = 0.5
+    neg_threshold: float = threshold - 0.15
     min_speech_duration_ms: int = 0
     max_speech_duration_s: float = float("inf")
     min_silence_duration_ms: int = 2000
@@ -42,7 +43,7 @@ class VadOptions(NamedTuple):
 
 
 def get_speech_timestamps(
-    audio: torch.Tensor,
+    audio: np.ndarray,
     vad_options: Optional[VadOptions] = None,
     sampling_rate: int = 16000,
     **kwargs,
@@ -61,7 +62,7 @@ def get_speech_timestamps(
     if vad_options is None:
         vad_options = VadOptions(**kwargs)
 
-    onset = vad_options.onset
+    threshold = vad_options.threshold
     min_speech_duration_ms = vad_options.min_speech_duration_ms
     max_speech_duration_s = vad_options.max_speech_duration_s
     min_silence_duration_ms = vad_options.min_silence_duration_ms
@@ -82,14 +83,14 @@ def get_speech_timestamps(
     model = get_vad_model()
 
     padded_audio = np.pad(
-        audio.numpy(), (0, window_size_samples - audio.shape[0] % window_size_samples)
+        audio, (0, window_size_samples - audio.shape[0] % window_size_samples)
     )
     speech_probs = model(padded_audio.reshape(1, -1)).squeeze(0)
 
     triggered = False
     speeches = []
     current_speech = {}
-    offset = vad_options.offset
+    neg_threshold = vad_options.neg_threshold
 
     # to save potential segment end (and tolerate some silence)
     temp_end = 0
@@ -97,12 +98,12 @@ def get_speech_timestamps(
     prev_end = next_start = 0
 
     for i, speech_prob in enumerate(speech_probs):
-        if (speech_prob >= onset) and temp_end:
+        if (speech_prob >= threshold) and temp_end:
             temp_end = 0
             if next_start < prev_end:
                 next_start = window_size_samples * i
 
-        if (speech_prob >= onset) and not triggered:
+        if (speech_prob >= threshold) and not triggered:
             triggered = True
             current_speech["start"] = window_size_samples * i
             continue
@@ -129,7 +130,7 @@ def get_speech_timestamps(
                 triggered = False
                 continue
 
-        if (speech_prob < offset) and triggered:
+        if (speech_prob < neg_threshold) and triggered:
             if not temp_end:
                 temp_end = window_size_samples * i
             # condition to avoid cutting in very short silence
@@ -181,15 +182,15 @@ def get_speech_timestamps(
 
 
 def collect_chunks(
-    audio: torch.Tensor, chunks: List[dict], sampling_rate: int = 16000
-) -> Tuple[List[torch.Tensor], List[Dict[str, int]]]:
+    audio: np.ndarray, chunks: List[dict], sampling_rate: int = 16000
+) -> Tuple[List[np.ndarray], List[Dict[str, int]]]:
     """Collects audio chunks."""
     if not chunks:
         chunk_metadata = {
             "start_time": 0,
             "end_time": 0,
         }
-        return [torch.tensor([], dtype=torch.float32)], [chunk_metadata]
+        return [np.array([], dtype=np.float32)], [chunk_metadata]
 
     audio_chunks = []
     chunks_metadata = []
@@ -279,7 +280,7 @@ class SileroVADModel:
     ):
         assert (
             audio.ndim == 2
-        ), "Input should be a 2D tensor with size (batch_size, num_samples)"
+        ), "Input should be a 2D array with size (batch_size, num_samples)"
         assert (
             audio.shape[1] % num_samples == 0
         ), "Input size should be a multiple of num_samples"
