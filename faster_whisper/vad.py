@@ -302,13 +302,12 @@ class SileroVADModel:
 
         batched_audio = batched_audio.reshape(-1, num_samples + context_size_samples)
 
-        batch_process_size = 10000
+        encoder_batch_size = 10000
         num_segments = batched_audio.shape[0]
         encoder_outputs = []
-        for start in range(0, num_segments, batch_process_size):
-            end = min(start + batch_process_size, num_segments)
+        for i in range(0, num_segments, encoder_batch_size):
             encoder_output = self.encoder_session.run(
-                None, {"input": batched_audio[start:end]}
+                None, {"input": batched_audio[i : i + encoder_batch_size]}
             )[0]
             encoder_outputs.append(encoder_output)
 
