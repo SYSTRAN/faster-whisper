@@ -114,7 +114,6 @@ class BatchedInferencePipeline:
         self,
         model,
     ):
-        self.logger = get_logger()
         self.model: WhisperModel = model
         self.last_speech_timestamp = 0.0
 
