@@ -388,7 +388,7 @@ class BatchedInferencePipeline:
             audio = decode_audio(audio, sampling_rate=sampling_rate)
         duration = audio.shape[0] / sampling_rate
 
-        self.logger.info(
+        self.model.logger.info(
             "Processing audio with duration %s", format_timestamp(duration)
         )
 
@@ -425,7 +425,7 @@ class BatchedInferencePipeline:
             / sampling_rate
         )
 
-        self.logger.info(
+        self.model.logger.info(
             "VAD filter removed %s of audio",
             format_timestamp(duration - duration_after_vad),
         )
