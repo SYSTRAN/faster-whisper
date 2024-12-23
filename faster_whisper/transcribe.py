@@ -388,6 +388,10 @@ class BatchedInferencePipeline:
             audio = decode_audio(audio, sampling_rate=sampling_rate)
         duration = audio.shape[0] / sampling_rate
 
+        self.model.logger.info(
+            "Processing audio with duration %s", format_timestamp(duration)
+        )
+
         chunk_length = chunk_length or self.model.feature_extractor.chunk_length
         # if no segment split is provided, use vad_model and generate segments
         if not clip_timestamps:
@@ -419,6 +423,11 @@ class BatchedInferencePipeline:
         duration_after_vad = (
             sum((segment["end"] - segment["start"]) for segment in clip_timestamps)
             / sampling_rate
+        )
+
+        self.model.logger.info(
+            "VAD filter removed %s of audio",
+            format_timestamp(duration - duration_after_vad),
         )
 
         audio_chunks, chunks_metadata = collect_chunks(audio, clip_timestamps)
