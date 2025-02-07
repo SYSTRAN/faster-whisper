@@ -86,7 +86,7 @@ The libraries (cuBLAS, cuDNN) are installed in this official NVIDIA CUDA Docker 
 On Linux these libraries can be installed with `pip`. Note that `LD_LIBRARY_PATH` must be set before launching Python.
 
 ```bash
-pip install nvidia-cublas-cu12 nvidia-cudnn-cu12==9.*
+pip install nvidia-cublas-cu12 'nvidia-cudnn-cu12<9.6,>=9'
 
 export LD_LIBRARY_PATH=`python3 -c 'import os; import nvidia.cublas.lib; import nvidia.cudnn.lib; print(os.path.dirname(nvidia.cublas.lib.__file__) + ":" + os.path.dirname(nvidia.cudnn.lib.__file__))'`
 ```
