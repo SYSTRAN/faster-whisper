@@ -10,7 +10,7 @@ from math import ceil
 from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
 from warnings import warn
 
-import ctranslate2
+import ctranslate2 # type: ignore
 import numpy as np
 import tokenizers
 
