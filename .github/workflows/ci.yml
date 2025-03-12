@@ -25,7 +25,7 @@ jobs:
       - name: Install module
         run: |
           pip install wheel
-          pip install -e .[dev]
+          pip install -e .[dev,cpu]
 
       - name: Check code format with Black
         run: |
@@ -55,7 +55,7 @@ jobs:
       - name: Install module
         run: |
           pip install wheel
-          pip install -e .[dev]
+          pip install -e .[dev,cpu]
 
       - name: Run pytest
         run: |
