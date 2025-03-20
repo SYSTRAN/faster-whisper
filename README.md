@@ -102,8 +102,14 @@ Purfview's [whisper-standalone-win](https://github.com/Purfview/whisper-standalo
 The module can be installed from [PyPI](https://pypi.org/project/faster-whisper/):
 
 ```bash
-pip install faster-whisper
+# Install with CPU support (default)
+pip install faster-whisper[cpu]
+
+# Install with GPU support
+pip install faster-whisper[gpu]
 ```
+
+Note: Installing just `pip install faster-whisper` will not include any onnxruntime backend. You must explicitly choose either the CPU or GPU version.
 
 <details>
 <summary>Other installation methods (click to expand)</summary>

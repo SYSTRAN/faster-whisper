@@ -9,7 +9,7 @@ We recommend installing the module in editable mode with the `dev` extra require
 ```bash
 git clone https://github.com/SYSTRAN/faster-whisper.git
 cd faster-whisper/
-pip install -e .[dev]
+pip install -e .[dev,cpu]
 ```
 
 ## Validate the changes before creating a pull request

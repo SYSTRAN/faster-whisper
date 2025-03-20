@@ -25,6 +25,8 @@ def get_requirements(path):
 
 
 install_requires = get_requirements(os.path.join(base_dir, "requirements.txt"))
+cpu_requires = get_requirements(os.path.join(base_dir, "requirements-cpu.txt"))
+gpu_requires = get_requirements(os.path.join(base_dir, "requirements-gpu.txt"))
 conversion_requires = get_requirements(
     os.path.join(base_dir, "requirements.conversion.txt")
 )
@@ -52,9 +54,11 @@ setup(
     ],
     keywords="openai whisper speech ctranslate2 inference quantization transformer",
     python_requires=">=3.9",
-    install_requires=install_requires,
+    install_requires=install_requires,  # Base requirements only
     extras_require={
         "conversion": conversion_requires,
+        "cpu": cpu_requires,
+        "gpu": gpu_requires,
         "dev": [
             "black==23.*",
             "flake8==6.*",
