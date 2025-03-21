@@ -111,7 +111,7 @@ def download_model(
     ) as exception:
         logger = get_logger()
         logger.warning(
-            "An error occured while synchronizing the model %s from the Hugging Face Hub:\n%s",
+            "An error occurred while synchronizing the model %s from the Hugging Face Hub:\n%s",
             repo_id,
             exception,
         )
