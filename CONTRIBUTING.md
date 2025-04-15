@@ -7,7 +7,7 @@ Contributions are welcome! Here are some pointers to help you install the librar
 We recommend installing the module in editable mode with the `dev` extra requirements:
 
 ```bash
-git clone https://github.com/guillaumekln/faster-whisper.git
+git clone https://github.com/SYSTRAN/faster-whisper.git
 cd faster-whisper/
 pip install -e .[dev]
 ```

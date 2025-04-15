@@ -1,0 +1,6 @@
+transformers
+jiwer
+datasets
+memory_profiler
+py3nvml
+pytubefix
