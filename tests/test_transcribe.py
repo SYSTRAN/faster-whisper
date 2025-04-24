@@ -4,8 +4,7 @@ import os
 import numpy as np
 import pytest
 
-from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
-from faster_whisper.pipelines import AsyncBatchedInferencePipeline
+from faster_whisper import BatchedInferencePipeline, AsyncBatchedInferencePipeline, WhisperModel, decode_audio
 
 
 def test_supported_languages():
