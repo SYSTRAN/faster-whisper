@@ -1,7 +1,7 @@
 from faster_whisper.audio import decode_audio
 from faster_whisper.transcribe import (
-    BatchedInferencePipeline,
     AsyncBatchedInferencePipeline,
+    BatchedInferencePipeline,
     WhisperModel,
 )
 from faster_whisper.utils import available_models, download_model, format_timestamp

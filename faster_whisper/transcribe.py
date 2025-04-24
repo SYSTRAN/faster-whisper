@@ -8,14 +8,16 @@ import zlib
 from dataclasses import asdict, dataclass
 from inspect import signature
 from math import ceil
-from typing import BinaryIO, Iterable, List, Optional, Tuple, Union, AsyncGenerator
+from typing import AsyncGenerator, BinaryIO, Iterable, List, Optional, Tuple, Union
 from warnings import warn
 
 import ctranslate2
 import numpy as np
 import tokenizers
 
+from ctranslate2._ext import WhisperGenerationResultAsync
 from tqdm import tqdm
+from tqdm.asyncio import tqdm as atqdm
 
 from faster_whisper.audio import decode_audio, pad_or_trim
 from faster_whisper.feature_extractor import FeatureExtractor
@@ -28,8 +30,6 @@ from faster_whisper.vad import (
     get_speech_timestamps,
     merge_segments,
 )
-from ctranslate2._ext import WhisperGenerationResultAsync
-from tqdm.asyncio import tqdm as atqdm
 
 
 @dataclass
