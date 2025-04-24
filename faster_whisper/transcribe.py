@@ -588,7 +588,6 @@ class BatchedInferencePipeline:
 
 
 class AsyncBatchedInferencePipeline(BatchedInferencePipeline):
-
     async def forward(self, features, tokenizer, chunks_metadata, options):
         encoder_output, outputs = await self.generate_segment_batched(
             features, tokenizer, options
