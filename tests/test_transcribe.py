@@ -2,8 +2,10 @@ import inspect
 import os
 
 import numpy as np
+import pytest
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
+from faster_whisper.pipelines import AsyncBatchedInferencePipeline
 
 
 def test_supported_languages():
@@ -87,6 +89,34 @@ def test_batched_transcribe(physcisworks_path):
         )
     assert len(segments) > 7
 
+@pytest.mark.asyncio
+async def test_async_batched_transcribe(physcisworks_path):
+    model = WhisperModel("tiny")
+    batched_model = AsyncBatchedInferencePipeline(model=model)
+    result, info = await batched_model.transcribe(physcisworks_path, batch_size=16)
+    assert info.language == "en"
+    assert info.language_probability > 0.7
+    segments = []
+    async for segment in result:
+        segments.append(
+            {"start": segment.start, "end": segment.end, "text": segment.text}
+        )
+    # number of near 30 sec segments
+    assert len(segments) == 7
+
+    result, info = await batched_model.transcribe(
+        physcisworks_path,
+        batch_size=16,
+        without_timestamps=False,
+        word_timestamps=True,
+    )
+    segments = []
+    async for segment in result:
+        assert segment.words is not None
+        segments.append(
+            {"start": segment.start, "end": segment.end, "text": segment.text}
+        )
+    assert len(segments) > 7
 
 def test_empty_audio():
     audio = np.asarray([], dtype="float32")
