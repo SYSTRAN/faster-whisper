@@ -31,6 +31,7 @@ from faster_whisper.vad import (
 from ctranslate2._ext import WhisperGenerationResultAsync
 from tqdm.asyncio import tqdm as atqdm
 
+
 @dataclass
 class Word:
     start: float
@@ -113,8 +114,8 @@ class TranscriptionInfo:
 
 class AsyncBatchedInferencePipeline:
     def __init__(
-            self,
-            model,
+        self,
+        model,
     ):
         self.model: WhisperModel = model
         self.last_speech_timestamp = 0.0
@@ -163,12 +164,14 @@ class AsyncBatchedInferencePipeline:
                         ),
                     )
                     for subsegment in subsegments
-                ]
+                ],
             )
 
         # Запускаем обработку всех чанков параллельно
-        tasks = [process_chunk(chunk_metadata, output)
-                 for chunk_metadata, output in zip(chunks_metadata, outputs)]
+        tasks = [
+            process_chunk(chunk_metadata, output)
+            for chunk_metadata, output in zip(chunks_metadata, outputs)
+        ]
         results = await asyncio.gather(*tasks)
 
         for segment_size, output in results:
@@ -191,15 +194,13 @@ class AsyncBatchedInferencePipeline:
     async def add_word_timestamps_async(self, *args, **kwargs):
         # Асинхронная обертка для метода add_word_timestamps
         # Предполагается, что внутренняя реализация может быть интенсивной
-        return await asyncio.to_thread(
-            self.model.add_word_timestamps, *args, **kwargs
-        )
+        return await asyncio.to_thread(self.model.add_word_timestamps, *args, **kwargs)
 
     async def generate_segment_batched(
-            self,
-            features: np.ndarray,
-            tokenizer: Tokenizer,
-            options: TranscriptionOptions,
+        self,
+        features: np.ndarray,
+        tokenizer: Tokenizer,
+        options: TranscriptionOptions,
     ):
         batch_size = features.shape[0]
 
@@ -257,7 +258,7 @@ class AsyncBatchedInferencePipeline:
             sampling_temperature=options.temperatures[0],
             repetition_penalty=options.repetition_penalty,
             no_repeat_ngram_size=options.no_repeat_ngram_size,
-            asynchronous=True
+            asynchronous=True,
         )
 
         async def await_result(future):
@@ -271,7 +272,7 @@ class AsyncBatchedInferencePipeline:
         for result in results:
             # return scores
             seq_len = len(result.sequences_ids[0])
-            cum_logprob = result.scores[0] * (seq_len ** options.length_penalty)
+            cum_logprob = result.scores[0] * (seq_len**options.length_penalty)
 
             output.append(
                 dict(
@@ -284,50 +285,50 @@ class AsyncBatchedInferencePipeline:
         return encoder_output, output
 
     async def transcribe(
-            self,
-            audio: Union[str, BinaryIO, np.ndarray],
-            language: Optional[str] = None,
-            task: str = "transcribe",
-            log_progress: bool = False,
-            beam_size: int = 5,
-            best_of: int = 5,
-            patience: float = 1,
-            length_penalty: float = 1,
-            repetition_penalty: float = 1,
-            no_repeat_ngram_size: int = 0,
-            temperature: Union[float, List[float], Tuple[float, ...]] = [
-                0.0,
-                0.2,
-                0.4,
-                0.6,
-                0.8,
-                1.0,
-            ],
-            compression_ratio_threshold: Optional[float] = 2.4,
-            log_prob_threshold: Optional[float] = -1.0,
-            no_speech_threshold: Optional[float] = 0.6,
-            condition_on_previous_text: bool = True,
-            prompt_reset_on_temperature: float = 0.5,
-            initial_prompt: Optional[Union[str, Iterable[int]]] = None,
-            prefix: Optional[str] = None,
-            suppress_blank: bool = True,
-            suppress_tokens: Optional[List[int]] = [-1],
-            without_timestamps: bool = True,
-            max_initial_timestamp: float = 1.0,
-            word_timestamps: bool = False,
-            prepend_punctuations: str = "\"'“¿([{-",
-            append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
-            multilingual: bool = False,
-            vad_filter: bool = True,
-            vad_parameters: Optional[Union[dict, VadOptions]] = None,
-            max_new_tokens: Optional[int] = None,
-            chunk_length: Optional[int] = None,
-            clip_timestamps: Optional[List[dict]] = None,
-            hallucination_silence_threshold: Optional[float] = None,
-            batch_size: int = 8,
-            hotwords: Optional[str] = None,
-            language_detection_threshold: Optional[float] = 0.5,
-            language_detection_segments: int = 1,
+        self,
+        audio: Union[str, BinaryIO, np.ndarray],
+        language: Optional[str] = None,
+        task: str = "transcribe",
+        log_progress: bool = False,
+        beam_size: int = 5,
+        best_of: int = 5,
+        patience: float = 1,
+        length_penalty: float = 1,
+        repetition_penalty: float = 1,
+        no_repeat_ngram_size: int = 0,
+        temperature: Union[float, List[float], Tuple[float, ...]] = [
+            0.0,
+            0.2,
+            0.4,
+            0.6,
+            0.8,
+            1.0,
+        ],
+        compression_ratio_threshold: Optional[float] = 2.4,
+        log_prob_threshold: Optional[float] = -1.0,
+        no_speech_threshold: Optional[float] = 0.6,
+        condition_on_previous_text: bool = True,
+        prompt_reset_on_temperature: float = 0.5,
+        initial_prompt: Optional[Union[str, Iterable[int]]] = None,
+        prefix: Optional[str] = None,
+        suppress_blank: bool = True,
+        suppress_tokens: Optional[List[int]] = [-1],
+        without_timestamps: bool = True,
+        max_initial_timestamp: float = 1.0,
+        word_timestamps: bool = False,
+        prepend_punctuations: str = "\"'“¿([{-",
+        append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
+        multilingual: bool = False,
+        vad_filter: bool = True,
+        vad_parameters: Optional[Union[dict, VadOptions]] = None,
+        max_new_tokens: Optional[int] = None,
+        chunk_length: Optional[int] = None,
+        clip_timestamps: Optional[List[dict]] = None,
+        hallucination_silence_threshold: Optional[float] = None,
+        batch_size: int = 8,
+        hotwords: Optional[str] = None,
+        language_detection_threshold: Optional[float] = 0.5,
+        language_detection_segments: int = 1,
     ) -> Tuple[AsyncGenerator[Segment, None], TranscriptionInfo]:
         """transcribe audio in chunks in batched fashion and return with language info.
 
@@ -416,7 +417,7 @@ class AsyncBatchedInferencePipeline:
             multilingual = False
 
         if not isinstance(audio, np.ndarray):
-            #When transmitting np.ndarray works faster since no decoding is needed!
+            # When transmitting np.ndarray works faster since no decoding is needed!
             audio = decode_audio(audio, sampling_rate=sampling_rate)
         duration = audio.shape[0] / sampling_rate
 
@@ -458,8 +459,8 @@ class AsyncBatchedInferencePipeline:
                 )
 
         duration_after_vad = (
-                sum((segment["end"] - segment["start"]) for segment in clip_timestamps)
-                / sampling_rate
+            sum((segment["end"] - segment["start"]) for segment in clip_timestamps)
+            / sampling_rate
         )
 
         self.model.logger.info(
@@ -471,7 +472,9 @@ class AsyncBatchedInferencePipeline:
         )
 
         async def extract_features(chunk):
-            feature_result = await asyncio.to_thread(self.model.feature_extractor, chunk)
+            feature_result = await asyncio.to_thread(
+                self.model.feature_extractor, chunk
+            )
             return feature_result[..., :-1]
 
         features = []
@@ -547,7 +550,9 @@ class AsyncBatchedInferencePipeline:
             prefix=prefix,
             suppress_blank=suppress_blank,
             suppress_tokens=(
-                await asyncio.to_thread(get_suppressed_tokens, tokenizer, suppress_tokens)
+                await asyncio.to_thread(
+                    get_suppressed_tokens, tokenizer, suppress_tokens
+                )
                 if suppress_tokens
                 else suppress_tokens
             ),
@@ -587,7 +592,7 @@ class AsyncBatchedInferencePipeline:
         return segments, info
 
     async def _batched_segments_generator(
-            self, features, tokenizer, chunks_metadata, batch_size, options, log_progress
+        self, features, tokenizer, chunks_metadata, batch_size, options, log_progress
     ):
         """
         Asynchronous generator for batch processing of transcription segments.
@@ -612,9 +617,9 @@ class AsyncBatchedInferencePipeline:
             # Process the data in packets of a certain size
             for i in range(0, len(features), batch_size):
                 results = await self.forward(
-                    features[i: i + batch_size],
+                    features[i : i + batch_size],
                     tokenizer,
-                    chunks_metadata[i: i + batch_size],
+                    chunks_metadata[i : i + batch_size],
                     options,
                 )
 
@@ -643,6 +648,7 @@ class AsyncBatchedInferencePipeline:
         finally:
             pbar.close()
             self.last_speech_timestamp = 0.0
+
 
 class BatchedInferencePipeline:
     def __init__(
