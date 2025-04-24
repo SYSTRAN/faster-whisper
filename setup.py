@@ -60,7 +60,7 @@ setup(
             "flake8==6.*",
             "isort==5.*",
             "pytest==7.*",
-            "pytest-asyncio==0.26.*"
+            "pytest-asyncio==0.21.*"
         ],
     },
     packages=find_packages(),
