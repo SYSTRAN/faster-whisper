@@ -51,6 +51,7 @@ def download_model(
     output_dir: Optional[str] = None,
     local_files_only: bool = False,
     cache_dir: Optional[str] = None,
+    revision: Optional[str] = None,
 ):
     """Downloads a CTranslate2 Whisper model from the Hugging Face Hub.
 
@@ -65,6 +66,8 @@ def download_model(
       local_files_only:  If True, avoid downloading the file and return the path to the local
         cached file if it exists.
       cache_dir: Path to the folder where cached files are stored.
+      revision: An optional Git revision id which can be a branch name, a tag, or a
+            commit hash.
 
     Returns:
       The path to the downloaded model.
@@ -94,6 +97,7 @@ def download_model(
         "local_files_only": local_files_only,
         "allow_patterns": allow_patterns,
         "tqdm_class": disabled_tqdm,
+        "revision": revision,
     }
 
     if output_dir is not None:

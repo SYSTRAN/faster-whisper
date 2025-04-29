@@ -596,6 +596,7 @@ class WhisperModel:
         download_root: Optional[str] = None,
         local_files_only: bool = False,
         files: dict = None,
+        revision: Optional[str] = None,
         **model_kwargs,
     ):
         """Initializes the Whisper model.
@@ -627,6 +628,9 @@ class WhisperModel:
           files: Load model files from the memory. This argument is a dictionary mapping file names
             to file contents as file-like or bytes objects. If this is set, model_path acts as an
             identifier for this model.
+          revision:
+            An optional Git revision id which can be a branch name, a tag, or a
+            commit hash.
         """
         self.logger = get_logger()
 
@@ -642,6 +646,7 @@ class WhisperModel:
                 model_size_or_path,
                 local_files_only=local_files_only,
                 cache_dir=download_root,
+                revision=revision,
             )
 
         self.model = ctranslate2.models.Whisper(
