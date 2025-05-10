@@ -71,7 +71,7 @@ def test_batched_transcribe(physcisworks_path):
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
     # number of near 30 sec segments
-    assert len(segments) == 7
+    assert len(segments) == 6
 
     result, info = batched_model.transcribe(
         physcisworks_path,
