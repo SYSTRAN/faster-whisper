@@ -180,13 +180,16 @@ class BatchedInferencePipeline:
     ):
         batch_size = features.shape[0]
 
+        initial_prompt_tokens = []
+        if options.initial_prompt is not None:
+            if isinstance(options.initial_prompt, str):
+                initial_prompt_tokens = tokenizer.encode(options.initial_prompt)
+            else:
+                initial_prompt_tokens = options.initial_prompt
+
         prompt = self.model.get_prompt(
             tokenizer,
-            previous_tokens=(
-                tokenizer.encode(options.initial_prompt)
-                if options.initial_prompt is not None
-                else []
-            ),
+            previous_tokens=initial_prompt_tokens,
             without_timestamps=options.without_timestamps,
             hotwords=options.hotwords,
         )
