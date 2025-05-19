@@ -277,7 +277,7 @@ class BatchedInferencePipeline:
         no_speech_threshold: Optional[float] = 0.6,
         condition_on_previous_text: bool = True,
         prompt_reset_on_temperature: float = 0.5,
-        initial_prompt: Optional[Union[str, Iterable[int]]] = None,
+        initial_prompt: Optional[str] = None,
         prefix: Optional[str] = None,
         suppress_blank: bool = True,
         suppress_tokens: Optional[List[int]] = [-1],
@@ -316,8 +316,8 @@ class BatchedInferencePipeline:
             no_repeat_ngram_size: Prevent repetitions of ngrams with this size (set 0 to disable).
             temperature: Temperature for sampling. If a list or tuple is passed,
                 only the first value is used.
-            initial_prompt: Optional text string or iterable of token ids to provide as a
-                prompt for the each window.
+            initial_prompt: Optional text string to provide as a
+                prompt for each window.
             suppress_blank: Suppress blank outputs at the beginning of the sampling.
             suppress_tokens: List of token IDs to suppress. -1 will suppress a default set
                 of symbols as defined in `tokenizer.non_speech_tokens()`.
