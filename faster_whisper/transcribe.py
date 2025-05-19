@@ -316,8 +316,7 @@ class BatchedInferencePipeline:
             no_repeat_ngram_size: Prevent repetitions of ngrams with this size (set 0 to disable).
             temperature: Temperature for sampling. If a list or tuple is passed,
                 only the first value is used.
-            initial_prompt: Optional text string to provide as a
-                prompt for each window.
+            initial_prompt: Optional text string to provide as a prompt for each window.
             suppress_blank: Suppress blank outputs at the beginning of the sampling.
             suppress_tokens: List of token IDs to suppress. -1 will suppress a default set
                 of symbols as defined in `tokenizer.non_speech_tokens()`.
