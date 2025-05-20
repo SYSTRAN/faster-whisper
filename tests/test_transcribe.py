@@ -275,7 +275,7 @@ def test_transcribe_batch_multible_audios(physcisworks_path):
     model = WhisperModel("tiny")
     batched_model = BatchedInferencePipeline(model=model)
     
-    result, info = batched_model.transcribe_batch(
+    result, info = batched_model.transcribe_batch_multible_audios(
         [physcisworks_path, physcisworks_path, physcisworks_path],
         batch_size=16
     )
@@ -289,7 +289,7 @@ def test_transcribe_batch_multible_audios(physcisworks_path):
     
     assert len(segments) == 3
 
-    result, info = batched_model.transcribe_batch(
+    result, info = batched_model.transcribe_batch_multible_audios(
         [physcisworks_path, physcisworks_path, physcisworks_path],
         batch_size=3,
         without_timestamps=False,

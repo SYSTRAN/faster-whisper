@@ -545,7 +545,7 @@ class BatchedInferencePipeline:
         return segments, info
 
 
-    def transcribe_batch(
+    def transcribe_batch_multible_audios(
         self,
         audios: List[Union[str, BinaryIO, np.ndarray]],
         language: Optional[str] = None,
