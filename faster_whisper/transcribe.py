@@ -600,7 +600,7 @@ class BatchedInferencePipeline:
             )
             multilingual = False
 
-        # Process all audio inputs in case of np.ndarray
+        # Process all audio inputs
         processed_audios = []
         for audio in audios:
             if not isinstance(audio, np.ndarray):

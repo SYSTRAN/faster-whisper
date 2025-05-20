@@ -279,6 +279,7 @@ def test_transcribe_batch_multiple_audios(physcisworks_path):
         [physcisworks_path, physcisworks_path, physcisworks_path],
         batch_size=16
     )
+    
     assert info.language == "en"
     assert info.language_probability > 0.7
     segments = []
