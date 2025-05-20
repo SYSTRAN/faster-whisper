@@ -600,24 +600,22 @@ class BatchedInferencePipeline:
             )
             multilingual = False
 
-        # Process all audio inputs
+        # Process all audio inputs in case of np.ndarray
         processed_audios = []
         for audio in audios:
             if not isinstance(audio, np.ndarray):
                 audio = decode_audio(audio, sampling_rate=sampling_rate)
             processed_audios.append(audio)
-
-        # Extract features for all audio inputs
+         
         features = []
         for audio in processed_audios:
             feature = self.model.feature_extractor(audio)[..., :-1]
             features.append(feature)
 
-        # Stack features for batch processing
         features = np.stack([pad_or_trim(feature) for feature in features]) if features else []
 
         all_language_probs = None
-        # detecting the language if not provided
+        
         if language is None:
             if not self.model.model.is_multilingual:
                 language = "en"
@@ -708,7 +706,6 @@ class BatchedInferencePipeline:
             all_language_probs=all_language_probs,
         )
 
-        # Create dummy chunks_metadata for batch processing
         chunks_metadata = [{"start_time": 0, "end_time": audio.shape[0] / sampling_rate} for audio in processed_audios]
 
         segments = self._batched_segments_generator(
