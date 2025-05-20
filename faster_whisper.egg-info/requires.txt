@@ -1,0 +1,15 @@
+av>=11
+ctranslate2<5,>=4.0
+huggingface_hub>=0.13
+onnxruntime<2,>=1.14
+tokenizers<1,>=0.13
+tqdm
+
+[conversion]
+transformers[torch]>=4.23
+
+[dev]
+black==23.*
+flake8==6.*
+isort==5.*
+pytest==7.*

@@ -240,7 +240,7 @@ class BatchedInferencePipeline:
         for result in results:
             # return scores
             seq_len = len(result.sequences_ids[0])
-            cum_logprob = result.scores[0] * (seq_len ** options.length_penalty)
+            cum_logprob = result.scores[0] * (seq_len**options.length_penalty)
 
             output.append(
                 dict(
@@ -1603,7 +1603,7 @@ class WhisperModel:
 
             # Recover the average log prob from the returned score.
             seq_len = len(tokens)
-            cum_logprob = result.scores[0] * (seq_len ** options.length_penalty)
+            cum_logprob = result.scores[0] * (seq_len**options.length_penalty)
             avg_logprob = cum_logprob / (seq_len + 1)
 
             text = tokenizer.decode(tokens).strip()
