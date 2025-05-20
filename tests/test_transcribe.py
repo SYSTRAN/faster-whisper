@@ -275,8 +275,7 @@ def test_transcribe_batch_multiple_audios(physcisworks_path):
     model = WhisperModel("tiny")
     batched_model = BatchedInferencePipeline(model=model)
     result, info = batched_model.transcribe_batch_multiple_audios(
-        [physcisworks_path, physcisworks_path, physcisworks_path],
-        batch_size=16
+        [physcisworks_path, physcisworks_path, physcisworks_path], batch_size=16
     )
 
     assert info.language == "en"

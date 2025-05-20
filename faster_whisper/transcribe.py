@@ -240,7 +240,7 @@ class BatchedInferencePipeline:
         for result in results:
             # return scores
             seq_len = len(result.sequences_ids[0])
-            cum_logprob = result.scores[0] * (seq_len**options.length_penalty)
+            cum_logprob = result.scores[0] * (seq_len ** options.length_penalty)
 
             output.append(
                 dict(
@@ -576,7 +576,7 @@ class BatchedInferencePipeline:
         without_timestamps: bool = True,
         max_initial_timestamp: float = 1.0,
         word_timestamps: bool = False,
-        prepend_punctuations: str = "\"'""¿([{-",
+        prepend_punctuations: str = "\"'" "¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         multilingual: bool = False,
         vad_filter: bool = False,
@@ -611,7 +611,9 @@ class BatchedInferencePipeline:
             feature = self.model.feature_extractor(audio)[..., :-1]
             features.append(feature)
 
-        features = np.stack([pad_or_trim(feature) for feature in features]) if features else []
+        features = (
+            np.stack([pad_or_trim(feature) for feature in features]) if features else []
+        )
 
         all_language_probs = None
 
@@ -706,7 +708,8 @@ class BatchedInferencePipeline:
         )
 
         chunks_metadata = [
-            {"start_time": 0, "end_time": a.shape[0] / sampling_rate} for a in processed_audios
+            {"start_time": 0, "end_time": a.shape[0] / sampling_rate}
+            for a in processed_audios
         ]
 
         segments = self._batched_segments_generator(
@@ -1601,7 +1604,7 @@ class WhisperModel:
 
             # Recover the average log prob from the returned score.
             seq_len = len(tokens)
-            cum_logprob = result.scores[0] * (seq_len**options.length_penalty)
+            cum_logprob = result.scores[0] * (seq_len ** options.length_penalty)
             avg_logprob = cum_logprob / (seq_len + 1)
 
             text = tokenizer.decode(tokens).strip()
