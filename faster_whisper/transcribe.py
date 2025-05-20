@@ -544,7 +544,6 @@ class BatchedInferencePipeline:
 
         return segments, info
 
-
     def transcribe_batch_multiple_audios(
         self,
         audios: List[Union[str, BinaryIO, np.ndarray]],
@@ -606,7 +605,7 @@ class BatchedInferencePipeline:
             if not isinstance(audio, np.ndarray):
                 audio = decode_audio(audio, sampling_rate=sampling_rate)
             processed_audios.append(audio)
-         
+
         features = []
         for audio in processed_audios:
             feature = self.model.feature_extractor(audio)[..., :-1]
@@ -615,7 +614,7 @@ class BatchedInferencePipeline:
         features = np.stack([pad_or_trim(feature) for feature in features]) if features else []
 
         all_language_probs = None
-        
+
         if language is None:
             if not self.model.model.is_multilingual:
                 language = "en"
@@ -706,7 +705,9 @@ class BatchedInferencePipeline:
             all_language_probs=all_language_probs,
         )
 
-        chunks_metadata = [{"start_time": 0, "end_time": audio.shape[0] / sampling_rate} for audio in processed_audios]
+        chunks_metadata = [
+            {"start_time": 0, "end_time": a.shape[0] / sampling_rate} for a in processed_audios
+        ]
 
         segments = self._batched_segments_generator(
             features,
@@ -718,7 +719,6 @@ class BatchedInferencePipeline:
         )
 
         return segments, info
-    
 
     def _batched_segments_generator(
         self, features, tokenizer, chunks_metadata, batch_size, options, log_progress

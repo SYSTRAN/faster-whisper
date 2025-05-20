@@ -274,12 +274,11 @@ def test_monotonic_timestamps(physcisworks_path):
 def test_transcribe_batch_multiple_audios(physcisworks_path):
     model = WhisperModel("tiny")
     batched_model = BatchedInferencePipeline(model=model)
-    
     result, info = batched_model.transcribe_batch_multiple_audios(
         [physcisworks_path, physcisworks_path, physcisworks_path],
         batch_size=16
     )
-    
+
     assert info.language == "en"
     assert info.language_probability > 0.7
     segments = []
@@ -287,7 +286,7 @@ def test_transcribe_batch_multiple_audios(physcisworks_path):
         segments.append(
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
-    
+
     assert len(segments) == 3
 
     result, info = batched_model.transcribe_batch_multiple_audios(
