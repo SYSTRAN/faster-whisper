@@ -189,6 +189,7 @@ class BatchedInferencePipeline:
             ),
             without_timestamps=options.without_timestamps,
             hotwords=options.hotwords,
+            prefix=options.prefix,
         )
 
         if options.max_new_tokens is not None:
