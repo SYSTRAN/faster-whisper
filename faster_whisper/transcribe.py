@@ -589,6 +589,7 @@ class BatchedInferencePipeline:
         hotwords: Optional[str] = None,
         language_detection_threshold: Optional[float] = 0.5,
         language_detection_segments: int = 1,
+        text_only: bool = False,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         sampling_rate = self.model.feature_extractor.sampling_rate
 
@@ -718,6 +719,7 @@ class BatchedInferencePipeline:
             batch_size,
             options,
             log_progress,
+            text_only,
         )
 
         return segments, info
