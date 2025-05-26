@@ -244,31 +244,31 @@ def test_transcribe_signature():
     assert model_transcribe_args == pipeline_transcribe_args
 
 
-# def test_monotonic_timestamps(physcisworks_path):
-#     model = WhisperModel("tiny")
-#     pipeline = BatchedInferencePipeline(model=model)
+def test_monotonic_timestamps(physcisworks_path):
+    model = WhisperModel("tiny")
+    pipeline = BatchedInferencePipeline(model=model)
 
-#     segments, info = model.transcribe(physcisworks_path, word_timestamps=True)
-#     segments = list(segments)
+    segments, info = model.transcribe(physcisworks_path, word_timestamps=True)
+    segments = list(segments)
 
-#     for i in range(len(segments) - 1):
-#         assert segments[i].start <= segments[i].end
-#         assert segments[i].end <= segments[i + 1].start
-#         for word in segments[i].words:
-#             assert word.start <= word.end
-#             assert word.end <= segments[i].end
-#     assert segments[-1].end <= info.duration
+    for i in range(len(segments) - 1):
+        assert segments[i].start <= segments[i].end
+        assert segments[i].end <= segments[i + 1].start
+        for word in segments[i].words:
+            assert word.start <= word.end
+            assert word.end <= segments[i].end
+    assert segments[-1].end <= info.duration
 
-#     segments, info = pipeline.transcribe(physcisworks_path, word_timestamps=True)
-#     segments = list(segments)
+    segments, info = pipeline.transcribe(physcisworks_path, word_timestamps=True)
+    segments = list(segments)
 
-#     for i in range(len(segments) - 1):
-#         assert segments[i].start <= segments[i].end
-#         assert segments[i].end <= segments[i + 1].start
-#         for word in segments[i].words:
-#             assert word.start <= word.end
-#             assert word.end <= segments[i].end
-#     assert segments[-1].end <= info.duration
+    for i in range(len(segments) - 1):
+        assert segments[i].start <= segments[i].end
+        assert segments[i].end <= segments[i + 1].start
+        for word in segments[i].words:
+            assert word.start <= word.end
+            assert word.end <= segments[i].end
+    assert segments[-1].end <= info.duration
 
 
 def test_transcribe_batch_multiple_audios(physcisworks_path):

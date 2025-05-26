@@ -749,7 +749,6 @@ class BatchedInferencePipeline:
             for result in results:
                 for segment in result:
                     seg_idx += 1
-
                     if text_only:
                         # return text only
                         yield segment["text"]
