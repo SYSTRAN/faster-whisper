@@ -735,7 +735,7 @@ class BatchedInferencePipeline:
         text_only=False,
     ):
         """
-        Optimized version that can return text-only results
+        Optimized version that can return text only results
         """
         pbar = tqdm(total=len(features), disable=not log_progress, position=0)
         seg_idx = 0
