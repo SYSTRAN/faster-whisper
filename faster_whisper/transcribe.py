@@ -722,7 +722,7 @@ class BatchedInferencePipeline:
 
         return segments, info
 
-    def _optimized_batched_segments_generator(
+    def _batched_segments_generator(
         self,
         features,
         tokenizer,
