@@ -110,7 +110,7 @@ def download_model(
 
     if cache_dir is not None:
         kwargs["cache_dir"] = cache_dir
-        
+
     if use_auth_token is not None:
         kwargs["token"] = use_auth_token
 
