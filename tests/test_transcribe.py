@@ -36,6 +36,7 @@ def test_transcribe(jfk_path):
         " And so my fellow Americans, ask not what your country can do for you, "
         "ask what you can do for your country."
     )
+    assert segment.language == "en"
 
     assert segment.text == "".join(word.word for word in segment.words)
     assert segment.start == segment.words[0].start
@@ -49,7 +50,12 @@ def test_transcribe(jfk_path):
     segments = []
     for segment in result:
         segments.append(
-            {"start": segment.start, "end": segment.end, "text": segment.text}
+            {
+                "start": segment.start,
+                "end": segment.end,
+                "text": segment.text,
+                "language": segment.language,
+            }
         )
 
     assert len(segments) == 1
@@ -57,6 +63,7 @@ def test_transcribe(jfk_path):
         " And so my fellow Americans ask not what your country can do for you, "
         "ask what you can do for your country."
     )
+    assert segment.language == "en"
 
 
 def test_batched_transcribe(physcisworks_path):
@@ -68,7 +75,12 @@ def test_batched_transcribe(physcisworks_path):
     segments = []
     for segment in result:
         segments.append(
-            {"start": segment.start, "end": segment.end, "text": segment.text}
+            {
+                "start": segment.start,
+                "end": segment.end,
+                "text": segment.text,
+                "language": segment.language,
+            }
         )
     # number of near 30 sec segments
     assert len(segments) == 7
@@ -182,6 +194,7 @@ def test_multilingual_transcription(data_dir):
         " notice and this permission notice, shall be included in all copies or substantial "
         "portions of the software."
     )
+    assert segments[0].language == "en"
 
     assert (
         segments[1].text
@@ -192,6 +205,7 @@ def test_multilingual_transcription(data_dir):
         "unterzulizenzieren und oder kopieren der Software zu verkaufen und diese Rechte "
         "unterfolgen den Bedingungen anderen zu übertragen."
     )
+    assert segments[1].language == "de"
 
     segments, info = pipeline.transcribe(audio, multilingual=True)
     segments = list(segments)
@@ -206,12 +220,14 @@ def test_multilingual_transcription(data_dir):
         " notice and this permission notice, shall be included in all copies or substantial "
         "portions of the software."
     )
+    assert segments[0].language == "en"
     assert (
         "Dokumentationsdatein erhält, wird hiermit unengeltlich die Genehmigung erteilt,"
         " wird der Software und eingeschränkt zu verfahren. Dies umfasst insbesondere das Recht,"
         " die Software zu verwenden, zu vervielfältigen, zu modifizieren"
         in segments[1].text
     )
+    assert segments[1].language == "de"
 
 
 def test_hotwords(data_dir):
