@@ -597,6 +597,7 @@ class WhisperModel:
         local_files_only: bool = False,
         files: dict = None,
         revision: Optional[str] = None,
+        use_auth_token: Optional[Union[str, bool]] = None,
         **model_kwargs,
     ):
         """Initializes the Whisper model.
@@ -631,6 +632,8 @@ class WhisperModel:
           revision:
             An optional Git revision id which can be a branch name, a tag, or a
             commit hash.
+          use_auth_token: HuggingFace authentication token or True to use the
+            token stored by the HuggingFace config folder.
         """
         self.logger = get_logger()
 
@@ -647,6 +650,7 @@ class WhisperModel:
                 local_files_only=local_files_only,
                 cache_dir=download_root,
                 revision=revision,
+                use_auth_token=use_auth_token,
             )
 
         self.model = ctranslate2.models.Whisper(
