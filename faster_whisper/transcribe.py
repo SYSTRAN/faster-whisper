@@ -830,6 +830,7 @@ class WhisperModel:
             - a generator over transcribed segments
             - an instance of TranscriptionInfo
         """
+
         sampling_rate = self.feature_extractor.sampling_rate
 
         if multilingual and not self.model.is_multilingual:
@@ -987,6 +988,34 @@ class WhisperModel:
         )
 
         return segments, info
+
+    def _detect_hotword_hallucination(  
+        self,   
+        text: str,   
+        hotwords: Optional[str],   
+        threshold: float = 0.3
+    ) -> bool:  
+        """  
+        Detect if the transcribed text is predominantly hotwords (hallucination).  
+        """  
+        if not hotwords or not text.strip():  
+            return False  
+        
+        hotword_list = [hw.strip().lower() for hw in hotwords.split(',')]  
+        text_words = text.lower().split()  
+        
+        if len(text_words) == 0:  
+            return False  
+        
+        hotword_count = 0  
+        for word in text_words:  
+            for hotword in hotword_list:  
+                if hotword in word or word in hotword:  
+                    hotword_count += 1  
+                    break  
+        
+        hotword_ratio = hotword_count / len(text_words)  
+        return hotword_ratio >= threshold
 
     def _split_segments_by_timestamps(
         self,
@@ -1171,13 +1200,45 @@ class WhisperModel:
                 prefix=options.prefix if seek == 0 else None,
                 hotwords=options.hotwords,
             )
-
+        
             (
                 result,
                 avg_logprob,
                 temperature,
                 compression_ratio,
             ) = self.generate_with_fallback(encoder_output, prompt, tokenizer, options)
+ 
+            tokens = result.sequences_ids[0]  
+            text = tokenizer.decode(tokens).strip()  
+            
+            # Check if this chunk is hotword hallucinated  
+            is_hallucinated = (options.hotwords and   
+                            self._detect_hotword_hallucination(text, options.hotwords))  
+            
+            if is_hallucinated:  
+                self.logger.debug(  
+                    "Hotword hallucination detected, regenerating without hotwords: '%s'",  
+                    text[:50] + "..." if len(text) > 50 else text  
+                )  
+                
+                # Regenerate with hotwords disabled using empty prefix approach  
+                clean_prompt = self.get_prompt(  
+                    tokenizer,  
+                    previous_tokens,  # Use the actual previous_tokens definition  
+                    without_timestamps=options.without_timestamps,  
+                    prefix="",  # Empty prefix disables hotwords  
+                    hotwords=None  # Disable hotwords  
+                )  
+
+                # Regenerate the chunk  
+                (  
+                    result,  
+                    avg_logprob,  
+                    temperature,  
+                    compression_ratio,  
+                ) = self.generate_with_fallback(encoder_output, clean_prompt, tokenizer, options)  
+            
+
 
             if options.no_speech_threshold is not None:
                 # no voice activity check
@@ -1376,7 +1437,7 @@ class WhisperModel:
         decode_result = None
         all_results = []
         below_cr_threshold_results = []
-
+ 
         max_initial_timestamp_index = int(
             round(options.max_initial_timestamp / self.time_precision)
         )
@@ -1397,6 +1458,7 @@ class WhisperModel:
             )
 
         for temperature in options.temperatures:
+
             if temperature > 0:
                 kwargs = {
                     "beam_size": 1,
