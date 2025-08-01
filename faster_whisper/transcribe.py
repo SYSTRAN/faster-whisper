@@ -3,11 +3,12 @@ import json
 import logging
 import os
 import zlib
+import re
 
 from dataclasses import asdict, dataclass
 from inspect import signature
 from math import ceil
-from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
+from typing import BinaryIO, Iterable, List, Optional, Tuple, Union, Set
 from warnings import warn
 
 import ctranslate2
@@ -830,7 +831,11 @@ class WhisperModel:
             - a generator over transcribed segments
             - an instance of TranscriptionInfo
         """
+        
+        hotwords_s =  ' '.join(word.strip().lower() for word in re.split(r'[^a-zA-Z0-9]', hotwords) if word.strip())
 
+        hot_set = set(hotwords_s)
+        
         sampling_rate = self.feature_extractor.sampling_rate
 
         if multilingual and not self.model.is_multilingual:
@@ -989,32 +994,32 @@ class WhisperModel:
 
         return segments, info
 
+
     def _detect_hotword_hallucination(  
         self,   
         text: str,   
-        hotwords: Optional[str],   
-        threshold: float = 0.3
+        hot_set: Optional[Set[str]],  
+        threshold: float = 0.7
     ) -> bool:  
         """  
         Detect if the transcribed text is predominantly hotwords (hallucination).  
         """  
-        if not hotwords or not text.strip():  
-            return False  
+        if not hot_set or not text.strip():  
+            return False     
+
+        text_s =  ' '.join(word.strip().lower() for word in re.split(r'[^a-zA-Z0-9]', text) if word.strip())
+
+        if len(text_s) == 0:  
+            return False 
+
+        match_count =0
         
-        hotword_list = [hw.strip().lower() for hw in hotwords.split(',')]  
-        text_words = text.lower().split()  
-        
-        if len(text_words) == 0:  
-            return False  
-        
-        hotword_count = 0  
-        for word in text_words:  
-            for hotword in hotword_list:  
-                if hotword in word or word in hotword:  
-                    hotword_count += 1  
-                    break  
-        
-        hotword_ratio = hotword_count / len(text_words)  
+        for word in text_s:
+            if word in hot_set:
+                match_count += 1
+
+        hotword_ratio = match_count / len(text_s)
+
         return hotword_ratio >= threshold
 
     def _split_segments_by_timestamps(
@@ -1175,6 +1180,7 @@ class WhisperModel:
             segment_duration = segment_size * self.feature_extractor.time_per_frame
             segment = pad_or_trim(segment)
 
+
             if self.logger.isEnabledFor(logging.DEBUG):
                 self.logger.debug(
                     "Processing segment at %s", format_timestamp(time_offset)
@@ -1229,7 +1235,7 @@ class WhisperModel:
                     prefix="",  # Empty prefix disables hotwords  
                     hotwords=None  # Disable hotwords  
                 )  
-
+                
                 # Regenerate the chunk  
                 (  
                     result,  
@@ -1250,6 +1256,19 @@ class WhisperModel:
                 ):
                     # don't skip if the logprob is high enough, despite the no_speech_prob
                     should_skip = False
+
+                # if (options.hotwords and   
+                #     result.no_speech_prob > 0.4 and  # moderate noise probability  
+                #     self._detect_hotword_hallucination(  
+                #         tokenizer.decode(tokens).strip(),   
+                #         options.hotwords,   
+                #         threshold=0.5  # lower threshold for noise segments  
+                #     )):  
+                    # should_skip = True  
+                    # self.logger.debug(  
+                    #     "Hotword hallucination detected in noisy segment (%f no_speech_prob)",  
+                    #     result.no_speech_prob  
+                    # ) 
 
                 if should_skip:
                     self.logger.debug(
@@ -1438,6 +1457,7 @@ class WhisperModel:
         all_results = []
         below_cr_threshold_results = []
  
+        need_hotwords = True
         max_initial_timestamp_index = int(
             round(options.max_initial_timestamp / self.time_precision)
         )
@@ -1458,6 +1478,23 @@ class WhisperModel:
             )
 
         for temperature in options.temperatures:
+
+        #     current_prompt  = prompt
+
+        #     need_hotwords = not self._detect_hotword_hallucination( options.initial_prompt ,hotwords=options.hotwords)
+
+        #     if not need_hotwords:  
+
+        #         current_prompt = self.get_prompt(  
+        #             tokenizer,  
+        #             previous_tokens,  
+        #             without_timestamps=options.without_timestamps,  
+        #             prefix=options.prefix,  
+        #             hotwords=None  # Disable hotwords  
+        #         )  
+        #         self.logger.debug(  
+        #             "Regenerating with hotwords disabled (need_hotwords=False)"  
+        #         )  
 
             if temperature > 0:
                 kwargs = {
