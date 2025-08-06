@@ -1832,7 +1832,7 @@ def restore_speech_timestamps(
 
         else:
             segment.start = ts_map.get_original_time(segment.start)
-            segment.end = ts_map.get_original_time(segment.end)
+            segment.end = ts_map.get_original_time(segment.end, is_end=True)
 
         yield segment
 

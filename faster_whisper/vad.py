@@ -229,15 +229,19 @@ class SpeechTimestampsMap:
         self,
         time: float,
         chunk_index: Optional[int] = None,
+        is_end: bool = False,
     ) -> float:
         if chunk_index is None:
-            chunk_index = self.get_chunk_index(time)
+            chunk_index = self.get_chunk_index(time, is_end)
 
         total_silence_before = self.total_silence_before[chunk_index]
         return round(total_silence_before + time, self.time_precision)
 
-    def get_chunk_index(self, time: float) -> int:
+    def get_chunk_index(self, time: float, is_end: bool = False) -> int:
         sample = int(time * self.sampling_rate)
+        if sample in self.chunk_end_sample and is_end:
+            return self.chunk_end_sample.index(sample)
+
         return min(
             bisect.bisect(self.chunk_end_sample, sample),
             len(self.chunk_end_sample) - 1,
