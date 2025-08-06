@@ -184,25 +184,62 @@ def get_speech_timestamps(
 
 
 def collect_chunks(
-    audio: np.ndarray, chunks: List[dict], sampling_rate: int = 16000
-) -> Tuple[List[np.ndarray], List[Dict[str, int]]]:
-    """Collects audio chunks."""
+    audio: np.ndarray,
+    chunks: List[dict],
+    sampling_rate: int = 16000,
+    max_duration: float = float("inf"),
+) -> Tuple[List[np.ndarray], List[Dict[str, float]]]:
+    """This function merges the chunks of audio into chunks of max_duration (s) length."""
     if not chunks:
         chunk_metadata = {
-            "start_time": 0,
-            "end_time": 0,
+            "offset": 0,
+            "duration": 0,
+            "segments": [],
         }
         return [np.array([], dtype=np.float32)], [chunk_metadata]
 
     audio_chunks = []
     chunks_metadata = []
+
+    current_segments = []
+    current_duration = 0
+    total_duration = 0
+    current_audio = np.array([], dtype=np.float32)
+
     for chunk in chunks:
-        chunk_metadata = {
-            "start_time": chunk["start"] / sampling_rate,
-            "end_time": chunk["end"] / sampling_rate,
-        }
-        audio_chunks.append(audio[chunk["start"] : chunk["end"]])
-        chunks_metadata.append(chunk_metadata)
+        if (
+            current_duration + chunk["end"] - chunk["start"]
+            > max_duration * sampling_rate
+        ):
+            audio_chunks.append(current_audio)
+            chunk_metadata = {
+                "offset": total_duration / sampling_rate,
+                "duration": current_duration / sampling_rate,
+                "segments": current_segments,
+            }
+            total_duration += current_duration
+            chunks_metadata.append(chunk_metadata)
+
+            current_segments = []
+
+            current_audio = audio[chunk["start"] : chunk["end"]]
+            current_duration = chunk["end"] - chunk["start"]
+        else:
+            current_segments.append(chunk)
+            current_audio = np.concatenate(
+                (current_audio, audio[chunk["start"] : chunk["end"]])
+            )
+
+            current_duration += chunk["end"] - chunk["start"]
+
+    audio_chunks.append(current_audio)
+
+    chunk_metadata = {
+        "offset": total_duration / sampling_rate,
+        "duration": current_duration / sampling_rate,
+        "segments": current_segments,
+    }
+    chunks_metadata.append(chunk_metadata)
     return audio_chunks, chunks_metadata
 
 
@@ -329,48 +366,3 @@ class SileroVADModel:
 
         out = np.stack(decoder_outputs, axis=1).squeeze(-1)
         return out
-
-
-def merge_segments(segments_list, vad_options: VadOptions, sampling_rate: int = 16000):
-    if not segments_list:
-        return []
-
-    curr_end = 0
-    seg_idxs = []
-    merged_segments = []
-    edge_padding = vad_options.speech_pad_ms * sampling_rate // 1000
-    chunk_length = vad_options.max_speech_duration_s * sampling_rate
-
-    curr_start = segments_list[0]["start"]
-
-    for idx, seg in enumerate(segments_list):
-        # if any segment start timing is less than previous segment end timing,
-        # reset the edge padding. Similarly for end timing.
-        if idx > 0:
-            if seg["start"] < segments_list[idx - 1]["end"]:
-                seg["start"] += edge_padding
-        if idx < len(segments_list) - 1:
-            if seg["end"] > segments_list[idx + 1]["start"]:
-                seg["end"] -= edge_padding
-
-        if seg["end"] - curr_start > chunk_length and curr_end - curr_start > 0:
-            merged_segments.append(
-                {
-                    "start": curr_start,
-                    "end": curr_end,
-                    "segments": seg_idxs,
-                }
-            )
-            curr_start = seg["start"]
-            seg_idxs = []
-        curr_end = seg["end"]
-        seg_idxs.append((seg["start"], seg["end"]))
-    # add final
-    merged_segments.append(
-        {
-            "start": curr_start,
-            "end": curr_end,
-            "segments": seg_idxs,
-        }
-    )
-    return merged_segments
