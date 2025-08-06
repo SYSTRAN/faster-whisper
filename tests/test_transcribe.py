@@ -2,6 +2,7 @@ import inspect
 import os
 
 import numpy as np
+import pytest
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 
@@ -269,3 +270,9 @@ def test_monotonic_timestamps(physcisworks_path):
             assert word.start <= word.end
             assert word.end <= segments[i].end
     assert segments[-1].end <= info.duration
+
+
+def test_language_detection_threshold_none_raises_error(jfk_path):
+    model = WhisperModel("tiny")
+    with pytest.raises(TypeError):
+        model.transcribe(jfk_path, language_detection_threshold=None)  # type: ignore
