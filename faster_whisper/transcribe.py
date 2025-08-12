@@ -566,6 +566,11 @@ class BatchedInferencePipeline:
 
             for result in results:
                 for segment in result:
+                    # Filter out segments that contain malformed special tokens like <|nocaptions|>
+                    text = segment["text"]
+                    if "<|nocaptions|>" in text or text.strip() == "<|nocaptions|>":
+                        continue
+                        
                     seg_idx += 1
                     yield Segment(
                         seek=segment["seek"],
@@ -1876,6 +1881,13 @@ def get_suppressed_tokens(
             tokenizer.sot_lm,
         ]
     )
+
+    # Add nocaptions component tokens to prevent malformed <|nocaptions|> generation
+    # These tokens can form <|nocaptions|> when combined: [27, 91, 1771, 496, 9799, 91, 29]
+    # = ['<', '|', 'no', 'ca', 'ptions', '|', '>']
+    # The bracket tokens [27, 91, 29] are already in non_speech_tokens,
+    # but the content tokens [1771, 496, 9799] need to be explicitly suppressed
+    suppress_tokens.extend([1771, 496, 9799])  # 'no', 'ca', 'ptions'
 
     return tuple(sorted(set(suppress_tokens)))
 
