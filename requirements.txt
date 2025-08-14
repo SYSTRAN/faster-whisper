@@ -1,6 +1,28 @@
-ctranslate2>=4.0,<5
-huggingface_hub>=0.13
-tokenizers>=0.13,<1
-onnxruntime>=1.14,<2 
-av>=11
-tqdm
+# Core transcription dependencies
+ctranslate2==4.4.0
+faster-whisper @ https://github.com/SYSTRAN/faster-whisper/archive/refs/heads/master.tar.gz
+ffmpeg-python==0.2.0
+numpy==1.26.4
+transformers==4.44.2
+tokenizers==0.19.1
+onnxruntime==1.19.2
+tqdm==4.66.5
+
+# Gradio frontend (stable version)
+gradio==3.44.4
+
+# Word document export
+python-docx==1.1.0
+
+# Optional: speaker diarization support
+# pyannote.audio==3.3.2
+# whisper-ctranslate2==0.4.5
+
+# Optional: audio augmentation and metrics
+# torch-audiomentations==0.11.1
+# torch-pitch-shift==1.2.4
+# torchmetrics==1.4.2
+
+# Optional: Hugging Face integration
+# huggingface-hub==0.25.0
+# gdown==5.2.0
