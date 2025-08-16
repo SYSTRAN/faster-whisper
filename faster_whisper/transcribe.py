@@ -417,15 +417,27 @@ class BatchedInferencePipeline:
                     "No clip timestamps found. "
                     "Set 'vad_filter' to True or provide 'clip_timestamps'."
                 )
+
+            audio_chunks, chunks_metadata = collect_chunks(
+                audio, clip_timestamps, max_duration=chunk_length
+            )
+
         else:
             clip_timestamps = [
                 {k: int(v * sampling_rate) for k, v in segment.items()}
                 for segment in clip_timestamps
             ]
 
-        audio_chunks, chunks_metadata = collect_chunks(
-            audio, clip_timestamps, max_duration=chunk_length
-        )
+            audio_chunks, chunks_metadata = [], []
+            for clip in clip_timestamps:
+                audio_chunks.append(audio[clip["start"] : clip["end"]])
+                chunks_metadata.append(
+                    {
+                        "offset": clip["start"] / sampling_rate,
+                        "duration": (clip["end"] - clip["start"]) / sampling_rate,
+                        "segments": [clip],
+                    }
+                )
 
         duration_after_vad = (
             sum((segment["end"] - segment["start"]) for segment in clip_timestamps)
