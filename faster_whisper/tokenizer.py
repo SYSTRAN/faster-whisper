@@ -67,6 +67,10 @@ class Tokenizer:
     def no_timestamps(self) -> int:
         return self.tokenizer.token_to_id("<|notimestamps|>")
 
+    @cached_property
+    def no_speech(self) -> int:
+        return self.tokenizer.token_to_id("<|nocaptions|>")
+
     @property
     def timestamp_begin(self) -> int:
         return self.no_timestamps + 1
@@ -138,6 +142,9 @@ class Tokenizer:
             ]:
                 if len(tokens) == 1 or symbol in miscellaneous:
                     result.add(tokens[0])
+
+        # Add the no_speech token to prevent malformed <|nocaptions|> generation
+        result.add(self.no_speech)
 
         return tuple(sorted(result))
 
