@@ -269,3 +269,24 @@ def test_monotonic_timestamps(physcisworks_path):
             assert word.start <= word.end
             assert word.end <= segments[i].end
     assert segments[-1].end <= info.duration
+
+
+def test_cliptimestamps_segments(jfk_path):
+    model = WhisperModel("tiny")
+    pipeline = BatchedInferencePipeline(model=model)
+
+    audio = decode_audio(jfk_path)
+    audio = np.concatenate([audio, audio])
+    clip_timestamps = [{"start": 0.0, "end": 11.0}, {"start": 11.0, "end": 22.0}]
+
+    segments, info = pipeline.transcribe(audio, clip_timestamps=clip_timestamps)
+    segments = list(segments)
+
+    assert len(segments) == 2
+    for segment, clip in zip(segments, clip_timestamps):
+        assert segment.start == clip["start"]
+        assert segment.end == clip["end"]
+        assert segment.text == (
+            " And so my fellow Americans ask not what your country can do for you, "
+            "ask what you can do for your country."
+        )
