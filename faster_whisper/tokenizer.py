@@ -68,7 +68,7 @@ class Tokenizer:
         return self.tokenizer.token_to_id("<|notimestamps|>")
 
     @cached_property
-    def no_speech(self) -> int:
+    def no_speech(self) -> Optional[int]:
         return self.tokenizer.token_to_id("<|nocaptions|>")
 
     @property
@@ -144,7 +144,8 @@ class Tokenizer:
                     result.add(tokens[0])
 
         # Add the no_speech token to prevent malformed <|nocaptions|> generation
-        result.add(self.no_speech)
+        if self.no_speech is not None:
+            result.add(self.no_speech)
 
         return tuple(sorted(result))
 
