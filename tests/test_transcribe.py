@@ -190,7 +190,7 @@ def test_multilingual_transcription(data_dir):
         "verfahren. Dies umfasst insbesondere das Recht, die Software zu verwenden, zu "
         "vervielfältigen, zu modifizieren, zu Samenzofügen, zu veröffentlichen, zu verteilen, "
         "unterzulizenzieren und oder kopieren der Software zu verkaufen und diese Rechte "
-        "unterfolgen den Bedingungen anderen zu übertragen."
+        "unterfolgenden den Bedingungen anderen zu übertragen."
     )
 
     segments, info = pipeline.transcribe(audio, multilingual=True)
