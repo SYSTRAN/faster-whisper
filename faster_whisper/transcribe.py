@@ -1886,11 +1886,11 @@ def get_suppressed_tokens(
         tokenizer.sot_prev,
         tokenizer.sot_lm,
     ]
-    
+
     # Add no_speech token if it exists
     if tokenizer.no_speech is not None:
         tokens_to_add.append(tokenizer.no_speech)
-    
+
     suppress_tokens.extend(tokens_to_add)
 
     return tuple(sorted(set(suppress_tokens)))
