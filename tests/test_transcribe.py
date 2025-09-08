@@ -59,14 +59,126 @@ def test_transcribe(jfk_path):
     )
 
 
-def test_batched_transcribe(physcisworks_path):
+def test_batch_audio_files(data_dir):
+    model = WhisperModel("tiny")
+    batched_model = BatchedInferencePipeline(model=model)
+
+    hotwords = os.path.join(data_dir, "hotwords.mp3")
+    hotwords_audio = decode_audio(hotwords)
+
+    jfk = os.path.join(data_dir, "jfk.flac")
+    jfk_audio = decode_audio(jfk)
+
+    audio_files = [
+        hotwords,  # batch 0
+        hotwords,
+        jfk,  # batch 1
+        jfk,
+        jfk,  # batch 2
+        hotwords,
+        hotwords,  # batch 3
+    ]
+
+    batch_size = 2
+    batch_generator = batched_model.batch_audio_files(
+        audio_files, batch_size=batch_size
+    )
+
+    for i, (audios, valid_lens) in enumerate(batch_generator):
+        if i < 3:
+            # batches 0-2 are filled batches
+            assert audios.shape[0] == 2
+
+            if i == 0:
+                assert audios.shape[-1] == hotwords_audio.shape[-1]
+
+            # in batch 2, we should pad to jfk size since len(jfk) > len(hotwords)
+            elif i == 1 or i == 2:
+                assert audios.shape[-1] == jfk_audio.shape[-1]
+
+            # make sure we can recover original lengths
+            if i == 2:
+                assert valid_lens[0] == jfk_audio.shape[-1]
+                assert valid_lens[1] == hotwords_audio.shape[-1]
+
+        else:
+            # only batch 3 is an unfilled batch
+            assert audios.shape[0] == 1
+            assert audios.shape[-1] == hotwords_audio.shape[-1]
+
+
+def test_batched_transcribe_many(jfk_path, physcisworks_path):
+    model = WhisperModel("tiny")
+    batched_model = BatchedInferencePipeline(model=model)
+
+    physcisworks_audio = decode_audio(physcisworks_path)
+    jfk_audio = decode_audio(jfk_path)
+
+    audio_files = [
+        physcisworks_path,  # batch 0
+        jfk_path,
+        jfk_path,  # batch 1
+        jfk_path,
+        physcisworks_path,  # batch 2
+        physcisworks_path,
+        physcisworks_path,  # batch 3
+    ]
+
+    batch_size = 2
+    num_batches = (len(audio_files) // batch_size) + 1
+
+    batch_segments, batch_info = batched_model.transcribe(
+        audio_files, batch_size=batch_size, language="en"
+    )
+
+    # transcribe returns a list of generators with size equal to number of batches
+    # iterate through each batch and then through each generator in that batch
+    # to get a flat list of segments (processed in parallel)
+    # then recreate hierarchy by stacking chunks for each audio file
+    regrouped_segments = []
+    total_flat_segments = []
+    for batch_idx in range(num_batches):
+        info = batch_info[batch_idx]
+
+        flat_segments = []
+        for segment in batch_segments[batch_idx]:
+            flat_segments.append(segment)
+            total_flat_segments.append(segment)
+
+        chunk_idx = 0
+        for audio_info in info:
+            num_chunks = audio_info.num_chunks
+            regrouped_segments.append(flat_segments[chunk_idx : chunk_idx + num_chunks])
+            chunk_idx += num_chunks
+
+    num_jfk_files = 3
+    num_physics_files = 4
+    expected_num_chunks_jfk = 1 * num_jfk_files
+    expected_num_chunks_physics = 6 * num_physics_files
+    expected_total_chunks = expected_num_chunks_jfk + expected_num_chunks_physics
+
+    assert len(total_flat_segments) == expected_total_chunks
+    assert len(regrouped_segments) == len(audio_files)
+
+    for i in range(1, 4):
+        # because jfk only has one segment
+        assert regrouped_segments[i][0].text == (
+            " And so my fellow Americans ask not what your country can do for you, "
+            "ask what you can do for your country."
+        )
+
+    # TODO: assert result for each other flat segments are identical to non-batched result
+
+
+def test_batched_transcribe_one(physcisworks_path):
     model = WhisperModel("tiny")
     batched_model = BatchedInferencePipeline(model=model)
     result, info = batched_model.transcribe(physcisworks_path, batch_size=16)
-    assert info.language == "en"
-    assert info.language_probability > 0.7
+    assert info[0][0].language == "en"
+    assert info[0][0].language_probability > 0.7
     segments = []
-    for segment in result:
+
+    for segment in result[0]:
         segments.append(
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
@@ -80,7 +192,7 @@ def test_batched_transcribe(physcisworks_path):
         word_timestamps=True,
     )
     segments = []
-    for segment in result:
+    for segment in result[0]:
         assert segment.words is not None
         segments.append(
             {"start": segment.start, "end": segment.end, "text": segment.text}
