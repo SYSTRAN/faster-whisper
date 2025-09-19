@@ -327,14 +327,17 @@ class SileroVADModel:
 
         encoder_batch_size = 2000
         batch_samples = encoder_batch_size // batch_size * window_size_samples
-        input_size = window_size_samples + context_size_samples
         h = np.zeros((1, batch_size, 128), dtype=np.float32)
         c = np.zeros((1, batch_size, 128), dtype=np.float32)
 
         outputs = []
         for i in range(0, num_samples, batch_samples):
             batch = audio[:, i : i + batch_samples + context_size_samples]
-            shape = (batch_size, batch.shape[1] // window_size_samples, input_size)
+            shape = (
+                batch_size,
+                batch.shape[1] // window_size_samples,
+                window_size_samples + context_size_samples,
+            )
             strides = (
                 batch.strides[0],
                 batch.strides[1] * window_size_samples,
