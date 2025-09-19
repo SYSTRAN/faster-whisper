@@ -1,6 +1,7 @@
 ctranslate2>=4.0,<5
 huggingface_hub>=0.13
 tokenizers>=0.13,<1
-onnxruntime>=1.14,<2 
+onnxruntime>=1.14,<2
+ten-vad==1.0
 av>=11
 tqdm

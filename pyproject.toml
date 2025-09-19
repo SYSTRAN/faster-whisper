@@ -1,0 +1,15 @@
+[project]
+name = "faster-whisper"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ten-vad==1.0",
+]
+tools = []
+
+[dependency-groups]
+dev = [
+    "scipy>=1.16.2",
+]

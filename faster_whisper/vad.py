@@ -8,6 +8,11 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from faster_whisper.utils import get_assets_path
+from faster_whisper.vad_predictor.silero_vad import SileroVADModel, \
+    get_vad_model
+from faster_whisper.vad_predictor.ten_vad import TenVadPredictor
+from faster_whisper.vad_predictor.debug import save_expanded_speech_prob_as_wav, \
+    plot_speech_segments_to_wav
 
 
 # The code below is adapted from https://github.com/snakers4/silero-vad.
@@ -53,7 +58,7 @@ def get_speech_timestamps(
     Args:
       audio: One dimensional float array.
       vad_options: Options for VAD processing.
-      sampling rate: Sampling rate of the audio.
+      sampling_rate: Sampling rate of the audio.
       kwargs: VAD options passed as keyword arguments for backward compatibility.
 
     Returns:
@@ -67,7 +72,7 @@ def get_speech_timestamps(
     min_speech_duration_ms = vad_options.min_speech_duration_ms
     max_speech_duration_s = vad_options.max_speech_duration_s
     min_silence_duration_ms = vad_options.min_silence_duration_ms
-    window_size_samples = 512
+    window_size_samples = 256
     speech_pad_ms = vad_options.speech_pad_ms
     min_speech_samples = sampling_rate * min_speech_duration_ms / 1000
     speech_pad_samples = sampling_rate * speech_pad_ms / 1000
@@ -81,12 +86,19 @@ def get_speech_timestamps(
 
     audio_length_samples = len(audio)
 
-    model = get_vad_model()
+    model_ten_vad = TenVadPredictor()
+    model = model_ten_vad
+    # model_silero_vad = get_vad_model()
+    # model = model_silero_vad
 
     padded_audio = np.pad(
         audio, (0, window_size_samples - audio.shape[0] % window_size_samples)
     )
-    speech_probs = model(padded_audio.reshape(1, -1)).squeeze(0)
+
+    speech_probs = model(padded_audio.reshape(1, -1), num_samples = window_size_samples).squeeze(0)
+# should be: ndarray shape=(7121, 1) dtype = float32
+# is: ndarray (14242,) dtype
+    save_expanded_speech_prob_as_wav(speech_probs, audio, "/tmp/out.wav", window_size_samples, sampling_rate)
 
     triggered = False
     speeches = []
@@ -180,6 +192,7 @@ def get_speech_timestamps(
                 min(audio_length_samples, speech["end"] + speech_pad_samples)
             )
 
+    plot_speech_segments_to_wav(audio, speeches, "/tmp/speeches.wav", sampling_rate)
     return speeches
 
 
@@ -243,88 +256,6 @@ class SpeechTimestampsMap:
             len(self.chunk_end_sample) - 1,
         )
 
-
-@functools.lru_cache
-def get_vad_model():
-    """Returns the VAD model instance."""
-    encoder_path = os.path.join(get_assets_path(), "silero_encoder_v5.onnx")
-    decoder_path = os.path.join(get_assets_path(), "silero_decoder_v5.onnx")
-    return SileroVADModel(encoder_path, decoder_path)
-
-
-class SileroVADModel:
-    def __init__(self, encoder_path, decoder_path):
-        try:
-            import onnxruntime
-        except ImportError as e:
-            raise RuntimeError(
-                "Applying the VAD filter requires the onnxruntime package"
-            ) from e
-
-        opts = onnxruntime.SessionOptions()
-        opts.inter_op_num_threads = 1
-        opts.intra_op_num_threads = 1
-        opts.enable_cpu_mem_arena = False
-        opts.log_severity_level = 4
-
-        self.encoder_session = onnxruntime.InferenceSession(
-            encoder_path,
-            providers=["CPUExecutionProvider"],
-            sess_options=opts,
-        )
-        self.decoder_session = onnxruntime.InferenceSession(
-            decoder_path,
-            providers=["CPUExecutionProvider"],
-            sess_options=opts,
-        )
-
-    def __call__(
-        self, audio: np.ndarray, num_samples: int = 512, context_size_samples: int = 64
-    ):
-        assert (
-            audio.ndim == 2
-        ), "Input should be a 2D array with size (batch_size, num_samples)"
-        assert (
-            audio.shape[1] % num_samples == 0
-        ), "Input size should be a multiple of num_samples"
-
-        batch_size = audio.shape[0]
-
-        state = np.zeros((2, batch_size, 128), dtype="float32")
-        context = np.zeros(
-            (batch_size, context_size_samples),
-            dtype="float32",
-        )
-
-        batched_audio = audio.reshape(batch_size, -1, num_samples)
-        context = batched_audio[..., -context_size_samples:]
-        context[:, -1] = 0
-        context = np.roll(context, 1, 1)
-        batched_audio = np.concatenate([context, batched_audio], 2)
-
-        batched_audio = batched_audio.reshape(-1, num_samples + context_size_samples)
-
-        encoder_batch_size = 10000
-        num_segments = batched_audio.shape[0]
-        encoder_outputs = []
-        for i in range(0, num_segments, encoder_batch_size):
-            encoder_output = self.encoder_session.run(
-                None, {"input": batched_audio[i : i + encoder_batch_size]}
-            )[0]
-            encoder_outputs.append(encoder_output)
-
-        encoder_output = np.concatenate(encoder_outputs, axis=0)
-        encoder_output = encoder_output.reshape(batch_size, -1, 128)
-
-        decoder_outputs = []
-        for window in np.split(encoder_output, encoder_output.shape[1], axis=1):
-            out, state = self.decoder_session.run(
-                None, {"input": window.squeeze(1), "state": state}
-            )
-            decoder_outputs.append(out)
-
-        out = np.stack(decoder_outputs, axis=1).squeeze(-1)
-        return out
 
 
 def merge_segments(segments_list, vad_options: VadOptions, sampling_rate: int = 16000):
