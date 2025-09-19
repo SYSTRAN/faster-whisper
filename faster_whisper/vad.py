@@ -1,13 +1,11 @@
 import bisect
-import functools
-import os
+from typing import Literal
 
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from faster_whisper.utils import get_assets_path
 from faster_whisper.vad_predictor.silero_vad import SileroVADModel, \
     get_vad_model
 from faster_whisper.vad_predictor.ten_vad import TenVadPredictor
@@ -45,6 +43,7 @@ class VadOptions:
     max_speech_duration_s: float = float("inf")
     min_silence_duration_ms: int = 2000
     speech_pad_ms: int = 400
+    model: Literal["silero_vad", "ten_vad"] = "silero_vad"
 
 
 def get_speech_timestamps(
@@ -72,7 +71,7 @@ def get_speech_timestamps(
     min_speech_duration_ms = vad_options.min_speech_duration_ms
     max_speech_duration_s = vad_options.max_speech_duration_s
     min_silence_duration_ms = vad_options.min_silence_duration_ms
-    window_size_samples = 256
+    window_size_samples = 512 if vad_options.model == "silero_vad" else 256
     speech_pad_ms = vad_options.speech_pad_ms
     min_speech_samples = sampling_rate * min_speech_duration_ms / 1000
     speech_pad_samples = sampling_rate * speech_pad_ms / 1000
@@ -86,11 +85,7 @@ def get_speech_timestamps(
 
     audio_length_samples = len(audio)
 
-    model_ten_vad = TenVadPredictor()
-    model = model_ten_vad
-    # model_silero_vad = get_vad_model()
-    # model = model_silero_vad
-
+    model = get_vad_model() if vad_options.model == "silero_vad" else TenVadPredictor()
     padded_audio = np.pad(
         audio, (0, window_size_samples - audio.shape[0] % window_size_samples)
     )
