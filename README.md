@@ -168,6 +168,24 @@ for segment in segments:
     print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
 ```
 
+### Async Batched Transcription
+The following code snippet illustrates how to run async batched transcription on an example audio file. `AsyncBatchedInferencePipeline.transcribe` is a drop-in replacement for `WhisperModel.transcribe`
+
+```python
+import asyncio
+from faster_whisper import WhisperModel, AsyncBatchedInferencePipeline
+
+async def transcribe_file():
+    model = WhisperModel("turbo", device="cuda", compute_type="float16")
+    batched_model = AsyncBatchedInferencePipeline(model=model)
+    segments_generator, info = await batched_model.transcribe("audio.mp3", batch_size=16)
+
+    async for segment in segments_generator:
+        print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+
+asyncio.run(transcribe_file())
+```
+
 ### Faster Distil-Whisper
 
 The Distil-Whisper checkpoints are compatible with the Faster-Whisper package. In particular, the latest [distil-large-v3](https://huggingface.co/distil-whisper/distil-large-v3)
