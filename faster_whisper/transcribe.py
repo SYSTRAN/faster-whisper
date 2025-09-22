@@ -1886,7 +1886,7 @@ def get_suppressed_tokens(
             tokenizer.sot,
             tokenizer.sot_prev,
             tokenizer.sot_lm,
-            tokenizer.no_speech,
+            tokenizer.no_captions,
         ]
     )
 
