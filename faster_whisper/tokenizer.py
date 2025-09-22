@@ -143,10 +143,6 @@ class Tokenizer:
                 if len(tokens) == 1 or symbol in miscellaneous:
                     result.add(tokens[0])
 
-        # Add the no_speech token to prevent malformed <|nocaptions|> generation
-        if self.no_speech is not None:
-            result.add(self.no_speech)
-
         return tuple(sorted(result))
 
     def split_to_word_tokens(
