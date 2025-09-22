@@ -1879,19 +1879,16 @@ def get_suppressed_tokens(
     else:
         assert isinstance(suppress_tokens, list), "suppress_tokens must be a list"
 
-    tokens_to_add = [
-        tokenizer.transcribe,
-        tokenizer.translate,
-        tokenizer.sot,
-        tokenizer.sot_prev,
-        tokenizer.sot_lm,
-    ]
-
-    # Add no_speech token if it exists
-    if tokenizer.no_speech is not None:
-        tokens_to_add.append(tokenizer.no_speech)
-
-    suppress_tokens.extend(tokens_to_add)
+    suppress_tokens.extend(
+        [
+            tokenizer.transcribe,
+            tokenizer.translate,
+            tokenizer.sot,
+            tokenizer.sot_prev,
+            tokenizer.sot_lm,
+            tokenizer.no_speech,
+        ]
+    )
 
     return tuple(sorted(set(suppress_tokens)))
 
