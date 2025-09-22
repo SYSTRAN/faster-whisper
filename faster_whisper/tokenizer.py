@@ -68,8 +68,8 @@ class Tokenizer:
         return self.tokenizer.token_to_id("<|notimestamps|>")
 
     @cached_property
-    def no_captions(self) -> Optional[int]:
-        return self.tokenizer.token_to_id("<|nocaptions|>")
+    def no_speech(self) -> int:
+        return self.tokenizer.token_to_id("<|nospeech|>") or self.tokenizer.token_to_id("<|nocaptions|>")
 
     @property
     def timestamp_begin(self) -> int:
