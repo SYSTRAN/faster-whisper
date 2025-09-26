@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from faster_whisper.utils import get_assets_path
+from faster_whisper.vad_predictor.predictor import VadPredictorModel
 
 
 @functools.lru_cache
@@ -18,7 +19,9 @@ def get_vad_model():
     return SileroVADModel(encoder_path, decoder_path)
 
 
-class SileroVADModel:
+class SileroVADModel(VadPredictorModel):
+    window_size_samples : int = 512
+
     def __init__(self, encoder_path, decoder_path):
         try:
             import onnxruntime
@@ -45,8 +48,9 @@ class SileroVADModel:
         )
 
     def __call__(
-        self, audio: np.ndarray, num_samples: int = 512, context_size_samples: int = 64
+        self, audio: np.ndarray, context_size_samples: int = 64
     ):
+        num_samples = self.window_size_samples
         assert (
             audio.ndim == 2
         ), "Input should be a 2D array with size (batch_size, num_samples)"
@@ -90,4 +94,5 @@ class SileroVADModel:
             decoder_outputs.append(out)
 
         out = np.stack(decoder_outputs, axis=1).squeeze(-1)
+
         return out

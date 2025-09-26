@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from faster_whisper.vad_predictor.predictor import VadPredictorModel
 from faster_whisper.vad_predictor.silero_vad import SileroVADModel, \
     get_vad_model
 from faster_whisper.vad_predictor.ten_vad import TenVadPredictor
@@ -40,10 +41,10 @@ class VadOptions:
     threshold: float = 0.5
     neg_threshold: float = None
     min_speech_duration_ms: int = 0
-    max_speech_duration_s: float = float("inf")
+    max_speech_duration_s: float = 30 # float("inf")
     min_silence_duration_ms: int = 2000
     speech_pad_ms: int = 400
-    model: Literal["silero_vad", "ten_vad"] = "silero_vad"
+    model: Literal["silero_vad", "ten_vad"] = "ten_vad"
 
 
 def get_speech_timestamps(
@@ -66,18 +67,29 @@ def get_speech_timestamps(
     if vad_options is None:
         vad_options = VadOptions(**kwargs)
 
+    model = get_vad_model() if vad_options.model == "silero_vad" else TenVadPredictor()
+
+    return get_speech_timestamps_using_model(model, audio, vad_options, sampling_rate)
+
+
+def get_speech_timestamps_using_model(
+    model: VadPredictorModel,
+    audio: np.ndarray,
+    vad_options: VadOptions,
+    sampling_rate: int = 16000,
+    ) -> List[dict]:
+
     threshold = vad_options.threshold
     neg_threshold = vad_options.neg_threshold
     min_speech_duration_ms = vad_options.min_speech_duration_ms
     max_speech_duration_s = vad_options.max_speech_duration_s
     min_silence_duration_ms = vad_options.min_silence_duration_ms
-    window_size_samples = 512 if vad_options.model == "silero_vad" else 256
     speech_pad_ms = vad_options.speech_pad_ms
     min_speech_samples = sampling_rate * min_speech_duration_ms / 1000
     speech_pad_samples = sampling_rate * speech_pad_ms / 1000
     max_speech_samples = (
         sampling_rate * max_speech_duration_s
-        - window_size_samples
+        - model.window_size_samples
         - 2 * speech_pad_samples
     )
     min_silence_samples = sampling_rate * min_silence_duration_ms / 1000
@@ -85,14 +97,15 @@ def get_speech_timestamps(
 
     audio_length_samples = len(audio)
 
-    model = get_vad_model() if vad_options.model == "silero_vad" else TenVadPredictor()
+
+    window_size_samples = model.window_size_samples
+
     padded_audio = np.pad(
         audio, (0, window_size_samples - audio.shape[0] % window_size_samples)
     )
 
-    speech_probs = model(padded_audio.reshape(1, -1), num_samples = window_size_samples).squeeze(0)
-# should be: ndarray shape=(7121, 1) dtype = float32
-# is: ndarray (14242,) dtype
+    speech_probs = model(padded_audio.reshape(1, -1)).squeeze(0)
+
     save_expanded_speech_prob_as_wav(speech_probs, audio, "/tmp/out.wav", window_size_samples, sampling_rate)
 
     triggered = False

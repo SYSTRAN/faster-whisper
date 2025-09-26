@@ -1,5 +1,7 @@
 import numpy as np
 
+from faster_whisper.vad_predictor.predictor import VadPredictorModel
+
 
 def _cast_audio(audio: np.ndarray) -> np.ndarray:
   """ Convert the audio in [audio] into  16-bit integer PCM"""
@@ -7,13 +9,16 @@ def _cast_audio(audio: np.ndarray) -> np.ndarray:
   return audio_int16
 
 
-class TenVadPredictor:
+class TenVadPredictor(VadPredictorModel):
+  window_size_samples : int = 256
+
   def __init__(self):
     from ten_vad import TenVad
-    self.hop_size = 256
+    self.hop_size = self.window_size_samples
     self.model = TenVad(self.hop_size, 0.5)
 
-  def __call__(self, audio: np.ndarray, num_samples: int = 256,):
+  def __call__(self, audio: np.ndarray):
+    num_samples = self.window_size_samples
     assert (
         audio.ndim == 2
     ), "Input should be a 2D array with size (batch_size, num_samples)"
