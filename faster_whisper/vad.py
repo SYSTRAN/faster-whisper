@@ -288,8 +288,8 @@ class SpeechTimestampsMap:
 @functools.lru_cache
 def get_vad_model():
     """Returns the VAD model instance."""
-    encoder_path = os.path.join(get_assets_path(), "silero_encoder_v5.onnx")
-    decoder_path = os.path.join(get_assets_path(), "silero_decoder_v5.onnx")
+    encoder_path = os.path.join(get_assets_path(), "silero_encoder_v6.onnx")
+    decoder_path = os.path.join(get_assets_path(), "silero_decoder_v6.onnx")
     return SileroVADModel(encoder_path, decoder_path)
 
 
