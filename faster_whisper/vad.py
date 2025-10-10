@@ -86,7 +86,7 @@ def get_speech_timestamps(
     padded_audio = np.pad(
         audio, (0, window_size_samples - audio.shape[0] % window_size_samples)
     )
-    speech_probs = model(padded_audio.reshape(1, -1)).squeeze(0)
+    speech_probs = model(padded_audio.reshape(1, -1)).squeeze((0, 1))
 
     triggered = False
     speeches = []
@@ -355,14 +355,9 @@ class SileroVADModel:
             encoder_outputs.append(encoder_output)
 
         encoder_output = np.concatenate(encoder_outputs, axis=0)
-        encoder_output = encoder_output.reshape(batch_size, -1, 128)
+        encoder_output = encoder_output.reshape(-1, batch_size, 128)
 
-        decoder_outputs = []
-        for window in np.split(encoder_output, encoder_output.shape[1], axis=1):
-            out, state = self.decoder_session.run(
-                None, {"input": window.squeeze(1), "state": state}
-            )
-            decoder_outputs.append(out)
-
-        out = np.stack(decoder_outputs, axis=1).squeeze(-1)
+        out, h, c = self.decoder_session.run(
+            None, {"input": encoder_output, "h": state[:1], "c": state[1:]}
+        )
         return out
