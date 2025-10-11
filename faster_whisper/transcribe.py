@@ -106,6 +106,7 @@ class TranscriptionInfo:
     all_language_probs: Optional[List[Tuple[str, float]]]
     transcription_options: TranscriptionOptions
     vad_options: VadOptions
+    num_chunks: Optional[List[int]] = None
 
 
 class BatchedInferencePipeline:
@@ -251,6 +252,47 @@ class BatchedInferencePipeline:
 
         return encoder_output, output
 
+    def batch_audio_files(
+        self,
+        audio_files: Union[str, list[str]],
+        sampling_rate: int = 16000,
+        batch_size: int = 8,
+    ) -> Iterable[Tuple[np.ndarray, list[int]]]:
+        """Batch multiple audio files together similar to PyTorch's collate_fn.
+
+        Arguments:
+            audio_files: Path to a single audio file (or a file-like object), or a list of files.
+            sampling_rate: Resample the audio to this sample rate.
+            batch_size: Max size of a single batch.
+
+        Returns:
+            A generator of numpy arrays with size (batch_size, X) where
+            X is the max audio size in the batch.
+
+            A generator of non-padded valid lengths of each audio file in the batch
+        """
+
+        if not isinstance(audio_files, list):
+            audio_files = [audio_files]
+
+        for i in range(0, len(audio_files), batch_size):
+            batch_audio_files = audio_files[i : i + batch_size]
+
+            audios = []
+            lens = []
+            max_len_in_batch = 0
+            for audio_file in batch_audio_files:
+                audio = decode_audio(audio_file, sampling_rate=sampling_rate)
+                max_len_in_batch = max(max_len_in_batch, len(audio))
+                lens.append(len(audio))
+                audios.append(audio)
+
+            batched_audios = np.stack(
+                [pad_or_trim(audio, length=max_len_in_batch) for audio in audios]
+            )
+
+            yield (batched_audios, lens)
+
     def transcribe(
         self,
         audio: Union[str, BinaryIO, np.ndarray],
@@ -341,7 +383,7 @@ class BatchedInferencePipeline:
             clip_timestamps: Optionally provide list of dictionaries each containing "start" and
                 "end" keys that specify the start and end of the voiced region within
                 `chunk_length` boundary. vad_filter will be ignored if clip_timestamps is used.
-            batch_size: the maximum number of parallel requests to model for decoding.
+            batch_size: the maximum number of audio files to process in parallel.
             hotwords:
                 Hotwords/hint phrases to the model. Has no effect if prefix is not None.
             language_detection_threshold: If the maximum probability of the language tokens is
@@ -383,16 +425,7 @@ class BatchedInferencePipeline:
             )
             multilingual = False
 
-        if not isinstance(audio, np.ndarray):
-            audio = decode_audio(audio, sampling_rate=sampling_rate)
-        duration = audio.shape[0] / sampling_rate
-
-        self.model.logger.info(
-            "Processing audio with duration %s", format_timestamp(duration)
-        )
-
         chunk_length = chunk_length or self.model.feature_extractor.chunk_length
-        # if no segment split is provided, use vad_model and generate segments
         if not clip_timestamps:
             if vad_filter:
                 if vad_parameters is None:
@@ -407,101 +440,21 @@ class BatchedInferencePipeline:
                     vad_parameters = VadOptions(
                         **vad_parameters, max_speech_duration_s=chunk_length
                     )
-
-                clip_timestamps = get_speech_timestamps(audio, vad_parameters)
-            # run the audio if it is less than 30 sec even without clip_timestamps
-            elif duration < chunk_length:
-                clip_timestamps = [{"start": 0, "end": audio.shape[0]}]
-            else:
-                raise RuntimeError(
-                    "No clip timestamps found. "
-                    "Set 'vad_filter' to True or provide 'clip_timestamps'."
-                )
-
-            audio_chunks, chunks_metadata = collect_chunks(
-                audio, clip_timestamps, max_duration=chunk_length
-            )
-
         else:
+            raise NotImplementedError("if clip_timestamps is provided")
             clip_timestamps = [
                 {k: int(v * sampling_rate) for k, v in segment.items()}
                 for segment in clip_timestamps
             ]
 
-            audio_chunks, chunks_metadata = [], []
-            for clip in clip_timestamps:
-                audio_chunks.append(audio[clip["start"] : clip["end"]])
-                chunks_metadata.append(
-                    {
-                        "offset": clip["start"] / sampling_rate,
-                        "duration": (clip["end"] - clip["start"]) / sampling_rate,
-                        "segments": [clip],
-                    }
-                )
-
-        duration_after_vad = (
-            sum((segment["end"] - segment["start"]) for segment in clip_timestamps)
-            / sampling_rate
-        )
-
-        self.model.logger.info(
-            "VAD filter removed %s of audio",
-            format_timestamp(duration - duration_after_vad),
-        )
-
-        features = (
-            [self.model.feature_extractor(chunk)[..., :-1] for chunk in audio_chunks]
-            if duration_after_vad
-            else []
-        )
-
-        all_language_probs = None
-        # detecting the language if not provided
-        if language is None:
-            if not self.model.model.is_multilingual:
-                language = "en"
-                language_probability = 1
-            else:
-                (
-                    language,
-                    language_probability,
-                    all_language_probs,
-                ) = self.model.detect_language(
-                    features=np.concatenate(
-                        features
-                        + [
-                            np.full((self.model.model.n_mels, 1), -1.5, dtype="float32")
-                        ],
-                        axis=1,
-                    ),  # add a dummy feature to account for empty audio
-                    language_detection_segments=language_detection_segments,
-                    language_detection_threshold=language_detection_threshold,
-                )
-
-                self.model.logger.info(
-                    "Detected language '%s' with probability %.2f",
-                    language,
-                    language_probability,
-                )
-        else:
-            if not self.model.model.is_multilingual and language != "en":
-                self.model.logger.warning(
-                    "The current model is English-only but the language parameter is set to '%s'; "
-                    "using 'en' instead." % language
-                )
-                language = "en"
-
-            language_probability = 1
-
+        # if this was inside the batch loop, we would allow for
+        # batched files to be different languages. for now
+        # let's assume all files are in the same language
         tokenizer = Tokenizer(
             self.model.hf_tokenizer,
             self.model.model.is_multilingual,
             task=task,
             language=language,
-        )
-
-        features = (
-            np.stack([pad_or_trim(feature) for feature in features]) if features else []
         )
 
         options = TranscriptionOptions(
@@ -534,34 +487,215 @@ class BatchedInferencePipeline:
             word_timestamps=word_timestamps,
             hallucination_silence_threshold=None,
             condition_on_previous_text=False,
-            clip_timestamps=clip_timestamps,
+            clip_timestamps=None,  # this field is not used in the BatchedInferencePipeline
             prompt_reset_on_temperature=0.5,
             multilingual=multilingual,
             without_timestamps=without_timestamps,
             max_initial_timestamp=0.0,
         )
 
-        info = TranscriptionInfo(
-            language=language,
-            language_probability=language_probability,
-            duration=duration,
-            duration_after_vad=duration_after_vad,
-            transcription_options=options,
-            vad_options=vad_parameters,
-            all_language_probs=all_language_probs,
-        )
+        if not isinstance(audio, np.ndarray):
+            batch_generator = self.batch_audio_files(
+                audio, batch_size=batch_size, sampling_rate=sampling_rate
+            )
+        else:
+            if audio.ndim != 2:
+                raise ValueError(
+                    "Input audio must have a single batch dimension if provided as numpy array"
+                )
+            batch_generator = audio
 
-        segments = self._batched_segments_generator(
-            features,
-            tokenizer,
-            chunks_metadata,
-            batch_size,
-            options,
-            log_progress,
-        )
-        segments = restore_speech_timestamps(segments, clip_timestamps, sampling_rate)
+        batched_segments = []
+        batched_info = []
+        for audio, valid_lens in batch_generator:
+            curr_batch_size = audio.shape[0]
+            batch_duration = audio.shape[-1] / sampling_rate
+            batched_durations = [valid_len / sampling_rate for valid_len in valid_lens]
 
-        return segments, info
+            for duration in batched_durations:
+                self.model.logger.info(
+                    "Processing audio with duration %s", format_timestamp(duration)
+                )
+
+            # if no segment split is provided, use vad_model and generate segments
+            if not clip_timestamps:
+                if vad_filter:
+                    batched_clip_timestamps = get_speech_timestamps(
+                        audio, vad_parameters
+                    )
+                # run the audio if it is less than 30 sec even without clip_timestamps
+                elif batch_duration < chunk_length:
+                    batched_clip_timestamps = [
+                        {"start": 0, "end": valid_len} for valid_len in valid_lens
+                    ]
+                else:
+                    raise RuntimeError(
+                        "No clip timestamps found. "
+                        "Set 'vad_filter' to True or provide 'clip_timestamps'."
+                    )
+
+                batched_audio_chunks = []
+                batched_chunks_metadata = []
+
+                for i, clip in enumerate(audio):
+                    audio_chunks, chunks_metadata = collect_chunks(
+                        clip, batched_clip_timestamps[i], max_duration=chunk_length
+                    )
+                    batched_audio_chunks.append(audio_chunks)
+                    batched_chunks_metadata.append(chunks_metadata)
+
+            else:
+                raise NotImplementedError(
+                    "if clip_timestamps is provided in batch loop"
+                )
+                audio_chunks, chunks_metadata = [], []
+                for clip in clip_timestamps:
+                    audio_chunks.append(audio[clip["start"] : clip["end"]])
+                    chunks_metadata.append(
+                        {
+                            "offset": clip["start"] / sampling_rate,
+                            "duration": (clip["end"] - clip["start"]) / sampling_rate,
+                            "segments": [clip],
+                        }
+                    )
+
+            batched_features = []
+            batched_durations_after_vad = []
+
+            for i in range(curr_batch_size):
+                batched_durations_after_vad.append(
+                    sum(
+                        (segment["end"] - segment["start"])
+                        for segment in batched_clip_timestamps[i]
+                    )
+                    / sampling_rate
+                )
+
+                self.model.logger.info(
+                    "VAD filter removed %s of audio",
+                    format_timestamp(
+                        batched_durations[i] - batched_durations_after_vad[i]
+                    ),
+                )
+
+                batched_features.append(
+                    [
+                        self.model.feature_extractor(chunk)[..., :-1]
+                        for chunk in batched_audio_chunks[i]
+                    ]
+                    if batched_durations_after_vad[i]
+                    else []
+                )
+
+            all_language_probs = None
+            # detecting the language if not provided
+            if language is None:
+                raise NotImplementedError("when language is not provided")
+                if not self.model.model.is_multilingual:
+                    language = "en"
+                    language_probability = 1
+                else:
+                    (
+                        language,
+                        language_probability,
+                        all_language_probs,
+                    ) = self.model.detect_language(
+                        features=np.concatenate(
+                            batched_features
+                            + [
+                                np.full(
+                                    (self.model.model.n_mels, 1), -1.5, dtype="float32"
+                                )
+                            ],
+                            axis=1,
+                        ),  # add a dummy feature to account for empty audio
+                        language_detection_segments=language_detection_segments,
+                        language_detection_threshold=language_detection_threshold,
+                    )
+
+                    self.model.logger.info(
+                        "Detected language '%s' with probability %.2f",
+                        language,
+                        language_probability,
+                    )
+            else:
+                print("TODO: can move this outside of batch loop")
+                if not self.model.model.is_multilingual and language != "en":
+                    self.model.logger.warning(
+                        "The current model is English-only but the language parameter is set to '%s'; "
+                        "using 'en' instead." % language
+                    )
+                    language = "en"
+
+                language_probability = 1
+
+            # flattening to have a single batch dimension (align with numpy C-order)
+            # we keep a single batch dimensions using vertical concat, despite varying number of chunks
+            # per audio file. to keep track, we refer to batched_chunks_metadata to see
+            # which chunks correspond to which audio file (number of chunks per audio file)
+            flat_padded_batched_features = [
+                (
+                    np.stack([pad_or_trim(feature) for feature in features])
+                    if features
+                    else []
+                )
+                for features in batched_features
+            ]
+            flat_padded_batched_features = np.concatenate(flat_padded_batched_features)
+
+            flat_chunks_metadata = [
+                chunk
+                for file_chunks in batched_chunks_metadata
+                for chunk in file_chunks
+            ]
+
+            flat_batched_clip_timestamps = [
+                clip
+                for clip_timestamps in batched_clip_timestamps
+                for clip in clip_timestamps
+            ]
+
+            # we regroup within outside of this function (user does it)
+            # this is because segments is an iterator and thus we can't
+            # regroup based on number of chunks in metadata
+            flat_segments = self._batched_segments_generator(
+                flat_padded_batched_features,
+                tokenizer,
+                flat_chunks_metadata,
+                batch_size,
+                options,
+                log_progress,
+            )
+
+            flat_segments = restore_speech_timestamps(
+                flat_segments, flat_batched_clip_timestamps, sampling_rate
+            )
+
+            # regrouping after flattening
+            info = []
+            for i in range(curr_batch_size):
+                # this option is not used by _batched_segments_generator
+                options.clip_timestamps = batched_clip_timestamps[i]
+
+                info.append(
+                    TranscriptionInfo(
+                        language=language,
+                        language_probability=language_probability,
+                        duration=batched_durations[i],
+                        duration_after_vad=batched_durations_after_vad[i],
+                        transcription_options=options,
+                        vad_options=vad_parameters,
+                        all_language_probs=all_language_probs,
+                        # so that user knows how many segments to consume for each audio file
+                        # when iterating over flat_segments
+                        num_chunks=len(batched_chunks_metadata[i]),
+                    )
+                )
+
+            batched_segments.append(flat_segments)
+            batched_info.append(info)
+
+        return batched_segments, batched_info
 
     def _batched_segments_generator(
         self, features, tokenizer, chunks_metadata, batch_size, options, log_progress
