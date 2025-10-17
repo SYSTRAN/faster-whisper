@@ -1778,7 +1778,7 @@ class WhisperModel:
 
         Returns:
             language: Detected language.
-            languege_probability: Probability of the detected language.
+            language_probability: Probability of the detected language.
             all_language_probs: List of tuples with all language names and probabilities.
         """
         assert (
