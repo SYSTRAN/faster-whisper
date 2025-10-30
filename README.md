@@ -56,7 +56,7 @@ For reference, here's the time and memory usage that are required to transcribe 
 
 ## Requirements
 
-* Python 3.9 or greater
+* Python 3.10 or greater
 
 Unlike openai-whisper, FFmpeg does **not** need to be installed on the system. The audio is decoded with the Python library [PyAV](https://github.com/PyAV-Org/PyAV) which bundles the FFmpeg libraries in its package.
 
