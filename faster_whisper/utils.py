@@ -5,7 +5,6 @@ import re
 from typing import List, Optional, Union
 
 import huggingface_hub
-import requests
 
 from tqdm.auto import tqdm
 
@@ -114,24 +113,7 @@ def download_model(
     if use_auth_token is not None:
         kwargs["token"] = use_auth_token
 
-    try:
-        return huggingface_hub.snapshot_download(repo_id, **kwargs)
-    except (
-        huggingface_hub.utils.HfHubHTTPError,
-        requests.exceptions.ConnectionError,
-    ) as exception:
-        logger = get_logger()
-        logger.warning(
-            "An error occured while synchronizing the model %s from the Hugging Face Hub:\n%s",
-            repo_id,
-            exception,
-        )
-        logger.warning(
-            "Trying to load the model directly from the local cache, if it exists."
-        )
-
-        kwargs["local_files_only"] = True
-        return huggingface_hub.snapshot_download(repo_id, **kwargs)
+    return huggingface_hub.snapshot_download(repo_id, **kwargs)
 
 
 def format_timestamp(
