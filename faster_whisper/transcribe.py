@@ -418,23 +418,34 @@ class BatchedInferencePipeline:
                     "Set 'vad_filter' to True or provide 'clip_timestamps'."
                 )
 
+            clip_timestamps_provided = False
             audio_chunks, chunks_metadata = collect_chunks(
                 audio, clip_timestamps, max_duration=chunk_length
             )
 
         else:
+            clip_timestamps_provided = True
             clip_timestamps = [
                 {k: int(v * sampling_rate) for k, v in segment.items()}
                 for segment in clip_timestamps
             ]
 
             audio_chunks, chunks_metadata = [], []
-            for clip in clip_timestamps:
+            for i, clip in enumerate(clip_timestamps):
                 audio_chunks.append(audio[clip["start"] : clip["end"]])
+
+                clip_duration = (clip["end"] - clip["start"]) / sampling_rate
+                if clip_duration > 30:
+                    self.model.logger.warning(
+                        "Segment %d is longer than 30 seconds, "
+                        "only the first 30 seconds will be transcribed",
+                        i,
+                    )
+
                 chunks_metadata.append(
                     {
                         "offset": clip["start"] / sampling_rate,
-                        "duration": (clip["end"] - clip["start"]) / sampling_rate,
+                        "duration": clip_duration,
                         "segments": [clip],
                     }
                 )
@@ -559,7 +570,10 @@ class BatchedInferencePipeline:
             options,
             log_progress,
         )
-        segments = restore_speech_timestamps(segments, clip_timestamps, sampling_rate)
+        if not clip_timestamps_provided:
+            segments = restore_speech_timestamps(
+                segments, clip_timestamps, sampling_rate
+            )
 
         return segments, info
 

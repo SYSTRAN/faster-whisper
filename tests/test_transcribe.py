@@ -290,3 +290,26 @@ def test_cliptimestamps_segments(jfk_path):
             " And so my fellow Americans ask not what your country can do for you, "
             "ask what you can do for your country."
         )
+
+
+def test_cliptimestamps_timings(physcisworks_path):
+    model = WhisperModel("tiny")
+    pipeline = BatchedInferencePipeline(model=model)
+
+    audio = decode_audio(physcisworks_path)
+    clip_timestamps = [{"start": 0.0, "end": 5.0}, {"start": 6.0, "end": 15.0}]
+    transcripts = [
+        " Now I want to return to the conservation of mechanical energy.",
+        (
+            " I have here a pendulum. I have an object that weighs 15 kilograms"
+            " and I can lift it up one meter, which I have done now."
+        ),
+    ]
+    segments, info = pipeline.transcribe(audio, clip_timestamps=clip_timestamps)
+    segments = list(segments)
+
+    assert len(segments) == 2
+    for segment, clip, transcript in zip(segments, clip_timestamps, transcripts):
+        assert clip["start"] == segment.start
+        assert clip["end"] == segment.end
+        assert segment.text == transcript
