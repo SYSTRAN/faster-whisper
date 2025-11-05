@@ -123,36 +123,36 @@ def get_speech_timestamps(
 
         if (speech_prob >= threshold) and not triggered:
             triggered = True
-            current_speech['start'] = cur_sample
+            current_speech["start"] = cur_sample
             continue
 
-        if triggered and (cur_sample - current_speech['start'] > max_speech_samples):
+        if triggered and (cur_sample - current_speech["start"] > max_speech_samples):
             if use_max_poss_sil_at_max_speech and possible_ends:
                 prev_end, dur = max(possible_ends, key=lambda x: x[1])
-                current_speech['end'] = prev_end
+                current_speech["end"] = prev_end
                 speeches.append(current_speech)
                 current_speech = {}
                 next_start = prev_end + dur
 
                 if next_start < prev_end + cur_sample:
-                    current_speech['start'] = next_start
+                    current_speech["start"] = next_start
                 else:
                     triggered = False
                 prev_end = next_start = temp_end = 0
                 possible_ends = []
             else:
                 if prev_end:
-                    current_speech['end'] = prev_end
+                    current_speech["end"] = prev_end
                     speeches.append(current_speech)
                     current_speech = {}
                     if next_start < prev_end:
                         triggered = False
                     else:
-                        current_speech['start'] = next_start
+                        current_speech["start"] = next_start
                     prev_end = next_start = temp_end = 0
                     possible_ends = []
                 else:
-                    current_speech['end'] = cur_sample
+                    current_speech["end"] = cur_sample
                     speeches.append(current_speech)
                     current_speech = {}
                     prev_end = next_start = temp_end = 0
@@ -174,8 +174,10 @@ def get_speech_timestamps(
             if sil_dur_now < min_silence_samples:
                 continue
             else:
-                current_speech['end'] = temp_end
-                if (current_speech['end'] - current_speech['start']) > min_speech_samples:
+                current_speech["end"] = temp_end
+                if (
+                    current_speech["end"] - current_speech["start"]
+                ) > min_speech_samples:
                     speeches.append(current_speech)
                 current_speech = {}
                 prev_end = next_start = temp_end = 0
