@@ -27,8 +27,8 @@ class VadOptions:
       min_speech_duration_ms: Final speech chunks shorter min_speech_duration_ms are thrown out.
       max_speech_duration_s: Maximum duration of speech chunks in seconds. Chunks longer
         than max_speech_duration_s will be split at the timestamp of the last silence that
-        lasts more than 100ms (if any), to prevent aggressive cutting. Otherwise, they will be
-        split aggressively just before max_speech_duration_s.
+        lasts more than min_silence_at_max_speech (if any), to prevent aggressive cutting.
+        Otherwise, they will be split aggressively just before max_speech_duration_s.
       min_silence_duration_ms: In the end of each speech chunk wait for min_silence_duration_ms
         before separating it
       speech_pad_ms: Final speech chunks are padded by speech_pad_ms each side
