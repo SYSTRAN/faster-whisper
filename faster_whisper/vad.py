@@ -32,6 +32,10 @@ class VadOptions:
       min_silence_duration_ms: In the end of each speech chunk wait for min_silence_duration_ms
         before separating it
       speech_pad_ms: Final speech chunks are padded by speech_pad_ms each side
+      min_silence_at_max_speech: Minimum silence duration in ms which is used to avoid abrupt cuts
+          when max_speech_duration_s is reached.
+      use_max_poss_sil_at_max_speech: Whether to use the maximum possible silence at
+          max_speech_duration_s or not. If not, the last silence is used.
     """
 
     threshold: float = 0.5
@@ -40,6 +44,8 @@ class VadOptions:
     max_speech_duration_s: float = float("inf")
     min_silence_duration_ms: int = 2000
     speech_pad_ms: int = 400
+    min_silence_at_max_speech: int = 98
+    use_max_poss_sil_at_max_speech: bool = True
 
 
 def get_speech_timestamps(
@@ -69,6 +75,9 @@ def get_speech_timestamps(
     min_silence_duration_ms = vad_options.min_silence_duration_ms
     window_size_samples = 512
     speech_pad_ms = vad_options.speech_pad_ms
+    min_silence_at_max_speech = vad_options.min_silence_at_max_speech
+    use_max_poss_sil_at_max_speech = vad_options.use_max_poss_sil_at_max_speech
+
     min_speech_samples = sampling_rate * min_speech_duration_ms / 1000
     speech_pad_samples = sampling_rate * speech_pad_ms / 1000
     max_speech_samples = (
@@ -77,7 +86,7 @@ def get_speech_timestamps(
         - 2 * speech_pad_samples
     )
     min_silence_samples = sampling_rate * min_silence_duration_ms / 1000
-    min_silence_samples_at_max_speech = sampling_rate * 98 / 1000
+    min_silence_samples_at_max_speech = sampling_rate * min_silence_at_max_speech / 1000
 
     audio_length_samples = len(audio)
 
@@ -91,6 +100,8 @@ def get_speech_timestamps(
     triggered = False
     speeches = []
     current_speech = {}
+    possible_ends = []
+
     if neg_threshold is None:
         neg_threshold = max(threshold - 0.15, 0.01)
 
@@ -100,55 +111,76 @@ def get_speech_timestamps(
     prev_end = next_start = 0
 
     for i, speech_prob in enumerate(speech_probs):
+        cur_sample = window_size_samples * i
+
         if (speech_prob >= threshold) and temp_end:
+            sil_dur = cur_sample - temp_end
+            if sil_dur > min_silence_samples_at_max_speech:
+                possible_ends.append((temp_end, sil_dur))
             temp_end = 0
             if next_start < prev_end:
-                next_start = window_size_samples * i
+                next_start = cur_sample
 
         if (speech_prob >= threshold) and not triggered:
             triggered = True
-            current_speech["start"] = window_size_samples * i
+            current_speech['start'] = cur_sample
             continue
 
-        if (
-            triggered
-            and (window_size_samples * i) - current_speech["start"] > max_speech_samples
-        ):
-            if prev_end:
-                current_speech["end"] = prev_end
+        if triggered and (cur_sample - current_speech['start'] > max_speech_samples):
+            if use_max_poss_sil_at_max_speech and possible_ends:
+                prev_end, dur = max(possible_ends, key=lambda x: x[1])
+                current_speech['end'] = prev_end
                 speeches.append(current_speech)
                 current_speech = {}
-                # previously reached silence (< neg_thres) and is still not speech (< thres)
-                if next_start < prev_end:
-                    triggered = False
+                next_start = prev_end + dur
+
+                if next_start < prev_end + cur_sample:
+                    current_speech['start'] = next_start
                 else:
-                    current_speech["start"] = next_start
+                    triggered = False
                 prev_end = next_start = temp_end = 0
+                possible_ends = []
             else:
-                current_speech["end"] = window_size_samples * i
-                speeches.append(current_speech)
-                current_speech = {}
-                prev_end = next_start = temp_end = 0
-                triggered = False
-                continue
+                if prev_end:
+                    current_speech['end'] = prev_end
+                    speeches.append(current_speech)
+                    current_speech = {}
+                    if next_start < prev_end:
+                        triggered = False
+                    else:
+                        current_speech['start'] = next_start
+                    prev_end = next_start = temp_end = 0
+                    possible_ends = []
+                else:
+                    current_speech['end'] = cur_sample
+                    speeches.append(current_speech)
+                    current_speech = {}
+                    prev_end = next_start = temp_end = 0
+                    triggered = False
+                    possible_ends = []
+                    continue
 
         if (speech_prob < neg_threshold) and triggered:
             if not temp_end:
-                temp_end = window_size_samples * i
-            # condition to avoid cutting in very short silence
-            if (window_size_samples * i) - temp_end > min_silence_samples_at_max_speech:
+                temp_end = cur_sample
+            sil_dur_now = cur_sample - temp_end
+
+            if (
+                not use_max_poss_sil_at_max_speech
+                and sil_dur_now > min_silence_samples_at_max_speech
+            ):
                 prev_end = temp_end
-            if (window_size_samples * i) - temp_end < min_silence_samples:
+
+            if sil_dur_now < min_silence_samples:
                 continue
             else:
-                current_speech["end"] = temp_end
-                if (
-                    current_speech["end"] - current_speech["start"]
-                ) > min_speech_samples:
+                current_speech['end'] = temp_end
+                if (current_speech['end'] - current_speech['start']) > min_speech_samples:
                     speeches.append(current_speech)
                 current_speech = {}
                 prev_end = next_start = temp_end = 0
                 triggered = False
+                possible_ends = []
                 continue
 
     if (
