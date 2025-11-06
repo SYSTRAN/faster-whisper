@@ -105,7 +105,6 @@ def download_model(
 
     if output_dir is not None:
         kwargs["local_dir"] = output_dir
-        kwargs["local_dir_use_symlinks"] = False
 
     if cache_dir is not None:
         kwargs["cache_dir"] = cache_dir
