@@ -141,20 +141,20 @@ class BatchedInferencePipeline:
             )
             segmented_outputs.append(
                 [
-                    dict(
-                        text=tokenizer.decode(subsegment["tokens"]),
-                        avg_logprob=output["avg_logprob"],
-                        no_speech_prob=output["no_speech_prob"],
-                        tokens=subsegment["tokens"],
-                        start=subsegment["start"],
-                        end=subsegment["end"],
-                        compression_ratio=get_compression_ratio(
+                    {
+                        "text": tokenizer.decode(subsegment["tokens"]),
+                        "avg_logprob": output["avg_logprob"],
+                        "no_speech_prob": output["no_speech_prob"],
+                        "tokens": subsegment["tokens"],
+                        "start": subsegment["start"],
+                        "end": subsegment["end"],
+                        "compression_ratio": get_compression_ratio(
                             tokenizer.decode(subsegment["tokens"])
                         ),
-                        seek=int(
+                        "seek": int(
                             chunk_metadata["offset"] * self.model.frames_per_second
                         ),
-                    )
+                    }
                     for subsegment in subsegments
                 ]
             )
@@ -242,11 +242,11 @@ class BatchedInferencePipeline:
             cum_logprob = result.scores[0] * (seq_len**options.length_penalty)
 
             output.append(
-                dict(
-                    avg_logprob=cum_logprob / (seq_len + 1),
-                    no_speech_prob=result.no_speech_prob,
-                    tokens=result.sequences_ids[0],
-                )
+                {
+                    "avg_logprob": cum_logprob / (seq_len + 1),
+                    "no_speech_prob": result.no_speech_prob,
+                    "tokens": result.sequences_ids[0],
+                }
             )
 
         return encoder_output, output
@@ -1059,12 +1059,12 @@ class WhisperModel:
                 end_time = time_offset + end_timestamp_position * self.time_precision
 
                 current_segments.append(
-                    dict(
-                        seek=seek,
-                        start=start_time,
-                        end=end_time,
-                        tokens=sliced_tokens,
-                    )
+                    {
+                        "seek": seek,
+                        "start": start_time,
+                        "end": end_time,
+                        "tokens": sliced_tokens,
+                    }
                 )
                 last_slice = current_slice
 
@@ -1088,12 +1088,12 @@ class WhisperModel:
                 duration = last_timestamp_position * self.time_precision
 
             current_segments.append(
-                dict(
-                    seek=seek,
-                    start=time_offset,
-                    end=time_offset + duration,
-                    tokens=tokens,
-                )
+                {
+                    "seek": seek,
+                    "start": time_offset,
+                    "end": time_offset + duration,
+                    "tokens": tokens,
+                }
             )
 
             seek += segment_size
@@ -1633,12 +1633,12 @@ class WhisperModel:
 
                     if timing["word"]:
                         words.append(
-                            dict(
-                                word=timing["word"],
-                                start=round(time_offset + timing["start"], 2),
-                                end=round(time_offset + timing["end"], 2),
-                                probability=timing["probability"],
-                            )
+                            {
+                                "word": timing["word"],
+                                "start": round(time_offset + timing["start"], 2),
+                                "end": round(time_offset + timing["end"], 2),
+                                "probability": timing["probability"],
+                            }
                         )
 
                     saved_tokens += len(timing["tokens"])
@@ -1751,13 +1751,13 @@ class WhisperModel:
 
             return_list.append(
                 [
-                    dict(
-                        word=word,
-                        tokens=tokens,
-                        start=start,
-                        end=end,
-                        probability=probability,
-                    )
+                    {
+                        "word": word,
+                        "tokens": tokens,
+                        "start": start,
+                        "end": end,
+                        "probability": probability,
+                    }
                     for word, tokens, start, end, probability in zip(
                         words, word_tokens, start_times, end_times, word_probabilities
                     )
