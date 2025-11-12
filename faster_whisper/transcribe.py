@@ -95,6 +95,7 @@ class TranscriptionOptions:
     clip_timestamps: Union[str, List[float]]
     hallucination_silence_threshold: Optional[float]
     hotwords: Optional[str]
+    retry_on_leftover_audio: bool
 
 
 @dataclass
@@ -296,6 +297,7 @@ class BatchedInferencePipeline:
         hotwords: Optional[str] = None,
         language_detection_threshold: Optional[float] = 0.5,
         language_detection_segments: int = 1,
+        retry_on_leftover_audio: bool = False,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """transcribe audio in chunks in batched fashion and return with language info.
 
@@ -550,6 +552,7 @@ class BatchedInferencePipeline:
             multilingual=multilingual,
             without_timestamps=without_timestamps,
             max_initial_timestamp=0.0,
+            retry_on_leftover_audio=False,
         )
 
         info = TranscriptionInfo(
@@ -788,6 +791,7 @@ class WhisperModel:
         hotwords: Optional[str] = None,
         language_detection_threshold: Optional[float] = 0.5,
         language_detection_segments: int = 1,
+        retry_on_leftover_audio: bool = False,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
 
@@ -857,6 +861,9 @@ class WhisperModel:
           language_detection_threshold: If the maximum probability of the language tokens is higher
            than this value, the language is detected.
           language_detection_segments: Number of segments to consider for the language detection.
+          retry_on_leftover_audio:
+            If True, the model will retry transcription on the audio that's outside
+            of the timestamps
         Returns:
           A tuple with:
 
@@ -1000,6 +1007,7 @@ class WhisperModel:
             clip_timestamps=clip_timestamps,
             hallucination_silence_threshold=hallucination_silence_threshold,
             hotwords=hotwords,
+            retry_on_leftover_audio=retry_on_leftover_audio,
         )
 
         segments = self.generate_segments(
@@ -1285,7 +1293,7 @@ class WhisperModel:
                     options.append_punctuations,
                     last_speech_timestamp=last_speech_timestamp,
                 )
-                if not single_timestamp_ending:
+                if not single_timestamp_ending and options.retry_on_leftover_audio:
                     last_word_end = get_end(current_segments)
                     if last_word_end is not None and last_word_end > time_offset:
                         seek = round(last_word_end * self.frames_per_second)
