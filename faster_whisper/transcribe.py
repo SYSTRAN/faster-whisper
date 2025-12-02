@@ -298,7 +298,7 @@ class BatchedInferencePipeline:
         language_detection_segments: int = 1,
     ) -> Union[
         Tuple[Iterable[Segment], TranscriptionInfo],
-        List[Tuple[List[Segment], TranscriptionInfo]],
+        Tuple[List[List[Segment]], TranscriptionInfo],
     ]:
         """Transcribe audio in chunks in batched fashion and return with language info.
 
@@ -379,9 +379,9 @@ class BatchedInferencePipeline:
             - a generator over transcribed segments
             - an instance of TranscriptionInfo
 
-          For multiple audios: A list of tuples, each containing:
-            - a list of transcribed segments
-            - an instance of TranscriptionInfo
+          For multiple audios: A tuple with:
+            - a list of segment lists (one per audio)
+            - an instance of TranscriptionInfo (using first audio's duration)
         """
 
         is_batch = isinstance(audio, list)
@@ -595,7 +595,7 @@ class BatchedInferencePipeline:
         clip_timestamps_provided = clip_timestamps is not None
 
         if is_batch:
-            grouped_segments = self._batched_segments_generator_grouped(
+            segments = self._batched_segments_generator_grouped(
                 all_features,
                 tokenizer,
                 all_chunks_metadata,
@@ -605,20 +605,17 @@ class BatchedInferencePipeline:
                 log_progress,
             )
 
-            results = []
-            for i, audio_segments in enumerate(grouped_segments):
-                info = TranscriptionInfo(
-                    language=language,
-                    language_probability=language_probability,
-                    duration=audio_infos[i]["duration"],
-                    duration_after_vad=audio_infos[i]["duration_after_vad"],
-                    transcription_options=options,
-                    vad_options=_vad_parameters,
-                    all_language_probs=all_language_probs,
-                )
-                results.append((audio_segments, info))
+            info = TranscriptionInfo(
+                language=language,
+                language_probability=language_probability,
+                duration=audio_infos[0]["duration"],
+                duration_after_vad=audio_infos[0]["duration_after_vad"],
+                transcription_options=options,
+                vad_options=_vad_parameters,
+                all_language_probs=all_language_probs,
+            )
 
-            return results
+            return segments, info
         else:
             info = TranscriptionInfo(
                 language=language,

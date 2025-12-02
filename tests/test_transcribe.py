@@ -308,19 +308,18 @@ def test_transcribe_multiple_audios(jfk_path):
     model = WhisperModel("tiny")
     batched_model = BatchedInferencePipeline(model=model)
 
-    results = batched_model.transcribe(
+    all_segments, info = batched_model.transcribe(
         [jfk_path, jfk_path, jfk_path],
         batch_size=8,
     )
 
-    assert isinstance(results, list)
-    assert len(results) == 3
+    assert isinstance(all_segments, list)
+    assert len(all_segments) == 3
+    assert info.language == "en"
+    assert info.language_probability > 0.7
+    assert info.duration == 11
 
-    for segments, info in results:
-        assert info.language == "en"
-        assert info.language_probability > 0.7
-        assert info.duration == 11
-
+    for segments in all_segments:
         assert isinstance(segments, list)
         assert len(segments) >= 1
 
@@ -339,16 +338,17 @@ def test_transcribe_multiple_audios_with_word_timestamps(jfk_path):
     model = WhisperModel("tiny")
     batched_model = BatchedInferencePipeline(model=model)
 
-    results = batched_model.transcribe(
+    all_segments, info = batched_model.transcribe(
         [jfk_path, jfk_path],
         batch_size=8,
         word_timestamps=True,
         without_timestamps=False,
     )
 
-    assert len(results) == 2
+    assert len(all_segments) == 2
+    assert info.language == "en"
 
-    for segments, info in results:
+    for segments in all_segments:
         assert isinstance(segments, list)
         for segment in segments:
             assert segment.words is not None
