@@ -383,7 +383,7 @@ class BatchedInferencePipeline:
             - a list of transcribed segments
             - an instance of TranscriptionInfo
         """
-        
+
         is_batch = isinstance(audio, list)
         audios = audio if is_batch else [audio]
 
@@ -485,7 +485,10 @@ class BatchedInferencePipeline:
                 format_timestamp(duration - duration_after_vad),
             )
             features = (
-                [self.model.feature_extractor(chunk)[..., :-1] for chunk in audio_chunks]
+                [
+                    self.model.feature_extractor(chunk)[..., :-1]
+                    for chunk in audio_chunks
+                ]
                 if duration_after_vad
                 else []
             )
