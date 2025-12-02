@@ -301,3 +301,65 @@ def test_transcribe_batch_multiple_audios(physcisworks_path):
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
     assert len(segments) > 3
+
+
+def test_transcribe_multiple_audios(jfk_path):
+    """Test transcribe() with a list of multiple audios."""
+    model = WhisperModel("tiny")
+    batched_model = BatchedInferencePipeline(model=model)
+
+    # 
+    results = batched_model.transcribe(
+        [jfk_path, jfk_path, jfk_path],
+        batch_size=8,
+    )
+
+    
+    assert isinstance(results, list)
+    assert len(results) == 3
+
+    for segments, info in results:
+        assert info.language == "en"
+        assert info.language_probability > 0.7
+        assert info.duration == 11
+
+        
+        assert isinstance(segments, list)
+        assert len(segments) >= 1
+
+        
+        full_text = "".join(segment.text for segment in segments)
+        assert "Americans" in full_text
+        assert "country" in full_text
+
+    
+    segments, info = batched_model.transcribe(jfk_path)
+    assert info.language == "en"
+    segments = list(segments)
+    assert len(segments) >= 1
+
+
+def test_transcribe_multiple_audios_with_word_timestamps(jfk_path):
+    """Test transcribe() with multiple audios and word timestamps."""
+    model = WhisperModel("tiny")
+    batched_model = BatchedInferencePipeline(model=model)
+
+    results = batched_model.transcribe(
+        [jfk_path, jfk_path],
+        batch_size=8,
+        word_timestamps=True,
+        without_timestamps=False,
+    )
+
+    assert len(results) == 2
+
+    for segments, info in results:
+        assert isinstance(segments, list)
+        for segment in segments:
+            assert segment.words is not None
+            assert len(segment.words) > 0
+            
+            for word in segment.words:
+                assert word.start is not None
+                assert word.end is not None
+                assert word.word is not None

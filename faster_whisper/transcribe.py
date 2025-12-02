@@ -254,7 +254,7 @@ class BatchedInferencePipeline:
 
     def transcribe(
         self,
-        audio: Union[str, BinaryIO, np.ndarray],
+        audio: Union[str, BinaryIO, np.ndarray, List[Union[str, BinaryIO, np.ndarray]]],
         language: Optional[str] = None,
         task: str = "transcribe",
         log_progress: bool = False,
@@ -297,11 +297,18 @@ class BatchedInferencePipeline:
         hotwords: Optional[str] = None,
         language_detection_threshold: Optional[float] = 0.5,
         language_detection_segments: int = 1,
-    ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
-        """transcribe audio in chunks in batched fashion and return with language info.
+    ) -> Union[
+        Tuple[Iterable[Segment], TranscriptionInfo],
+        List[Tuple[List[Segment], TranscriptionInfo]],
+    ]:
+        """Transcribe audio in chunks in batched fashion and return with language info.
+
+        Supports both single audio and batch processing of multiple audios.
+        When a list of audios is provided, returns a list of results (one per audio).
 
         Arguments:
             audio: Path to the input file (or a file-like object), or the audio waveform.
+                Can also be a list of audio inputs for batch processing.
             language: The language spoken in the audio. It should be a language code such
                 as "en" or "fr". If not set, the language will be detected in the first 30 seconds
                 of audio.
@@ -369,13 +376,20 @@ class BatchedInferencePipeline:
                 When word_timestamps is True, skip silent periods longer than this threshold
                 (in seconds) when a possible hallucination is detected. set as None.
         Returns:
-          A tuple with:
-
+          For single audio: A tuple with:
             - a generator over transcribed segments
             - an instance of TranscriptionInfo
+
+          For multiple audios: A list of tuples, each containing:
+            - a list of transcribed segments
+            - an instance of TranscriptionInfo
         """
+        # Normalize input: detect batch mode and convert to list
+        is_batch = isinstance(audio, list)
+        audios = audio if is_batch else [audio]
 
         sampling_rate = self.model.feature_extractor.sampling_rate
+        _chunk_length = chunk_length or self.model.feature_extractor.chunk_length
 
         if multilingual and not self.model.model.is_multilingual:
             self.model.logger.warning(
@@ -384,61 +398,94 @@ class BatchedInferencePipeline:
             )
             multilingual = False
 
-        if not isinstance(audio, np.ndarray):
-            audio = decode_audio(audio, sampling_rate=sampling_rate)
-        duration = audio.shape[0] / sampling_rate
-
-        self.model.logger.info(
-            "Processing audio with duration %s", format_timestamp(duration)
-        )
-
-        chunk_length = chunk_length or self.model.feature_extractor.chunk_length
-        # if no segment split is provided, use vad_model and generate segments
-        if not clip_timestamps:
-            if vad_filter:
-                if vad_parameters is None:
-                    vad_parameters = VadOptions(
-                        max_speech_duration_s=chunk_length,
-                        min_silence_duration_ms=160,
-                    )
-                elif isinstance(vad_parameters, dict):
-                    if "max_speech_duration_s" in vad_parameters.keys():
-                        vad_parameters.pop("max_speech_duration_s")
-
-                    vad_parameters = VadOptions(
-                        **vad_parameters, max_speech_duration_s=chunk_length
-                    )
-
-                active_segments = get_speech_timestamps(audio, vad_parameters)
-                clip_timestamps = merge_segments(active_segments, vad_parameters)
-            # run the audio if it is less than 30 sec even without clip_timestamps
-            elif duration < chunk_length:
-                clip_timestamps = [{"start": 0, "end": audio.shape[0]}]
-            else:
-                raise RuntimeError(
-                    "No clip timestamps found. "
-                    "Set 'vad_filter' to True or provide 'clip_timestamps'."
+        # Prepare VAD options once if needed
+        _vad_parameters = None
+        if vad_filter:
+            if vad_parameters is None:
+                _vad_parameters = VadOptions(
+                    max_speech_duration_s=_chunk_length,
+                    min_silence_duration_ms=160,
                 )
+            elif isinstance(vad_parameters, dict):
+                vad_params_copy = vad_parameters.copy()
+                if "max_speech_duration_s" in vad_params_copy.keys():
+                    vad_params_copy.pop("max_speech_duration_s")
+                _vad_parameters = VadOptions(
+                    **vad_params_copy, max_speech_duration_s=_chunk_length
+                )
+            else:
+                _vad_parameters = vad_parameters
 
-        duration_after_vad = (
-            sum((segment["end"] - segment["start"]) for segment in clip_timestamps)
-            / sampling_rate
-        )
+        # Process all audios: decode, VAD, extract features
+        all_features = []
+        all_chunks_metadata = []
+        audio_infos = []  # Per-audio metadata for TranscriptionInfo
+        audio_boundaries = [0]  # Track chunk boundaries per audio
 
-        self.model.logger.info(
-            "VAD filter removed %s of audio",
-            format_timestamp(duration - duration_after_vad),
-        )
+        for audio_item in audios:
+            # Decode audio
+            if not isinstance(audio_item, np.ndarray):
+                audio_item = decode_audio(audio_item, sampling_rate=sampling_rate)
 
-        audio_chunks, chunks_metadata = collect_chunks(audio, clip_timestamps)
-        features = (
-            [self.model.feature_extractor(chunk)[..., :-1] for chunk in audio_chunks]
-            if duration_after_vad
-            else []
-        )
+            duration = audio_item.shape[0] / sampling_rate
 
+            self.model.logger.info(
+                "Processing audio with duration %s", format_timestamp(duration)
+            )
+
+            # Determine clip_timestamps for this audio
+            audio_clip_timestamps = clip_timestamps
+            if not audio_clip_timestamps:
+                if vad_filter:
+                    active_segments = get_speech_timestamps(audio_item, _vad_parameters)
+                    audio_clip_timestamps = merge_segments(
+                        active_segments, _vad_parameters
+                    )
+                elif duration < _chunk_length:
+                    audio_clip_timestamps = [{"start": 0, "end": audio_item.shape[0]}]
+                else:
+                    raise RuntimeError(
+                        "No clip timestamps found. "
+                        "Set 'vad_filter' to True or provide 'clip_timestamps'."
+                    )
+
+            duration_after_vad = (
+                sum(
+                    (segment["end"] - segment["start"])
+                    for segment in audio_clip_timestamps
+                )
+                / sampling_rate
+            )
+
+            self.model.logger.info(
+                "VAD filter removed %s of audio",
+                format_timestamp(duration - duration_after_vad),
+            )
+
+            # Collect chunks and extract features
+            audio_chunks, chunks_meta = collect_chunks(audio_item, audio_clip_timestamps)
+            features = (
+                [self.model.feature_extractor(chunk)[..., :-1] for chunk in audio_chunks]
+                if duration_after_vad
+                else []
+            )
+
+            # Store per-audio info
+            audio_infos.append(
+                {
+                    "duration": duration,
+                    "duration_after_vad": duration_after_vad,
+                    "clip_timestamps": audio_clip_timestamps,
+                }
+            )
+
+            # Track boundaries and collect
+            all_features.extend(features)
+            all_chunks_metadata.extend(chunks_meta)
+            audio_boundaries.append(len(all_features))
+
+        # Language detection
         all_language_probs = None
-        # detecting the language if not provided
         if language is None:
             if not self.model.model.is_multilingual:
                 language = "en"
@@ -450,12 +497,12 @@ class BatchedInferencePipeline:
                     all_language_probs,
                 ) = self.model.detect_language(
                     features=np.concatenate(
-                        features
+                        all_features
                         + [
                             np.full((self.model.model.n_mels, 1), -1.5, dtype="float32")
                         ],
                         axis=1,
-                    ),  # add a dummy feature to account for empty audio
+                    ),
                     language_detection_segments=language_detection_segments,
                     language_detection_threshold=language_detection_threshold,
                 )
@@ -482,8 +529,11 @@ class BatchedInferencePipeline:
             language=language,
         )
 
-        features = (
-            np.stack([pad_or_trim(feature) for feature in features]) if features else []
+        # Stack features
+        all_features = (
+            np.stack([pad_or_trim(feature) for feature in all_features])
+            if all_features
+            else []
         )
 
         options = TranscriptionOptions(
@@ -523,26 +573,54 @@ class BatchedInferencePipeline:
             max_initial_timestamp=0.0,
         )
 
-        info = TranscriptionInfo(
-            language=language,
-            language_probability=language_probability,
-            duration=duration,
-            duration_after_vad=duration_after_vad,
-            transcription_options=options,
-            vad_options=vad_parameters,
-            all_language_probs=all_language_probs,
-        )
+        if is_batch:
+            # Batch mode: return grouped results per audio
+            grouped_segments = self._batched_segments_generator_grouped(
+                all_features,
+                tokenizer,
+                all_chunks_metadata,
+                audio_boundaries,
+                batch_size,
+                options,
+                log_progress,
+            )
 
-        segments = self._batched_segments_generator(
-            features,
-            tokenizer,
-            chunks_metadata,
-            batch_size,
-            options,
-            log_progress,
-        )
+            results = []
+            for i, audio_segments in enumerate(grouped_segments):
+                info = TranscriptionInfo(
+                    language=language,
+                    language_probability=language_probability,
+                    duration=audio_infos[i]["duration"],
+                    duration_after_vad=audio_infos[i]["duration_after_vad"],
+                    transcription_options=options,
+                    vad_options=_vad_parameters,
+                    all_language_probs=all_language_probs,
+                )
+                results.append((audio_segments, info))
 
-        return segments, info
+            return results
+        else:
+            # Single audio: return generator
+            info = TranscriptionInfo(
+                language=language,
+                language_probability=language_probability,
+                duration=audio_infos[0]["duration"],
+                duration_after_vad=audio_infos[0]["duration_after_vad"],
+                transcription_options=options,
+                vad_options=_vad_parameters,
+                all_language_probs=all_language_probs,
+            )
+
+            segments = self._batched_segments_generator(
+                all_features,
+                tokenizer,
+                all_chunks_metadata,
+                batch_size,
+                options,
+                log_progress,
+            )
+
+            return segments, info
 
     def transcribe_batch_multiple_audios(
         self,
@@ -591,6 +669,14 @@ class BatchedInferencePipeline:
         language_detection_segments: int = 1,
         text_only: bool = False,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
+        """Deprecated: Use transcribe() with a list of audios instead."""
+        warn(
+            "transcribe_batch_multiple_audios() is deprecated, "
+            "use transcribe() with a list of audios instead",
+            DeprecationWarning,
+            2,
+        )
+
         sampling_rate = self.model.feature_extractor.sampling_rate
 
         if multilingual and not self.model.model.is_multilingual:
@@ -777,6 +863,91 @@ class BatchedInferencePipeline:
 
         pbar.close()
         self.last_speech_timestamp = 0.0
+
+    def _batched_segments_generator_grouped(
+        self,
+        features,
+        tokenizer,
+        chunks_metadata,
+        audio_boundaries,
+        batch_size,
+        options,
+        log_progress,
+    ):
+        """
+        Process batched features and return segments grouped by audio.
+
+        Args:
+            features: Stacked features for all audios
+            tokenizer: Tokenizer instance
+            chunks_metadata: Metadata for all chunks
+            audio_boundaries: List of indices marking where each audio's chunks start/end
+            batch_size: Batch size for processing
+            options: Transcription options
+            log_progress: Whether to show progress bar
+
+        Returns:
+            List of lists, where each inner list contains Segment objects for one audio
+        """
+        if len(features) == 0:
+            # Return empty lists for each audio
+            return [[] for _ in range(len(audio_boundaries) - 1)]
+
+        pbar = tqdm(total=len(features), disable=not log_progress, position=0)
+
+        # Collect all results first
+        all_results = []
+        for i in range(0, len(features), batch_size):
+            results = self.forward(
+                features[i : i + batch_size],
+                tokenizer,
+                chunks_metadata[i : i + batch_size],
+                options,
+            )
+            all_results.extend(results)
+            pbar.update(len(results))
+
+        pbar.close()
+        self.last_speech_timestamp = 0.0
+
+        # Group results by audio using boundaries
+        num_audios = len(audio_boundaries) - 1
+        grouped_segments = []
+
+        for audio_idx in range(num_audios):
+            start_idx = audio_boundaries[audio_idx]
+            end_idx = audio_boundaries[audio_idx + 1]
+
+            audio_segments = []
+            seg_idx = 0
+
+            for chunk_idx in range(start_idx, end_idx):
+                if chunk_idx < len(all_results):
+                    for segment in all_results[chunk_idx]:
+                        seg_idx += 1
+                        audio_segments.append(
+                            Segment(
+                                seek=segment["seek"],
+                                id=seg_idx,
+                                text=segment["text"],
+                                start=round(segment["start"], 3),
+                                end=round(segment["end"], 3),
+                                words=(
+                                    None
+                                    if not options.word_timestamps
+                                    else [Word(**word) for word in segment["words"]]
+                                ),
+                                tokens=segment["tokens"],
+                                avg_logprob=segment["avg_logprob"],
+                                no_speech_prob=segment["no_speech_prob"],
+                                compression_ratio=segment["compression_ratio"],
+                                temperature=options.temperatures[0],
+                            )
+                        )
+
+            grouped_segments.append(audio_segments)
+
+        return grouped_segments
 
 
 class WhisperModel:
