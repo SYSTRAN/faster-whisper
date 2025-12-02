@@ -25,7 +25,6 @@ from faster_whisper.vad import (
     VadOptions,
     collect_chunks,
     get_speech_timestamps,
-    merge_segments,
 )
 
 
@@ -125,7 +124,7 @@ class BatchedInferencePipeline:
         segmented_outputs = []
         segment_sizes = []
         for chunk_metadata, output in zip(chunks_metadata, outputs):
-            duration = chunk_metadata["end_time"] - chunk_metadata["start_time"]
+            duration = chunk_metadata["duration"]
             segment_size = int(ceil(duration) * self.model.frames_per_second)
             segment_sizes.append(segment_size)
             (
@@ -135,7 +134,7 @@ class BatchedInferencePipeline:
             ) = self.model._split_segments_by_timestamps(
                 tokenizer=tokenizer,
                 tokens=output["tokens"],
-                time_offset=chunk_metadata["start_time"],
+                time_offset=chunk_metadata["offset"],
                 segment_size=segment_size,
                 segment_duration=duration,
                 seek=0,
@@ -153,7 +152,7 @@ class BatchedInferencePipeline:
                             tokenizer.decode(subsegment["tokens"])
                         ),
                         seek=int(
-                            chunk_metadata["start_time"] * self.model.frames_per_second
+                            chunk_metadata["offset"] * self.model.frames_per_second
                         ),
                     )
                     for subsegment in subsegments
@@ -437,9 +436,8 @@ class BatchedInferencePipeline:
             audio_clip_timestamps = clip_timestamps
             if not audio_clip_timestamps:
                 if vad_filter:
-                    active_segments = get_speech_timestamps(audio_item, _vad_parameters)
-                    audio_clip_timestamps = merge_segments(
-                        active_segments, _vad_parameters
+                    audio_clip_timestamps = get_speech_timestamps(
+                        audio_item, _vad_parameters
                     )
                 elif duration < _chunk_length:
                     audio_clip_timestamps = [{"start": 0, "end": audio_item.shape[0]}]
@@ -463,7 +461,9 @@ class BatchedInferencePipeline:
             )
 
             # Collect chunks and extract features
-            audio_chunks, chunks_meta = collect_chunks(audio_item, audio_clip_timestamps)
+            audio_chunks, chunks_meta = collect_chunks(
+                audio_item, audio_clip_timestamps, max_duration=_chunk_length
+            )
             features = (
                 [self.model.feature_extractor(chunk)[..., :-1] for chunk in audio_chunks]
                 if duration_after_vad
@@ -794,7 +794,7 @@ class BatchedInferencePipeline:
         )
 
         chunks_metadata = [
-            {"start_time": 0, "end_time": a.shape[0] / sampling_rate}
+            {"offset": 0, "duration": a.shape[0] / sampling_rate}
             for a in processed_audios
         ]
 
@@ -963,6 +963,7 @@ class WhisperModel:
         local_files_only: bool = False,
         files: dict = None,
         revision: Optional[str] = None,
+        use_auth_token: Optional[Union[str, bool]] = None,
         **model_kwargs,
     ):
         """Initializes the Whisper model.
@@ -997,6 +998,8 @@ class WhisperModel:
           revision:
             An optional Git revision id which can be a branch name, a tag, or a
             commit hash.
+          use_auth_token: HuggingFace authentication token or True to use the
+            token stored by the HuggingFace config folder.
         """
         self.logger = get_logger()
 
@@ -1013,6 +1016,7 @@ class WhisperModel:
                 local_files_only=local_files_only,
                 cache_dir=download_root,
                 revision=revision,
+                use_auth_token=use_auth_token,
             )
 
         self.model = ctranslate2.models.Whisper(
@@ -2121,7 +2125,7 @@ class WhisperModel:
 
         Returns:
             language: Detected language.
-            languege_probability: Probability of the detected language.
+            language_probability: Probability of the detected language.
             all_language_probs: List of tuples with all language names and probabilities.
         """
         assert (
@@ -2194,7 +2198,7 @@ def restore_speech_timestamps(
 
         else:
             segment.start = ts_map.get_original_time(segment.start)
-            segment.end = ts_map.get_original_time(segment.end)
+            segment.end = ts_map.get_original_time(segment.end, is_end=True)
 
         yield segment
 
@@ -2229,6 +2233,7 @@ def get_suppressed_tokens(
             tokenizer.sot,
             tokenizer.sot_prev,
             tokenizer.sot_lm,
+            tokenizer.no_speech,
         ]
     )
 
