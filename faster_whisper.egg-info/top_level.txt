@@ -1,1 +1,0 @@
-faster_whisper
