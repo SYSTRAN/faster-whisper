@@ -383,7 +383,7 @@ class BatchedInferencePipeline:
             - a list of transcribed segments
             - an instance of TranscriptionInfo
         """
-        # Normalize input: detect batch mode and convert to list
+        
         is_batch = isinstance(audio, list)
         audios = audio if is_batch else [audio]
 
@@ -397,7 +397,6 @@ class BatchedInferencePipeline:
             )
             multilingual = False
 
-        # Prepare VAD options once if needed
         _vad_parameters = None
         if vad_filter:
             if vad_parameters is None:
@@ -415,14 +414,12 @@ class BatchedInferencePipeline:
             else:
                 _vad_parameters = vad_parameters
 
-        # Process all audios: decode, VAD, extract features
         all_features = []
         all_chunks_metadata = []
-        audio_infos = []  # Per-audio metadata for TranscriptionInfo
-        audio_boundaries = [0]  # Track chunk boundaries per audio
+        audio_infos = []
+        audio_boundaries = [0]
 
         for audio_item in audios:
-            # Decode audio
             if not isinstance(audio_item, np.ndarray):
                 audio_item = decode_audio(audio_item, sampling_rate=sampling_rate)
 
@@ -432,20 +429,48 @@ class BatchedInferencePipeline:
                 "Processing audio with duration %s", format_timestamp(duration)
             )
 
-            # Determine clip_timestamps for this audio
-            audio_clip_timestamps = clip_timestamps
-            if not audio_clip_timestamps:
-                if vad_filter:
-                    audio_clip_timestamps = get_speech_timestamps(
-                        audio_item, _vad_parameters
+            audio_clip_timestamps = None
+            clip_timestamps_provided = clip_timestamps is not None
+
+            if clip_timestamps_provided:
+                audio_clip_timestamps = [
+                    {k: int(v * sampling_rate) for k, v in segment.items()}
+                    for segment in clip_timestamps
+                ]
+                audio_chunks, chunks_meta = [], []
+                for i, clip in enumerate(audio_clip_timestamps):
+                    audio_chunks.append(audio_item[clip["start"] : clip["end"]])
+                    clip_duration = (clip["end"] - clip["start"]) / sampling_rate
+                    if clip_duration > 30:
+                        self.model.logger.warning(
+                            "Segment %d is longer than 30 seconds, "
+                            "only the first 30 seconds will be transcribed",
+                            i,
+                        )
+                    chunks_meta.append(
+                        {
+                            "offset": clip["start"] / sampling_rate,
+                            "duration": clip_duration,
+                            "segments": [clip],
+                        }
                     )
-                elif duration < _chunk_length:
-                    audio_clip_timestamps = [{"start": 0, "end": audio_item.shape[0]}]
-                else:
-                    raise RuntimeError(
-                        "No clip timestamps found. "
-                        "Set 'vad_filter' to True or provide 'clip_timestamps'."
-                    )
+            elif vad_filter:
+                audio_clip_timestamps = get_speech_timestamps(
+                    audio_item, _vad_parameters
+                )
+                audio_chunks, chunks_meta = collect_chunks(
+                    audio_item, audio_clip_timestamps, max_duration=_chunk_length
+                )
+            elif duration < _chunk_length:
+                audio_clip_timestamps = [{"start": 0, "end": audio_item.shape[0]}]
+                audio_chunks, chunks_meta = collect_chunks(
+                    audio_item, audio_clip_timestamps, max_duration=_chunk_length
+                )
+            else:
+                raise RuntimeError(
+                    "No clip timestamps found. "
+                    "Set 'vad_filter' to True or provide 'clip_timestamps'."
+                )
 
             duration_after_vad = (
                 sum(
@@ -459,18 +484,12 @@ class BatchedInferencePipeline:
                 "VAD filter removed %s of audio",
                 format_timestamp(duration - duration_after_vad),
             )
-
-            # Collect chunks and extract features
-            audio_chunks, chunks_meta = collect_chunks(
-                audio_item, audio_clip_timestamps, max_duration=_chunk_length
-            )
             features = (
                 [self.model.feature_extractor(chunk)[..., :-1] for chunk in audio_chunks]
                 if duration_after_vad
                 else []
             )
 
-            # Store per-audio info
             audio_infos.append(
                 {
                     "duration": duration,
@@ -479,12 +498,10 @@ class BatchedInferencePipeline:
                 }
             )
 
-            # Track boundaries and collect
             all_features.extend(features)
             all_chunks_metadata.extend(chunks_meta)
             audio_boundaries.append(len(all_features))
 
-        # Language detection
         all_language_probs = None
         if language is None:
             if not self.model.model.is_multilingual:
@@ -529,7 +546,6 @@ class BatchedInferencePipeline:
             language=language,
         )
 
-        # Stack features
         all_features = (
             np.stack([pad_or_trim(feature) for feature in all_features])
             if all_features
@@ -573,8 +589,9 @@ class BatchedInferencePipeline:
             max_initial_timestamp=0.0,
         )
 
+        clip_timestamps_provided = clip_timestamps is not None
+
         if is_batch:
-            # Batch mode: return grouped results per audio
             grouped_segments = self._batched_segments_generator_grouped(
                 all_features,
                 tokenizer,
@@ -600,7 +617,6 @@ class BatchedInferencePipeline:
 
             return results
         else:
-            # Single audio: return generator
             info = TranscriptionInfo(
                 language=language,
                 language_probability=language_probability,
@@ -619,6 +635,11 @@ class BatchedInferencePipeline:
                 options,
                 log_progress,
             )
+
+            if not clip_timestamps_provided:
+                segments = restore_speech_timestamps(
+                    segments, audio_infos[0]["clip_timestamps"], sampling_rate
+                )
 
             return segments, info
 
