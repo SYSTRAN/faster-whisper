@@ -308,24 +308,20 @@ def test_transcribe_multiple_audios(jfk_path):
     model = WhisperModel("tiny")
     batched_model = BatchedInferencePipeline(model=model)
 
-    all_segments, info = batched_model.transcribe(
+    result, info = batched_model.transcribe(
         [jfk_path, jfk_path, jfk_path],
         batch_size=8,
     )
 
-    assert isinstance(all_segments, list)
-    assert len(all_segments) == 3
     assert info.language == "en"
     assert info.language_probability > 0.7
     assert info.duration == 11
 
-    for segments in all_segments:
-        assert isinstance(segments, list)
-        assert len(segments) >= 1
+    segments = list(result)
+    assert len(segments) == 3
 
-        full_text = "".join(segment.text for segment in segments)
-        assert "Americans" in full_text
-        assert "country" in full_text
+    for segment in segments:
+        assert "Americans" in segment.text or "country" in segment.text
 
     segments, info = batched_model.transcribe(jfk_path)
     assert info.language == "en"
@@ -338,26 +334,26 @@ def test_transcribe_multiple_audios_with_word_timestamps(jfk_path):
     model = WhisperModel("tiny")
     batched_model = BatchedInferencePipeline(model=model)
 
-    all_segments, info = batched_model.transcribe(
+    result, info = batched_model.transcribe(
         [jfk_path, jfk_path],
         batch_size=8,
         word_timestamps=True,
         without_timestamps=False,
     )
 
-    assert len(all_segments) == 2
     assert info.language == "en"
 
-    for segments in all_segments:
-        assert isinstance(segments, list)
-        for segment in segments:
-            assert segment.words is not None
-            assert len(segment.words) > 0
+    segments = list(result)
+    assert len(segments) >= 2
 
-            for word in segment.words:
-                assert word.start is not None
-                assert word.end is not None
-                assert word.word is not None
+    for segment in segments:
+        assert segment.words is not None
+        assert len(segment.words) > 0
+
+        for word in segment.words:
+            assert word.start is not None
+            assert word.end is not None
+            assert word.word is not None
 
 
 def test_cliptimestamps_segments(jfk_path):

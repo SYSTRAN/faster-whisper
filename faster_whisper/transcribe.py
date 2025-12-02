@@ -296,10 +296,7 @@ class BatchedInferencePipeline:
         hotwords: Optional[str] = None,
         language_detection_threshold: Optional[float] = 0.5,
         language_detection_segments: int = 1,
-    ) -> Union[
-        Tuple[Iterable[Segment], TranscriptionInfo],
-        Tuple[List[List[Segment]], TranscriptionInfo],
-    ]:
+    ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribe audio in chunks in batched fashion and return with language info.
 
         Supports both single audio and batch processing of multiple audios.
@@ -375,13 +372,9 @@ class BatchedInferencePipeline:
                 When word_timestamps is True, skip silent periods longer than this threshold
                 (in seconds) when a possible hallucination is detected. set as None.
         Returns:
-          For single audio: A tuple with:
+          A tuple with:
             - a generator over transcribed segments
             - an instance of TranscriptionInfo
-
-          For multiple audios: A tuple with:
-            - a list of segment lists (one per audio)
-            - an instance of TranscriptionInfo (using first audio's duration)
         """
 
         is_batch = isinstance(audio, list)
@@ -594,54 +587,31 @@ class BatchedInferencePipeline:
 
         clip_timestamps_provided = clip_timestamps is not None
 
-        if is_batch:
-            segments = self._batched_segments_generator_grouped(
-                all_features,
-                tokenizer,
-                all_chunks_metadata,
-                audio_boundaries,
-                batch_size,
-                options,
-                log_progress,
+        info = TranscriptionInfo(
+            language=language,
+            language_probability=language_probability,
+            duration=audio_infos[0]["duration"],
+            duration_after_vad=audio_infos[0]["duration_after_vad"],
+            transcription_options=options,
+            vad_options=_vad_parameters,
+            all_language_probs=all_language_probs,
+        )
+
+        segments = self._batched_segments_generator(
+            all_features,
+            tokenizer,
+            all_chunks_metadata,
+            batch_size,
+            options,
+            log_progress,
+        )
+
+        if not is_batch and not clip_timestamps_provided:
+            segments = restore_speech_timestamps(
+                segments, audio_infos[0]["clip_timestamps"], sampling_rate
             )
 
-            info = TranscriptionInfo(
-                language=language,
-                language_probability=language_probability,
-                duration=audio_infos[0]["duration"],
-                duration_after_vad=audio_infos[0]["duration_after_vad"],
-                transcription_options=options,
-                vad_options=_vad_parameters,
-                all_language_probs=all_language_probs,
-            )
-
-            return segments, info
-        else:
-            info = TranscriptionInfo(
-                language=language,
-                language_probability=language_probability,
-                duration=audio_infos[0]["duration"],
-                duration_after_vad=audio_infos[0]["duration_after_vad"],
-                transcription_options=options,
-                vad_options=_vad_parameters,
-                all_language_probs=all_language_probs,
-            )
-
-            segments = self._batched_segments_generator(
-                all_features,
-                tokenizer,
-                all_chunks_metadata,
-                batch_size,
-                options,
-                log_progress,
-            )
-
-            if not clip_timestamps_provided:
-                segments = restore_speech_timestamps(
-                    segments, audio_infos[0]["clip_timestamps"], sampling_rate
-                )
-
-            return segments, info
+        return segments, info
 
     def transcribe_batch_multiple_audios(
         self,
