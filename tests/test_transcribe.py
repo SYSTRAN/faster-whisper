@@ -271,6 +271,91 @@ def test_monotonic_timestamps(physcisworks_path):
     assert segments[-1].end <= info.duration
 
 
+def test_transcribe_batch_multiple_audios(physcisworks_path):
+    model = WhisperModel("tiny")
+    batched_model = BatchedInferencePipeline(model=model)
+    result, info = batched_model.transcribe_batch_multiple_audios(
+        [physcisworks_path, physcisworks_path, physcisworks_path], batch_size=16
+    )
+
+    assert info.language == "en"
+    assert info.language_probability > 0.7
+    segments = []
+    for segment in result:
+        segments.append(
+            {"start": segment.start, "end": segment.end, "text": segment.text}
+        )
+
+    assert len(segments) == 3
+
+    result, info = batched_model.transcribe_batch_multiple_audios(
+        [physcisworks_path, physcisworks_path, physcisworks_path],
+        batch_size=3,
+        without_timestamps=False,
+        word_timestamps=True,
+    )
+    segments = []
+    for segment in result:
+        assert segment.words is not None
+        segments.append(
+            {"start": segment.start, "end": segment.end, "text": segment.text}
+        )
+    assert len(segments) > 3
+
+
+def test_transcribe_multiple_audios(jfk_path):
+    """Test transcribe() with a list of multiple audios."""
+    model = WhisperModel("tiny")
+    batched_model = BatchedInferencePipeline(model=model)
+
+    result, info = batched_model.transcribe(
+        [jfk_path, jfk_path, jfk_path],
+        batch_size=8,
+    )
+
+    assert info.language == "en"
+    assert info.language_probability > 0.7
+    assert info.duration == 11
+
+    segments = list(result)
+    assert len(segments) == 3
+
+    for segment in segments:
+        assert "Americans" in segment.text or "country" in segment.text
+
+    segments, info = batched_model.transcribe(jfk_path)
+    assert info.language == "en"
+    segments = list(segments)
+    assert len(segments) >= 1
+
+
+def test_transcribe_multiple_audios_with_word_timestamps(jfk_path):
+    """Test transcribe() with multiple audios and word timestamps."""
+    model = WhisperModel("tiny")
+    batched_model = BatchedInferencePipeline(model=model)
+
+    result, info = batched_model.transcribe(
+        [jfk_path, jfk_path],
+        batch_size=8,
+        word_timestamps=True,
+        without_timestamps=False,
+    )
+
+    assert info.language == "en"
+
+    segments = list(result)
+    assert len(segments) >= 2
+
+    for segment in segments:
+        assert segment.words is not None
+        assert len(segment.words) > 0
+
+        for word in segment.words:
+            assert word.start is not None
+            assert word.end is not None
+            assert word.word is not None
+
+
 def test_cliptimestamps_segments(jfk_path):
     model = WhisperModel("tiny")
     pipeline = BatchedInferencePipeline(model=model)
