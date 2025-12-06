@@ -22,7 +22,7 @@ args = parser.parse_args()
 model_path = "large-v3"
 model = WhisperModel(model_path, device="cuda")
 
-# load the dataset with streaming mode
+# Load the dataset with streaming mode.
 dataset = load_dataset("librispeech_asr", "clean", split="validation", streaming=True)
 
 with open(os.path.join(os.path.dirname(__file__), "normalizer.json"), "r") as f:
@@ -43,17 +43,17 @@ dataset = dataset.map(function=inference, batched=True, batch_size=16)
 all_transcriptions = []
 all_references = []
 
-# iterate over the dataset and run inference
+# Iterate over the dataset and run inference.
 for i, result in tqdm(enumerate(dataset), desc="Evaluating..."):
     all_transcriptions.append(result["transcription"])
     all_references.append(result["reference"])
     if args.audio_numb and i == (args.audio_numb - 1):
         break
 
-# normalize predictions and references
+# Normalize predictions and references.
 all_transcriptions = [normalizer(transcription) for transcription in all_transcriptions]
 all_references = [normalizer(reference) for reference in all_references]
 
-# compute the WER metric
+# Compute the WER metric.
 word_error_rate = 100 * wer(hypothesis=all_transcriptions, reference=all_references)
 print("WER: %.3f" % word_error_rate)

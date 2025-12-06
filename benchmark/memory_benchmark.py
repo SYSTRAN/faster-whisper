@@ -31,7 +31,7 @@ def measure_memory(func: Callable[[], None]):
             "Measuring maximum GPU memory usage on GPU device."
             " Make sure to not have additional processes running on the same GPU."
         )
-        # init nvml
+        # Init NVML.
         nvml.nvmlInit()
         handle = nvml.nvmlDeviceGetHandleByIndex(device_idx)
         gpu_name = nvml.nvmlDeviceGetName(handle)
@@ -62,7 +62,7 @@ def measure_memory(func: Callable[[], None]):
         thread.join()
         result = thread.get_result()
 
-        # shutdown nvml
+        # Shutdown NVML.
         nvml.nvmlShutdown()
         max_memory_usage = max(result["gpu_memory_usage"])
         max_power_usage = max(result["gpu_power_usage"])

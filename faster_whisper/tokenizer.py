@@ -128,14 +128,14 @@ class Tokenizer:
             "<< >> <<< >>> -- --- -( -[ (' (\" (( )) ((( ))) [[ ]] {{ }} ♪♪ ♪♪♪".split()
         )
 
-        # symbols that may be a single token or multiple tokens depending on the tokenizer.
+        # Symbols that may be a single token or multiple tokens depending on the tokenizer.
         # In case they're multiple tokens, suppress the first token, which is safe because:
         # These are between U+2640 and U+267F miscellaneous symbols that are okay to suppress
         # in generations, and in the 3-byte UTF-8 representation they share the first two bytes.
         miscellaneous = set("♩♪♫♬♭♮♯")
         assert all(0x2640 <= ord(c) <= 0x267F for c in miscellaneous)
 
-        # allow hyphens "-" and single quotes "'" between words, but not at the beginning of a word
+        # Allow hyphens "-" and single quotes "'" between words, but not at the beginning of a word.
         result = {self.encode(" -")[0], self.encode(" '")[0]}
         for symbol in symbols + list(miscellaneous):
             for tokens in [

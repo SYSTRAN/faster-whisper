@@ -57,8 +57,8 @@ def decode_audio(
     # It appears that some objects related to the resampler are not freed
     # unless the garbage collector is manually run.
     # https://github.com/SYSTRAN/faster-whisper/issues/390
-    # note that this slows down loading the audio a little bit
-    # if that is a concern, please use ffmpeg directly as in here:
+    # Note that this slows down loading the audio a little bit.
+    # If that is a concern, please use FFmpeg directly as in here:
     # https://github.com/openai/whisper/blob/25639fc/whisper/audio.py#L25-L62
     del resampler
     gc.collect()

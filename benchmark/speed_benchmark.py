@@ -16,8 +16,8 @@ args = parser.parse_args()
 
 
 def measure_speed(func: Callable[[], None]):
-    # as written in https://docs.python.org/3/library/timeit.html#timeit.Timer.repeat,
-    # min should be taken rather than the average
+    # As written in https://docs.python.org/3/library/timeit.html#timeit.Timer.repeat,
+    # the minimum should be taken rather than the average.
     runtimes = timeit.repeat(
         func,
         repeat=args.repeat,

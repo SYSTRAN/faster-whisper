@@ -21,7 +21,7 @@ def test_transcribe(jfk_path):
     assert info.duration == 11
 
     # Get top language info from all results, which should match the
-    # already existing metadata
+    # already existing metadata.
     top_lang, top_lang_score = info.all_language_probs[0]
     assert info.language == top_lang
     assert abs(info.language_probability - top_lang_score) < 1e-16
@@ -70,7 +70,7 @@ def test_batched_transcribe(physcisworks_path):
         segments.append(
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
-    # number of near 30 sec segments
+    # Number of near 30 sec segments.
     assert len(segments) == 6
 
     result, info = batched_model.transcribe(

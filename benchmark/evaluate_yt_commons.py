@@ -55,7 +55,7 @@ pipeline = BatchedInferencePipeline(model, device="cuda")
 
 all_transcriptions = []
 all_references = []
-# iterate over the dataset and run inference
+# Iterate over the dataset and run inference.
 for i, row in tqdm(enumerate(dataset["test"]), desc="Evaluating..."):
     if not row["audio"]:
         continue
@@ -71,10 +71,10 @@ for i, row in tqdm(enumerate(dataset["test"]), desc="Evaluating..."):
     if args.audio_numb and i == (args.audio_numb - 1):
         break
 
-# normalize predictions and references
+# Normalize predictions and references.
 all_transcriptions = [normalizer(transcription) for transcription in all_transcriptions]
 all_references = [normalizer(reference) for reference in all_references]
 
-# compute the WER metric
+# Compute the WER metric.
 word_error_rate = 100 * wer(hypothesis=all_transcriptions, reference=all_references)
 print("WER: %.3f" % word_error_rate)
