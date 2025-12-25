@@ -357,18 +357,18 @@ class SileroVADModel:
 
         h = np.zeros((1, 1, 128), dtype="float32")
         c = np.zeros((1, 1, 128), dtype="float32")
-        context = np.zeros(
-            (1, context_size_samples),
-            dtype="float32",
-        )
 
-        batched_audio = audio.reshape(-1, num_samples)
-        context = batched_audio[..., -context_size_samples:]
-        context[-1] = 0
-        context = np.roll(context, 1, 0)
-        batched_audio = np.concatenate([context, batched_audio], 1)
+        frames = audio.reshape(-1, num_samples)
+        num_frames = frames.shape[0]
+        frame_width = num_samples + context_size_samples
 
-        batched_audio = batched_audio.reshape(-1, num_samples + context_size_samples)
+        batched_audio = np.empty((num_frames, frame_width), dtype=np.float32)
+        batched_audio[:, context_size_samples:] = frames
+        if num_frames > 1:
+            batched_audio[1:, :context_size_samples] = frames[
+                :-1, -context_size_samples:
+            ]
+        batched_audio[0, :context_size_samples] = 0.0
 
         encoder_batch_size = 10000
         num_segments = batched_audio.shape[0]
