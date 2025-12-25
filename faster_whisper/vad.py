@@ -360,7 +360,7 @@ class SileroVADModel:
 
         frames = audio.reshape(-1, num_samples)
         num_frames = frames.shape[0]
-        frame_width  = num_samples + context_size_samples
+        frame_width = num_samples + context_size_samples
 
         batched_audio = np.empty((num_frames, frame_width), dtype=np.float32)
         batched_audio[:, context_size_samples:] = frames
