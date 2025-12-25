@@ -365,7 +365,9 @@ class SileroVADModel:
         batched_audio = np.empty((num_frames, frame_width), dtype=np.float32)
         batched_audio[:, context_size_samples:] = frames
         if num_frames > 1:
-            batched_audio[1:, :context_size_samples] = frames[:-1, -context_size_samples:]
+            batched_audio[1:, :context_size_samples] = frames[
+                :-1, -context_size_samples:
+            ]
         batched_audio[0, :context_size_samples] = 0.0
 
         encoder_batch_size = 10000
