@@ -1,11 +1,13 @@
 import bisect
 import functools
 import os
+
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+
 from faster_whisper.utils import get_assets_path
 
 
