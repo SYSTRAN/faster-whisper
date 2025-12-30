@@ -404,9 +404,9 @@ def batched_vad(
     chunk_len = len(chunks[0])
     a_second = window_size_samples * 31
 
-    if chunk_len > a_second * 3:
+    if chunk_len > a_second * 6:
         overlap_samples = a_second * 3
-    elif chunk_len > a_second * 1:
+    elif chunk_len > a_second * 2:
         overlap_samples = a_second * 1
     else:
         overlap_samples = window_size_samples
