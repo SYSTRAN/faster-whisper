@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from faster_whisper.utils import get_assets_path
+from concurrent.futures import ThreadPoolExecutor
 
 
 # The code below is adapted from https://github.com/snakers4/silero-vad.
@@ -36,6 +37,7 @@ class VadOptions:
           when max_speech_duration_s is reached.
       use_max_poss_sil_at_max_speech: Whether to use the maximum possible silence at
           max_speech_duration_s or not. If not, the last silence is used.
+      vad_batch_size: When > 1, splits audio to chunks and process them in parallel threads
     """
 
     threshold: float = 0.5
@@ -46,6 +48,7 @@ class VadOptions:
     speech_pad_ms: int = 400
     min_silence_at_max_speech: int = 98
     use_max_poss_sil_at_max_speech: bool = True
+    vad_batch_size: int = 1
 
 
 def get_speech_timestamps(
@@ -77,6 +80,7 @@ def get_speech_timestamps(
     speech_pad_ms = vad_options.speech_pad_ms
     min_silence_at_max_speech = vad_options.min_silence_at_max_speech
     use_max_poss_sil_at_max_speech = vad_options.use_max_poss_sil_at_max_speech
+    vad_batch_size = vad_options.vad_batch_size
 
     min_speech_samples = sampling_rate * min_speech_duration_ms / 1000
     speech_pad_samples = sampling_rate * speech_pad_ms / 1000
@@ -95,7 +99,13 @@ def get_speech_timestamps(
     padded_audio = np.pad(
         audio, (0, window_size_samples - audio.shape[0] % window_size_samples)
     )
-    speech_probs = model(padded_audio)
+
+    if vad_batch_size > 1:
+        speech_probs = batched_vad(
+            padded_audio, vad_batch_size, window_size_samples, model
+        )
+    else:
+        speech_probs = model(padded_audio)
 
     triggered = False
     speeches = []
@@ -383,3 +393,66 @@ class SileroVADModel:
         out = np.concatenate(outputs, axis=0)
 
         return out
+
+
+def batched_vad(
+    padded_audio: np.ndarray, vad_batch_size: int, window_size_samples: int, model
+):
+    chunks = split_into_chunks(padded_audio, vad_batch_size, window_size_samples)
+
+    n_parts = len(chunks)
+    chunk_len = len(chunks[0])
+    a_second = window_size_samples * 31
+
+    if chunk_len > a_second * 3:
+        overlap_samples = a_second * 3
+    elif chunk_len > a_second * 1:
+        overlap_samples = a_second * 1
+    else:
+        overlap_samples = window_size_samples
+
+    overlap_frames = overlap_samples // window_size_samples
+
+    chunk_lens = [len(c) for c in chunks]
+    starts = np.cumsum([0] + chunk_lens)[:-1].tolist()
+
+    def process(i, chunk):
+        if i == 0:
+            return model(chunk)
+        start = starts[i]
+        overlap_start = max(0, start - overlap_samples)
+        overlap = padded_audio[overlap_start:start]
+        chunk_with_overlap = np.concatenate([overlap, chunk])
+        out = model(chunk_with_overlap)
+        return out[overlap_frames:]
+
+    with ThreadPoolExecutor(max_workers=n_parts) as ex:
+        results = list(ex.map(lambda ic: process(*ic), enumerate(chunks)))
+
+    speech_probs = np.concatenate(results)
+    return speech_probs
+
+
+def split_into_chunks(audio: np.ndarray, vad_batch_size: int, window_size_samples: int):
+    assert audio.ndim == 1, "audio must be 1D array"
+    total_len = len(audio)
+    assert (
+        total_len % window_size_samples == 0
+    ), f"audio length ({total_len}) must be divisible by {window_size_samples}"
+
+    total_units = total_len // window_size_samples
+    base_units = total_units // vad_batch_size
+    extra_units = total_units % vad_batch_size
+
+    chunks = []
+    idx = 0
+    for i in range(vad_batch_size):
+        units = base_units + (1 if i < extra_units else 0)
+        chunk_len = units * window_size_samples
+        if chunk_len == 0:
+            continue
+        chunk = audio[idx : idx + chunk_len]
+        chunks.append(chunk)
+        idx += chunk_len
+
+    return chunks
