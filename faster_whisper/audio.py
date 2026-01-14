@@ -4,6 +4,8 @@ The advantage of PyAV is that it bundles the FFmpeg libraries so there is no add
 system dependencies. FFmpeg does not need to be installed on the system.
 
 However, the API is quite low-level so we need to manipulate audio frames directly.
+
+For common formats like WAV/FLAC, we use soundfile for much faster loading (10-100x).
 """
 
 import gc
@@ -14,6 +16,63 @@ from typing import BinaryIO, Union
 
 import av
 import numpy as np
+
+
+def _decode_audio_soundfile(
+    input_file: str,
+    sampling_rate: int = 16000,
+    split_stereo: bool = False,
+):
+    """Fast audio decoding using soundfile for WAV/FLAC files.
+
+    Returns None if soundfile can't handle the file, allowing fallback to PyAV.
+    """
+    try:
+        import soundfile as sf
+    except ImportError:
+        return None
+
+    try:
+        audio, sr = sf.read(input_file, dtype="float32")
+    except Exception:
+        return None
+
+    # Handle stereo
+    if len(audio.shape) > 1:
+        if split_stereo:
+            left = audio[:, 0]
+            right = audio[:, 1] if audio.shape[1] > 1 else audio[:, 0]
+            if sr != sampling_rate:
+                left = _resample_array(left, sr, sampling_rate)
+                right = _resample_array(right, sr, sampling_rate)
+            return left, right
+        else:
+            audio = audio.mean(axis=1)
+
+    # Resample if needed
+    if sr != sampling_rate:
+        audio = _resample_array(audio, sr, sampling_rate)
+
+    return audio
+
+
+def _resample_array(audio: np.ndarray, sr_orig: int, sr_target: int) -> np.ndarray:
+    """Resample audio array to target sample rate."""
+    if sr_orig == sr_target:
+        return audio
+
+    try:
+        import resampy
+
+        return resampy.resample(audio, sr_orig, sr_target)
+    except ImportError:
+        pass
+
+    # Linear interpolation fallback
+    duration = len(audio) / sr_orig
+    target_length = int(duration * sr_target)
+    indices = np.linspace(0, len(audio) - 1, target_length)
+    return np.interp(indices, np.arange(len(audio)), audio).astype(np.float32)
 
 
 def decode_audio(
@@ -34,6 +93,13 @@ def decode_audio(
       If `split_stereo` is enabled, the function returns a 2-tuple with the
       separated left and right channels.
     """
+    # Fast path: use soundfile for file paths (WAV, FLAC, etc.)
+    if isinstance(input_file, str):
+        result = _decode_audio_soundfile(input_file, sampling_rate, split_stereo)
+        if result is not None:
+            return result
+
+    # Fall back to PyAV for other formats or file-like objects
     resampler = av.audio.resampler.AudioResampler(
         format="s16",
         layout="mono" if not split_stereo else "stereo",
