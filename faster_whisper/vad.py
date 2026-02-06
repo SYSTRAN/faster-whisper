@@ -128,7 +128,7 @@ def get_speech_timestamps(
 
         if triggered and (cur_sample - current_speech["start"] > max_speech_samples):
             if use_max_poss_sil_at_max_speech and possible_ends:
-                prev_end, dur = max(possible_ends, key=lambda x: x[1])
+                prev_end, dur = max(possible_ends, key=lambda x: (x[1], x[0]))
                 current_speech["end"] = prev_end
                 speeches.append(current_speech)
                 current_speech = {}
