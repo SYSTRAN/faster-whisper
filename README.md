@@ -19,40 +19,39 @@ For reference, here's the time and memory usage that are required to transcribe 
 
 ### Large-v2 model on GPU
 
-| Implementation | Precision | Beam size | Time | VRAM Usage |
-| --- | --- | --- | --- | --- |
-| openai/whisper | fp16 | 5 | 2m23s | 4708MB |
-| whisper.cpp (Flash Attention) | fp16 | 5 | 1m05s | 4127MB |
-| transformers (SDPA)[^1] | fp16 | 5 | 1m52s | 4960MB |
-| faster-whisper | fp16 | 5 | 1m03s | 4525MB |
-| faster-whisper (`batch_size=8`) | fp16 | 5 | 17s | 6090MB |
-| faster-whisper | int8 | 5 | 59s | 2926MB |
-| faster-whisper (`batch_size=8`) | int8 | 5 | 16s | 4500MB |
+| Implementation                  | Precision | Beam size | Time  | VRAM Usage |
+| ------------------------------- | --------- | --------- | ----- | ---------- |
+| openai/whisper                  | fp16      | 5         | 2m23s | 4708MB     |
+| whisper.cpp (Flash Attention)   | fp16      | 5         | 1m05s | 4127MB     |
+| transformers (SDPA)[^1]         | fp16      | 5         | 1m52s | 4960MB     |
+| faster-whisper                  | fp16      | 5         | 1m03s | 4525MB     |
+| faster-whisper (`batch_size=8`) | fp16      | 5         | 17s   | 6090MB     |
+| faster-whisper                  | int8      | 5         | 59s   | 2926MB     |
+| faster-whisper (`batch_size=8`) | int8      | 5         | 16s   | 4500MB     |
 
 ### distil-whisper-large-v3 model on GPU
 
-| Implementation | Precision | Beam size | Time | YT Commons WER |
-| --- | --- | --- | --- | --- |
-| transformers (SDPA) (`batch_size=16`) | fp16 | 5 | 46m12s | 14.801 |
-| faster-whisper (`batch_size=16`) | fp16 | 5 | 25m50s | 13.527 |
+| Implementation                        | Precision | Beam size | Time   | YT Commons WER |
+| ------------------------------------- | --------- | --------- | ------ | -------------- |
+| transformers (SDPA) (`batch_size=16`) | fp16      | 5         | 46m12s | 14.801         |
+| faster-whisper (`batch_size=16`)      | fp16      | 5         | 25m50s | 13.527         |
 
 *GPU Benchmarks are Executed with CUDA 12.4 on a NVIDIA RTX 3070 Ti 8GB.*
 [^1]: transformers OOM for any batch size > 1
 
 ### Small model on CPU
 
-| Implementation | Precision | Beam size | Time | RAM Usage |
-| --- | --- | --- | --- | --- |
-| openai/whisper | fp32 | 5 | 6m58s | 2335MB |
-| whisper.cpp | fp32 | 5 | 2m05s | 1049MB |
-| whisper.cpp (OpenVINO) | fp32 | 5 | 1m45s | 1642MB |
-| faster-whisper | fp32 | 5 | 2m37s | 2257MB |
-| faster-whisper (`batch_size=8`) | fp32 | 5 | 1m06s | 4230MB |
-| faster-whisper | int8 | 5 | 1m42s | 1477MB |
-| faster-whisper (`batch_size=8`) | int8 | 5 | 51s | 3608MB |
+| Implementation                  | Precision | Beam size | Time  | RAM Usage |
+| ------------------------------- | --------- | --------- | ----- | --------- |
+| openai/whisper                  | fp32      | 5         | 6m58s | 2335MB    |
+| whisper.cpp                     | fp32      | 5         | 2m05s | 1049MB    |
+| whisper.cpp (OpenVINO)          | fp32      | 5         | 1m45s | 1642MB    |
+| faster-whisper                  | fp32      | 5         | 2m37s | 2257MB    |
+| faster-whisper (`batch_size=8`) | fp32      | 5         | 1m06s | 4230MB    |
+| faster-whisper                  | int8      | 5         | 1m42s | 1477MB    |
+| faster-whisper (`batch_size=8`) | int8      | 5         | 51s   | 3608MB    |
 
 *Executed with 8 threads on an Intel Core i7-12700K.*
-
 
 ## Requirements
 
@@ -73,7 +72,6 @@ There are multiple ways to install the NVIDIA libraries mentioned above. The rec
 
 <details>
 <summary>Other installation methods (click to expand)</summary>
-
 
 **Note:** For all these methods below, keep in mind the above note regarding CUDA versions. Depending on your setup, you may need to install the _CUDA 11_ versions of libraries that correspond to the CUDA 12 libraries listed in the instructions below.
 
@@ -155,6 +153,7 @@ segments = list(segments)  # The transcription will actually run here.
 ```
 
 ### Batched Transcription
+
 The following code snippet illustrates how to run batched transcription on an example audio file. `BatchedInferencePipeline.transcribe` is a drop-in replacement for `WhisperModel.transcribe`
 
 ```python
@@ -215,6 +214,7 @@ segments, _ = model.transcribe(
     vad_parameters=dict(min_silence_duration_ms=500),
 )
 ```
+
 Vad filter is enabled by default for batched transcription.
 
 ### Logging
@@ -236,7 +236,6 @@ See more model and transcription options in the [`WhisperModel`](https://github.
 
 Here is a non exhaustive list of open-source projects using faster-whisper. Feel free to add your project to the list!
 
-
 * [speaches](https://github.com/speaches-ai/speaches) is an OpenAI compatible server using `faster-whisper`. It's easily deployable with Docker, works with OpenAI SDKs/CLI, supports streaming, and live transcription.
 * [WhisperX](https://github.com/m-bain/whisperX) is an award-winning Python library that offers speaker diarization and accurate word-level timestamps using wav2vec2 alignment
 * [whisper-ctranslate2](https://github.com/Softcatala/whisper-ctranslate2) is a command line client based on faster-whisper and compatible with the original client from openai/whisper.
@@ -251,6 +250,7 @@ Here is a non exhaustive list of open-source projects using faster-whisper. Feel
 * [Faster-Whisper-Transcriber](https://github.com/BBC-Esq/ctranslate2-faster-whisper-transcriber) is a simple but reliable voice transcriber that provides a user-friendly interface.
 * [Open-dubbing](https://github.com/softcatala/open-dubbing) is open dubbing is an AI dubbing system which uses machine learning models to automatically translate and synchronize audio dialogue into different languages.
 * [Whisper-FastAPI](https://github.com/heimoshuiyu/whisper-fastapi) whisper-fastapi is a very simple script that provides an API backend compatible with OpenAI, HomeAssistant, and Konele (Android voice typing) formats.
+* [Atlas Voice](https://github.com/briankelley/atlas-voice) is an always-listening, wake-word-activated dictation tool for Linux. It types transcribed speech directly into active windows, featuring spoken punctuation, custom word replacements, and native desktop integration using system tray status indicators.
 
 ## Model conversion
 
@@ -275,14 +275,16 @@ Models can also be converted from the code. See the [conversion API](https://ope
 ### Load a converted model
 
 1. Directly load the model from a local directory:
-```python
-model = faster_whisper.WhisperModel("whisper-large-v3-ct2")
-```
+   
+   ```python
+   model = faster_whisper.WhisperModel("whisper-large-v3-ct2")
+   ```
 
 2. [Upload your model to the Hugging Face Hub](https://huggingface.co/docs/transformers/model_sharing#upload-with-the-web-interface) and load it from its name:
-```python
-model = faster_whisper.WhisperModel("username/whisper-large-v3-ct2")
-```
+   
+   ```python
+   model = faster_whisper.WhisperModel("username/whisper-large-v3-ct2")
+   ```
 
 ## Comparing performance against other implementations
 
