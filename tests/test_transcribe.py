@@ -1,9 +1,32 @@
 import inspect
+import logging
 import os
+
+from types import SimpleNamespace
 
 import numpy as np
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
+
+
+class _DummyFeatureExtractor:
+    sampling_rate = 16000
+    chunk_length = 30
+
+    def __call__(self, audio, chunk_length=None):
+        return np.zeros((80, 4), dtype="float32")
+
+
+def _make_dummy_batched_model():
+    logger = logging.getLogger("test.batched_options")
+
+    return SimpleNamespace(
+        feature_extractor=_DummyFeatureExtractor(),
+        frames_per_second=50,
+        hf_tokenizer=object(),
+        logger=logger,
+        model=SimpleNamespace(is_multilingual=False),
+    )
 
 
 def test_supported_languages():
@@ -313,3 +336,71 @@ def test_cliptimestamps_timings(physcisworks_path):
         assert clip["start"] == segment.start
         assert clip["end"] == segment.end
         assert segment.text == transcript
+
+
+def test_batched_transcribe_respects_condition_on_previous_text(monkeypatch):
+    pipeline = BatchedInferencePipeline(_make_dummy_batched_model())
+    captured_options = []
+
+    monkeypatch.setattr(
+        "faster_whisper.transcribe.Tokenizer",
+        lambda *args, **kwargs: object(),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_batched_segments_generator",
+        lambda *args: captured_options.append(args[4]) or iter(()),
+    )
+
+    audio = np.zeros(1600, dtype="float32")
+    clip_timestamps = [{"start": 0.0, "end": 0.1}]
+
+    _, info = pipeline.transcribe(
+        audio,
+        language="en",
+        clip_timestamps=clip_timestamps,
+        condition_on_previous_text=True,
+        suppress_tokens=[],
+    )
+
+    assert info.transcription_options.condition_on_previous_text is True
+    assert captured_options[0].condition_on_previous_text is True
+
+    captured_options.clear()
+
+    _, info = pipeline.transcribe(
+        audio,
+        language="en",
+        clip_timestamps=clip_timestamps,
+        condition_on_previous_text=False,
+        suppress_tokens=[],
+    )
+
+    assert info.transcription_options.condition_on_previous_text is False
+    assert captured_options[0].condition_on_previous_text is False
+
+
+def test_batched_transcribe_respects_max_initial_timestamp(monkeypatch):
+    pipeline = BatchedInferencePipeline(_make_dummy_batched_model())
+    captured_options = []
+
+    monkeypatch.setattr(
+        "faster_whisper.transcribe.Tokenizer",
+        lambda *args, **kwargs: object(),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_batched_segments_generator",
+        lambda *args: captured_options.append(args[4]) or iter(()),
+    )
+
+    _, info = pipeline.transcribe(
+        np.zeros(1600, dtype="float32"),
+        language="en",
+        clip_timestamps=[{"start": 0.0, "end": 0.1}],
+        max_initial_timestamp=1.7,
+        suppress_tokens=[],
+    )
+
+    assert info.transcription_options.max_initial_timestamp == 1.7
+    assert captured_options[0].max_initial_timestamp == 1.7

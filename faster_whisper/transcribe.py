@@ -359,14 +359,14 @@ class BatchedInferencePipeline:
             condition_on_previous_text: If True, the previous output of the model is provided
                 as a prompt for the next window; disabling may make the text inconsistent across
                 windows, but the model becomes less prone to getting stuck in a failure loop,
-                such as repetition looping or timestamps going out of sync. Set as False
+                such as repetition looping or timestamps going out of sync.
             prompt_reset_on_temperature: Resets prompt if temperature is above this value.
                 Arg has effect only if condition_on_previous_text is True. Set at 0.5
             prefix: Optional text to provide as a prefix at the beginning of each window.
-            max_initial_timestamp: The initial timestamp cannot be later than this, set at 0.0.
+            max_initial_timestamp: The initial timestamp cannot be later than this.
             hallucination_silence_threshold: Optional[float]
                 When word_timestamps is True, skip silent periods longer than this threshold
-                (in seconds) when a possible hallucination is detected. set as None.
+                (in seconds) when a possible hallucination is detected. Set as None.
         Returns:
           A tuple with:
 
@@ -544,12 +544,12 @@ class BatchedInferencePipeline:
             hotwords=hotwords,
             word_timestamps=word_timestamps,
             hallucination_silence_threshold=None,
-            condition_on_previous_text=False,
+            condition_on_previous_text=condition_on_previous_text,
             clip_timestamps=clip_timestamps,
             prompt_reset_on_temperature=0.5,
             multilingual=multilingual,
             without_timestamps=without_timestamps,
-            max_initial_timestamp=0.0,
+            max_initial_timestamp=max_initial_timestamp,
         )
 
         info = TranscriptionInfo(
