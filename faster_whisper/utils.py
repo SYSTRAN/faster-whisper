@@ -2,10 +2,9 @@ import logging
 import os
 import re
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import huggingface_hub
-import requests
 
 from tqdm.auto import tqdm
 
@@ -26,6 +25,9 @@ _MODELS = {
     "distil-medium.en": "Systran/faster-distil-whisper-medium.en",
     "distil-small.en": "Systran/faster-distil-whisper-small.en",
     "distil-large-v3": "Systran/faster-distil-whisper-large-v3",
+    "distil-large-v3.5": "distil-whisper/distil-large-v3.5-ct2",
+    "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+    "turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
 }
 
 
@@ -49,6 +51,8 @@ def download_model(
     output_dir: Optional[str] = None,
     local_files_only: bool = False,
     cache_dir: Optional[str] = None,
+    revision: Optional[str] = None,
+    use_auth_token: Optional[Union[str, bool]] = None,
 ):
     """Downloads a CTranslate2 Whisper model from the Hugging Face Hub.
 
@@ -63,6 +67,10 @@ def download_model(
       local_files_only:  If True, avoid downloading the file and return the path to the local
         cached file if it exists.
       cache_dir: Path to the folder where cached files are stored.
+      revision: An optional Git revision id which can be a branch name, a tag, or a
+            commit hash.
+      use_auth_token: HuggingFace authentication token or True to use the
+            token stored by the HuggingFace config folder.
 
     Returns:
       The path to the downloaded model.
@@ -92,33 +100,19 @@ def download_model(
         "local_files_only": local_files_only,
         "allow_patterns": allow_patterns,
         "tqdm_class": disabled_tqdm,
+        "revision": revision,
     }
 
     if output_dir is not None:
         kwargs["local_dir"] = output_dir
-        kwargs["local_dir_use_symlinks"] = False
 
     if cache_dir is not None:
         kwargs["cache_dir"] = cache_dir
 
-    try:
-        return huggingface_hub.snapshot_download(repo_id, **kwargs)
-    except (
-        huggingface_hub.utils.HfHubHTTPError,
-        requests.exceptions.ConnectionError,
-    ) as exception:
-        logger = get_logger()
-        logger.warning(
-            "An error occured while synchronizing the model %s from the Hugging Face Hub:\n%s",
-            repo_id,
-            exception,
-        )
-        logger.warning(
-            "Trying to load the model directly from the local cache, if it exists."
-        )
+    if use_auth_token is not None:
+        kwargs["token"] = use_auth_token
 
-        kwargs["local_files_only"] = True
-        return huggingface_hub.snapshot_download(repo_id, **kwargs)
+    return huggingface_hub.snapshot_download(repo_id, **kwargs)
 
 
 def format_timestamp(

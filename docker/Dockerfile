@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04
 WORKDIR /root
 RUN apt-get update -y && apt-get install -y python3-pip
 COPY infer.py jfk.flac ./
