@@ -544,12 +544,12 @@ class BatchedInferencePipeline:
             hotwords=hotwords,
             word_timestamps=word_timestamps,
             hallucination_silence_threshold=None,
-            condition_on_previous_text=False,
+            condition_on_previous_text=condition_on_previous_text,
             clip_timestamps=clip_timestamps,
-            prompt_reset_on_temperature=0.5,
+            prompt_reset_on_temperature=prompt_reset_on_temperature,
             multilingual=multilingual,
             without_timestamps=without_timestamps,
-            max_initial_timestamp=0.0,
+            max_initial_timestamp=max_initial_timestamp,
         )
 
         info = TranscriptionInfo(
