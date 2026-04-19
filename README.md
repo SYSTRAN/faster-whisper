@@ -60,6 +60,14 @@ For reference, here's the time and memory usage that are required to transcribe 
 
 Unlike openai-whisper, FFmpeg does **not** need to be installed on the system. The audio is decoded with the Python library [PyAV](https://github.com/PyAV-Org/PyAV) which bundles the FFmpeg libraries in its package.
 
+If PyAV cannot be loaded in your environment (for example on Windows 11 with Smart App Control enabled, which blocks unsigned DLLs shipped by the PyAV wheel), you can opt into the alternative `ffmpeg` audio backend, which shells out to a system `ffmpeg` binary instead:
+
+```python
+model = WhisperModel("large-v3", audio_backend="ffmpeg")
+```
+
+This requires `ffmpeg` to be available on `PATH`, or the `FFMPEG_EXE` environment variable to point at its absolute path. The default remains `audio_backend="pyav"`, so nothing changes for existing users.
+
 ### GPU
 
 GPU execution requires the following NVIDIA libraries to be installed:

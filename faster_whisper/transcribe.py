@@ -16,7 +16,7 @@ import tokenizers
 
 from tqdm import tqdm
 
-from faster_whisper.audio import decode_audio, pad_or_trim
+from faster_whisper.audio import SUPPORTED_AUDIO_BACKENDS, decode_audio, pad_or_trim
 from faster_whisper.feature_extractor import FeatureExtractor
 from faster_whisper.tokenizer import _LANGUAGE_CODES, Tokenizer
 from faster_whisper.utils import download_model, format_timestamp, get_end, get_logger
@@ -384,7 +384,11 @@ class BatchedInferencePipeline:
             multilingual = False
 
         if not isinstance(audio, np.ndarray):
-            audio = decode_audio(audio, sampling_rate=sampling_rate)
+            audio = decode_audio(
+                audio,
+                sampling_rate=sampling_rate,
+                backend=self.model.audio_backend,
+            )
         duration = audio.shape[0] / sampling_rate
 
         self.model.logger.info(
@@ -631,6 +635,7 @@ class WhisperModel:
         files: dict = None,
         revision: Optional[str] = None,
         use_auth_token: Optional[Union[str, bool]] = None,
+        audio_backend: str = "pyav",
         **model_kwargs,
     ):
         """Initializes the Whisper model.
@@ -667,7 +672,20 @@ class WhisperModel:
             commit hash.
           use_auth_token: HuggingFace authentication token or True to use the
             token stored by the HuggingFace config folder.
+          audio_backend: Which backend to use when decoding audio inputs. One of:
+            - "pyav" (default): decode via the PyAV library in-process.
+            - "ffmpeg": shell out to the `ffmpeg` binary. Useful when PyAV
+              cannot be loaded (e.g. Windows 11 Smart App Control blocks the
+              PyAV DLLs, or restricted corporate environments). Requires
+              `ffmpeg` on PATH, or the `FFMPEG_EXE` environment variable.
         """
+        if audio_backend not in SUPPORTED_AUDIO_BACKENDS:
+            raise ValueError(
+                f"Unsupported audio_backend={audio_backend!r}. "
+                f"Expected one of {SUPPORTED_AUDIO_BACKENDS}."
+            )
+        self.audio_backend = audio_backend
+
         self.logger = get_logger()
 
         tokenizer_bytes, preprocessor_bytes = None, None
@@ -873,7 +891,11 @@ class WhisperModel:
             multilingual = False
 
         if not isinstance(audio, np.ndarray):
-            audio = decode_audio(audio, sampling_rate=sampling_rate)
+            audio = decode_audio(
+                audio,
+                sampling_rate=sampling_rate,
+                backend=self.audio_backend,
+            )
 
         duration = audio.shape[0] / sampling_rate
         duration_after_vad = duration
