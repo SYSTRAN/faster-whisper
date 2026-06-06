@@ -1021,6 +1021,409 @@ class WhisperModel:
 
         return segments, info
 
+    def transcribe_batch(
+        self,
+        audios: List[Union[str, BinaryIO, np.ndarray]],
+        language: Optional[str] = None,
+        task: str = "transcribe",
+        beam_size: int = 5,
+        best_of: int = 5,
+        patience: float = 1,
+        length_penalty: float = 1,
+        repetition_penalty: float = 1,
+        no_repeat_ngram_size: int = 0,
+        temperature: float = 0.0,
+        initial_prompt: Optional[Union[str, Iterable[int]]] = None,
+        suppress_blank: bool = True,
+        suppress_tokens: Optional[List[int]] = [-1],
+        without_timestamps: bool = False,
+        max_initial_timestamp: float = 1.0,
+        word_timestamps: bool = False,
+        prepend_punctuations: str = "\"'\u201c\u00bf([{-",
+        append_punctuations: str = "\"'.\u3002,\uff0c!\uff01?\uff1f:\uff1a\u201d)]}\u3001",
+        multilingual: bool = False,
+        max_new_tokens: Optional[int] = None,
+        chunk_length: Optional[int] = None,
+        hotwords: Optional[str] = None,
+        language_detection_threshold: Optional[float] = 0.5,
+        language_detection_segments: int = 1,
+        _instrumentation: bool = False,
+    ) -> List[Tuple[List[Segment], TranscriptionInfo]]:
+        """Transcribe a batch of short audio clips (each <= chunk_length seconds).
+
+        All clips are encoded and decoded together in a single batched call to the
+        model, which is significantly faster than calling ``transcribe`` in a loop.
+
+        No VAD, no temperature fallback, no condition-on-previous-text, and no
+        sliding-window algorithm are used.  Every audio **must** fit within a
+        single encoder window (``chunk_length`` seconds, 30 by default).
+
+        Arguments:
+          audios: List of inputs. Each element can be a path, file-like object,
+              or a float32 numpy waveform array.
+          language: Language code (e.g. "en").  If not set, detected from the
+              first clip.
+          task: "transcribe" or "translate".
+          beam_size: Beam size for decoding.
+          best_of: Number of candidates when sampling with non-zero temperature.
+          patience: Beam search patience factor.
+          length_penalty: Exponential length penalty constant.
+          repetition_penalty: Penalty for previously generated tokens (>1 to penalize).
+          no_repeat_ngram_size: Prevent repetitions of ngrams with this size.
+          temperature: Sampling temperature (single float, no fallback).
+          initial_prompt: Optional text or token ids used as prompt for every clip.
+          suppress_blank: Suppress blank outputs at sampling start.
+          suppress_tokens: Token IDs to suppress (-1 for default set).
+          without_timestamps: Only sample text tokens.
+          max_initial_timestamp: Maximum initial timestamp value.
+          word_timestamps: Extract word-level timestamps.
+          prepend_punctuations: Punctuation symbols to merge with the next word.
+          append_punctuations: Punctuation symbols to merge with the previous word.
+          multilingual: Detect language per clip.
+          max_new_tokens: Maximum new tokens to generate per clip.
+          chunk_length: Override the default 30 s encoder window.
+          hotwords: Hotwords/hint phrases for the model.
+          language_detection_threshold: Threshold for language detection confidence.
+          language_detection_segments: Segments to consider for language detection.
+
+        Returns:
+          A list with one entry per input audio.  Each entry is a tuple of
+          ``(segments, info)`` where ``segments`` is a ``List[Segment]`` and
+          ``info`` is a ``TranscriptionInfo``.
+
+        Raises:
+          ValueError: If any audio exceeds ``chunk_length`` seconds.
+        """
+        if len(audios) == 0:
+            return ([], {}) if _instrumentation else []
+
+        import time as _time
+
+        _timings: dict = {}
+        _t0_total = _time.perf_counter()
+
+        sampling_rate = self.feature_extractor.sampling_rate
+        effective_chunk_length = chunk_length or self.feature_extractor.chunk_length
+
+        if multilingual and not self.model.is_multilingual:
+            self.logger.warning(
+                "The current model is English-only but the multilingual parameter "
+                "is set to True; setting to False instead."
+            )
+            multilingual = False
+
+        # --- 1. Decode all audios and extract per-clip features ----------------
+        _t1 = _time.perf_counter()
+        waveforms: List[np.ndarray] = []
+        durations: List[float] = []
+
+        for i, audio in enumerate(audios):
+            if not isinstance(audio, np.ndarray):
+                audio = decode_audio(audio, sampling_rate=sampling_rate)
+            dur = audio.shape[0] / sampling_rate
+            if dur > effective_chunk_length:
+                raise ValueError(
+                    f"Audio at index {i} is {dur:.2f}s which exceeds the maximum "
+                    f"chunk_length of {effective_chunk_length}s. All audios in the "
+                    f"batch must be <= {effective_chunk_length}s."
+                )
+            waveforms.append(audio)
+            durations.append(dur)
+
+        _t1_features = _time.perf_counter()
+        features_list = [
+            self.feature_extractor(w, chunk_length=chunk_length) for w in waveforms
+        ]
+        _timings["1_decode_audio"] = _t1_features - _t1
+        _timings["1_feature_extract"] = _time.perf_counter() - _t1_features
+
+        # --- 2. Language detection ---------------------------------------------
+        _t2 = _time.perf_counter()
+        all_language_probs = None
+        if language is None:
+            if not self.model.is_multilingual:
+                language = "en"
+                language_probability = 1
+            else:
+                (
+                    language,
+                    language_probability,
+                    all_language_probs,
+                ) = self.detect_language(
+                    features=features_list[0],
+                    language_detection_segments=language_detection_segments,
+                    language_detection_threshold=language_detection_threshold,
+                )
+                self.logger.info(
+                    "Detected language '%s' with probability %.2f",
+                    language,
+                    language_probability,
+                )
+        else:
+            if not self.model.is_multilingual and language != "en":
+                self.logger.warning(
+                    "The current model is English-only but the language parameter "
+                    "is set to '%s'; using 'en' instead." % language
+                )
+                language = "en"
+            language_probability = 1
+
+        _timings["2_language_detect"] = _time.perf_counter() - _t2
+
+        # --- 3. Build tokenizer and prompt -------------------------------------
+        _t3 = _time.perf_counter()
+        tokenizer = Tokenizer(
+            self.hf_tokenizer,
+            self.model.is_multilingual,
+            task=task,
+            language=language,
+        )
+
+        options = TranscriptionOptions(
+            beam_size=beam_size,
+            best_of=best_of,
+            patience=patience,
+            length_penalty=length_penalty,
+            repetition_penalty=repetition_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            log_prob_threshold=None,
+            no_speech_threshold=None,
+            compression_ratio_threshold=None,
+            condition_on_previous_text=False,
+            prompt_reset_on_temperature=0.5,
+            temperatures=[temperature],
+            initial_prompt=initial_prompt,
+            prefix=None,
+            suppress_blank=suppress_blank,
+            suppress_tokens=(
+                get_suppressed_tokens(tokenizer, suppress_tokens)
+                if suppress_tokens
+                else suppress_tokens
+            ),
+            without_timestamps=without_timestamps,
+            max_initial_timestamp=max_initial_timestamp,
+            word_timestamps=word_timestamps,
+            prepend_punctuations=prepend_punctuations,
+            append_punctuations=append_punctuations,
+            multilingual=multilingual,
+            max_new_tokens=max_new_tokens,
+            clip_timestamps="0",
+            hallucination_silence_threshold=None,
+            hotwords=hotwords,
+        )
+
+        prompt = self.get_prompt(
+            tokenizer,
+            previous_tokens=(
+                tokenizer.encode(options.initial_prompt)
+                if options.initial_prompt is not None
+                else []
+            ),
+            without_timestamps=options.without_timestamps,
+            hotwords=options.hotwords,
+        )
+
+        if options.max_new_tokens is not None:
+            max_length = len(prompt) + options.max_new_tokens
+        else:
+            max_length = self.max_length
+
+        if max_length > self.max_length:
+            raise ValueError(
+                f"The length of the prompt is {len(prompt)}, and the `max_new_tokens` "
+                f"{max_length - len(prompt)}. Thus, the combined length of the prompt "
+                f"and `max_new_tokens` is: {max_length}. This exceeds the "
+                f"`max_length` of the Whisper model: {self.max_length}. "
+                "You should either reduce the length of your prompt, or "
+                "reduce the value of `max_new_tokens`, "
+                f"so that their combined length is less that {self.max_length}."
+            )
+
+        _timings["3_tokenizer_prompt"] = _time.perf_counter() - _t3
+        _t4 = _time.perf_counter()
+
+        # --- 4. Pad/trim features and stack into batch -------------------------
+        padded = np.stack([pad_or_trim(f) for f in features_list])  # [B, n_mels, 3000]
+        batch_size = padded.shape[0]
+        _timings["4_pad_stack"] = _time.perf_counter() - _t4
+
+        # --- 5. Encode ---------------------------------------------------------
+        _t5 = _time.perf_counter()
+        encoder_output = self.encode(padded)
+        _timings["5_encode"] = _time.perf_counter() - _t5
+
+        # --- 6. Handle per-clip language detection if multilingual --------------
+        _t6 = _time.perf_counter()
+        prompts = [prompt.copy() for _ in range(batch_size)]
+        if multilingual:
+            language_tokens = [
+                tokenizer.tokenizer.token_to_id(segment_langs[0][0])
+                for segment_langs in self.model.detect_language(encoder_output)
+            ]
+            language_token_index = prompt.index(tokenizer.language)
+            for i, language_token in enumerate(language_tokens):
+                prompts[i][language_token_index] = language_token
+        _timings["6_multilingual_detect"] = _time.perf_counter() - _t6
+
+        # --- 7. Generate -------------------------------------------------------
+        _t7 = _time.perf_counter()
+        max_initial_timestamp_index = int(
+            round(options.max_initial_timestamp / self.time_precision)
+        )
+
+        if temperature > 0:
+            gen_kwargs = {
+                "beam_size": 1,
+                "num_hypotheses": options.best_of,
+                "sampling_topk": 0,
+                "sampling_temperature": temperature,
+            }
+        else:
+            gen_kwargs = {
+                "beam_size": options.beam_size,
+                "patience": options.patience,
+            }
+
+        _common_gen_args = dict(
+            length_penalty=options.length_penalty,
+            repetition_penalty=options.repetition_penalty,
+            no_repeat_ngram_size=options.no_repeat_ngram_size,
+            return_scores=True,
+            return_no_speech_prob=True,
+            suppress_blank=options.suppress_blank,
+            suppress_tokens=options.suppress_tokens,
+            max_initial_timestamp_index=max_initial_timestamp_index,
+            **gen_kwargs,
+        )
+
+        # 7a. Single-step probe: force generate to produce only 1 token
+        #     This isolates the fixed per-call overhead (cross-attention setup,
+        #     KV-cache allocation, beam initialization) from autoregressive cost.
+        if _instrumentation:
+            _t7a = _time.perf_counter()
+            _probe_max_length = len(prompt) + 1
+            self.model.generate(
+                encoder_output,
+                [p.copy() for p in prompts],
+                max_length=_probe_max_length,
+                **_common_gen_args,
+            )
+            _timings["7a_generate_1step"] = _time.perf_counter() - _t7a
+
+        # 7b. Full generate
+        _t7b = _time.perf_counter()
+        results = self.model.generate(
+            encoder_output,
+            prompts,
+            max_length=max_length,
+            **_common_gen_args,
+        )
+        _timings["7b_generate_full"] = _time.perf_counter() - _t7b
+        _timings["7_generate"] = _timings["7b_generate_full"]
+
+        # Capture per-item token counts and effective beam info
+        if _instrumentation:
+            token_counts = [len(r.sequences_ids[0]) for r in results]
+            _timings["7_token_counts"] = token_counts
+            _timings["7_max_tokens"] = max(token_counts)
+            _timings["7_min_tokens"] = min(token_counts)
+            _timings["7_avg_tokens"] = sum(token_counts) / len(token_counts)
+            _timings["7_effective_beam_batch"] = (
+                batch_size * gen_kwargs.get("beam_size", 1)
+            )
+
+        # --- 8. Post-process each result ---------------------------------------
+        _t8 = _time.perf_counter()
+        batch_output: List[Tuple[List[Segment], TranscriptionInfo]] = []
+
+        for idx, result in enumerate(results):
+            tokens = result.sequences_ids[0]
+            seq_len = len(tokens)
+            cum_logprob = result.scores[0] * (seq_len ** options.length_penalty)
+            avg_logprob = cum_logprob / (seq_len + 1)
+
+            text = tokenizer.decode(tokens).strip()
+            compression_ratio = get_compression_ratio(text)
+
+            content_frames = features_list[idx].shape[-1] - 1
+            segment_size = min(
+                self.feature_extractor.nb_max_frames, content_frames
+            )
+            segment_duration = durations[idx]
+
+            (
+                current_segments,
+                _seek,
+                single_timestamp_ending,
+            ) = self._split_segments_by_timestamps(
+                tokenizer=tokenizer,
+                tokens=tokens,
+                time_offset=0.0,
+                segment_size=segment_size,
+                segment_duration=segment_duration,
+                seek=0,
+            )
+
+            # Word timestamps
+            if options.word_timestamps:
+                self.add_word_timestamps(
+                    [current_segments],
+                    tokenizer,
+                    encoder_output,
+                    segment_size,
+                    options.prepend_punctuations,
+                    options.append_punctuations,
+                    last_speech_timestamp=0.0,
+                )
+
+            # Build Segment dataclass objects
+            segments: List[Segment] = []
+            seg_idx = 0
+            for seg in current_segments:
+                seg_tokens = seg["tokens"]
+                seg_text = tokenizer.decode(seg_tokens)
+                if seg["start"] == seg["end"] or not seg_text.strip():
+                    continue
+                seg_idx += 1
+                segments.append(
+                    Segment(
+                        id=seg_idx,
+                        seek=seg.get("seek", 0),
+                        start=seg["start"],
+                        end=seg["end"],
+                        text=seg_text,
+                        tokens=seg_tokens,
+                        temperature=temperature,
+                        avg_logprob=avg_logprob,
+                        compression_ratio=compression_ratio,
+                        no_speech_prob=result.no_speech_prob,
+                        words=(
+                            [Word(**w) for w in seg["words"]]
+                            if options.word_timestamps
+                            else None
+                        ),
+                    )
+                )
+
+            info = TranscriptionInfo(
+                language=language,
+                language_probability=language_probability,
+                duration=durations[idx],
+                duration_after_vad=durations[idx],
+                transcription_options=options,
+                vad_options=None,
+                all_language_probs=all_language_probs,
+            )
+
+            batch_output.append((segments, info))
+
+        _timings["8_postprocess"] = _time.perf_counter() - _t8
+        _timings["total"] = _time.perf_counter() - _t0_total
+
+        if _instrumentation:
+            return batch_output, _timings
+        return batch_output
+
     def _split_segments_by_timestamps(
         self,
         tokenizer: Tokenizer,
