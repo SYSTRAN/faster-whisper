@@ -1717,6 +1717,12 @@ class WhisperModel:
         for result, text_token in zip(results, text_tokens):
             text_token_probs = result.text_token_probs
             alignments = result.alignments
+            if len(alignments) == 0:
+                # No alignment available, e.g. the window was shorter than the
+                # encoder stride so there were no frames to align against
+                # (ctranslate2 returns an empty alignment for such windows).
+                return_list.append([])
+                continue
             text_indices = np.array([pair[0] for pair in alignments])
             time_indices = np.array([pair[1] for pair in alignments])
 
