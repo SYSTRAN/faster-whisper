@@ -46,8 +46,8 @@ def decode_audio(
     with av.open(input_file, mode="r", metadata_errors="ignore") as container:
         frames = container.decode(audio=0)
         frames = _ignore_invalid_frames(frames)
-        frames = _group_frames(frames, 500000)
         frames = _resample_frames(frames, resampler)
+        frames = _group_frames(frames, 500000)
 
         for frame in frames:
             array = frame.to_ndarray()
