@@ -198,6 +198,15 @@ for segment in segments:
         print("[%.2fs -> %.2fs] %s" % (word.start, word.end, word.word))
 ```
 
+### Multilingual transcription
+
+```python
+segments, _ = model.transcribe("audio.mp3", multilingual=True)
+
+for segment in segments:
+    print("[%.2fs -> %.2fs] (%s) %s" % (segment.start, segment.end, segment.language, segment.text))
+```
+
 ### VAD filter
 
 The library integrates the [Silero VAD](https://github.com/snakers4/silero-vad) model to filter out parts of the audio without speech:
