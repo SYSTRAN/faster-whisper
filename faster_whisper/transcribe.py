@@ -7,7 +7,7 @@ import zlib
 from dataclasses import asdict, dataclass
 from inspect import signature
 from math import ceil
-from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
+from typing import BinaryIO, Dict, Iterable, List, Optional, Tuple, Union
 from warnings import warn
 
 import ctranslate2
@@ -92,6 +92,7 @@ class TranscriptionOptions:
     prepend_punctuations: str
     append_punctuations: str
     multilingual: bool
+    language_aware_vad_segments: bool
     max_new_tokens: Optional[int]
     clip_timestamps: Union[str, List[float]]
     hallucination_silence_threshold: Optional[float]
@@ -117,14 +118,105 @@ class BatchedInferencePipeline:
         self.model: WhisperModel = model
         self.last_speech_timestamp = 0.0
 
+    @staticmethod
+    def _group_chunks_by_language(
+        sub_chunks: List[dict],
+        sampling_rate: int,
+        chunk_length: float,
+        max_gap_s: float = 2.0,
+    ) -> List[dict]:
+        """Group consecutive same-language sub-chunks into <= chunk_length windows.
+
+        Windows keep their original audio coordinates: the silence between
+        sub-chunks is *not* packed away, so each window is a contiguous slice of
+        the original audio and timestamps need no restoration. The model's own
+        per-window language detection (run later in ``generate_segment_batched``)
+        picks the actual decode language; this grouping only keeps windows
+        monolingual so that detection is not confused by a mid-window switch.
+
+        ``max_gap_s`` bounds how much silence may be folded into a window when
+        merging same-language sub-chunks, so a long pause starts a fresh window.
+        """
+        windows: List[dict] = []
+        cur_start: Optional[int] = None
+        cur_end: Optional[int] = None
+        cur_lang: Optional[str] = None
+        # A run of unconfident (None) sub-chunks is kept pending rather than
+        # emitted on its own: it gets folded into the following confident window
+        # (or the current one, if it still fits). This avoids tiny standalone
+        # windows whose language the model can't determine reliably.
+        pending_start: Optional[int] = None
+
+        def flush():
+            if cur_start is not None:
+                windows.append(
+                    {
+                        "start": cur_start / sampling_rate,
+                        "end": cur_end / sampling_rate,
+                    }
+                )
+
+        for sc in sub_chunks:
+            s = int(sc["start"])
+            e = int(sc["end"])
+            lang = sc.get("language")
+
+            if lang is None:
+                # Fold into the current window if it still fits, otherwise carry
+                # the span forward to attach to the next confident window.
+                if (
+                    cur_start is not None
+                    and (e - cur_start) / sampling_rate <= chunk_length
+                    and (s - cur_end) / sampling_rate <= max_gap_s
+                ):
+                    cur_end = e
+                else:
+                    if pending_start is None:
+                        pending_start = s
+                continue
+
+            same_language = cur_start is not None and lang == cur_lang
+            prospective_start = (
+                pending_start if pending_start is not None else cur_start
+            )
+            within_length = (
+                e - (prospective_start or s)
+            ) / sampling_rate <= chunk_length
+            small_gap = (
+                cur_end is not None and (s - cur_end) / sampling_rate <= max_gap_s
+            ) or pending_start is not None
+
+            if same_language and within_length and (cur_start is None or small_gap):
+                if pending_start is not None:
+                    cur_start = pending_start
+                cur_end = e
+                pending_start = None
+                continue
+
+            flush()
+            cur_start = pending_start if pending_start is not None else s
+            cur_end = e
+            cur_lang = lang
+            pending_start = None
+        flush()
+        return windows
+
     def forward(self, features, tokenizer, chunks_metadata, options):
+        if options.multilingual:
+            self.model.logger.debug(
+                "Multilingual batched: forward with %d chunk(s), batch features "
+                "shape %s",
+                len(chunks_metadata),
+                features.shape,
+            )
+
         encoder_output, outputs = self.generate_segment_batched(
             features, tokenizer, options
         )
 
         segmented_outputs = []
         segment_sizes = []
-        for chunk_metadata, output in zip(chunks_metadata, outputs):
+        for j, (chunk_metadata, output) in enumerate(zip(chunks_metadata, outputs)):
             duration = chunk_metadata["duration"]
             segment_size = int(ceil(duration) * self.model.frames_per_second)
             segment_sizes.append(segment_size)
@@ -140,6 +232,26 @@ class BatchedInferencePipeline:
                 segment_duration=duration,
                 seek=0,
             )
+
+            n_tokens = len(output["tokens"])
+            lang_token_id = output["language_token"]
+            lang_str = (
+                tokenizer.tokenizer.id_to_token(lang_token_id)
+                if lang_token_id is not None
+                else "?"
+            )[2:-2]
+
+            self.model.logger.debug(
+                "Multilingual batched: chunk %d decoded: %d tokens, lang=%s, "
+                "no_speech_prob=%.3f, avg_logprob=%.3f, subsegments=%d",
+                j,
+                n_tokens,
+                lang_str,
+                output["no_speech_prob"],
+                output["avg_logprob"],
+                len(subsegments),
+            )
+
             segmented_outputs.append(
                 [
                     dict(
@@ -214,14 +326,24 @@ class BatchedInferencePipeline:
         prompts = [prompt.copy() for _ in range(batch_size)]
 
         if options.multilingual:
+            detected_languages = self.model.model.detect_language(encoder_output)
             language_tokens = [
                 tokenizer.tokenizer.token_to_id(segment_langs[0][0])
-                for segment_langs in self.model.model.detect_language(encoder_output)
+                for segment_langs in detected_languages
             ]
             language_token_index = prompt.index(tokenizer.language)
 
             for i, language_token in enumerate(language_tokens):
                 prompts[i][language_token_index] = language_token
+
+            self.model.logger.debug(
+                "Multilingual batched: per-chunk languages: %s",
+                ", ".join(
+                    f"chunk-{i}: {detected_languages[i][0][0][2:-2]} "
+                    f"({detected_languages[i][0][1]:.2f})"
+                    for i in range(len(detected_languages))
+                ),
+            )
         else:
             language_tokens = [tokenizer.language] * batch_size
 
@@ -293,6 +415,7 @@ class BatchedInferencePipeline:
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         multilingual: bool = False,
+        language_aware_vad_segments: bool = False,
         vad_filter: bool = True,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
         max_new_tokens: Optional[int] = None,
@@ -336,6 +459,12 @@ class BatchedInferencePipeline:
             append_punctuations: If word_timestamps is True, merge these punctuation symbols
                 with the previous word
             multilingual: Perform language detection on every segment.
+            language_aware_vad_segments: Split VAD speech chunks at detected language change
+                points before batching, so each batch window is monolingual. This prevents
+                a single language token being applied across a mid-window language switch
+                (which truncates and mis-transcribes the other language). Only effective when
+                ``multilingual=True`` and ``vad_filter=True``. Adds an extra detection pass
+                over the speech chunks (~3x slower) and is therefore opt-in.
             vad_filter: Enable the voice activity detection (VAD) to filter out parts of the audio
                 without speech. This step is using the Silero VAD model
                 https://github.com/snakers4/silero-vad.
@@ -399,6 +528,74 @@ class BatchedInferencePipeline:
         )
 
         chunk_length = chunk_length or self.model.feature_extractor.chunk_length
+
+        # When the caller opts into language-aware VAD segmentation, build the
+        # batch windows from VAD speech chunks split at detected language change
+        # points so each window is monolingual. This prevents a single language
+        # token being applied across a mid-window language switch (which truncates
+        # and mis-transcribes the other language). On by request only: it adds an
+        # extra detection pass over the speech chunks (~3x slower).
+        if multilingual and language_aware_vad_segments and not clip_timestamps:
+            # Use the same VAD defaults as the non-multilingual batched path so the
+            # speech chunks (and thus our language-aligned windows) are capped at
+            # chunk_length, unless the caller overrides them.
+            if vad_parameters is None:
+                vad_options = VadOptions(
+                    max_speech_duration_s=chunk_length,
+                    min_silence_duration_ms=160,
+                )
+            elif isinstance(vad_parameters, dict):
+                overrides = dict(vad_parameters)
+                overrides.setdefault("max_speech_duration_s", chunk_length)
+                overrides.setdefault("min_silence_duration_ms", 160)
+                vad_options = VadOptions(**overrides)
+            else:
+                vad_options = vad_parameters
+
+            if vad_filter:
+                speech_chunks = get_speech_timestamps(audio, vad_options)
+                self.model.logger.debug(
+                    "Multilingual batched: %d VAD speech chunk(s): %s",
+                    len(speech_chunks),
+                    ", ".join(
+                        "[%s – %s]"
+                        % (
+                            format_timestamp(c["start"] / sampling_rate),
+                            format_timestamp(c["end"] / sampling_rate),
+                        )
+                        for c in speech_chunks
+                    ),
+                )
+
+                sub_chunks = self.model._split_vad_chunks_by_language(
+                    audio, speech_chunks, sampling_rate
+                )
+
+                clip_timestamps = self._group_chunks_by_language(
+                    sub_chunks, sampling_rate, chunk_length
+                )
+            else:
+                clip_timestamps = [
+                    {
+                        "start": i * chunk_length,
+                        "end": min((i + 1) * chunk_length, duration),
+                    }
+                    for i in range(int(np.ceil(duration / chunk_length)))
+                ]
+
+            self.model.logger.debug(
+                "Multilingual batched: %d language-aligned window(s): %s",
+                len(clip_timestamps),
+                ", ".join(
+                    "[%s – %s]"
+                    % (
+                        format_timestamp(w["start"]),
+                        format_timestamp(w["end"]),
+                    )
+                    for w in clip_timestamps
+                ),
+            )
+
         # if no segment split is provided, use vad_model and generate segments
         if not clip_timestamps:
             if vad_filter:
@@ -439,7 +636,8 @@ class BatchedInferencePipeline:
 
             audio_chunks, chunks_metadata = [], []
             for i, clip in enumerate(clip_timestamps):
-                audio_chunks.append(audio[clip["start"] : clip["end"]])
+                audio_chunk = audio[clip["start"] : clip["end"]]
+                audio_chunks.append(audio_chunk)
 
                 clip_duration = (clip["end"] - clip["start"]) / sampling_rate
                 if clip_duration > 30:
@@ -455,6 +653,16 @@ class BatchedInferencePipeline:
                         "duration": clip_duration,
                         "segments": [clip],
                     }
+                )
+
+                self.model.logger.debug(
+                    "Multilingual batched: chunk %d → [%.3f – %.3f] (%.2f s) "
+                    "%d audio samples",
+                    i,
+                    clip["start"] / sampling_rate,
+                    clip["end"] / sampling_rate,
+                    clip_duration,
+                    len(audio_chunk),
                 )
 
         duration_after_vad = (
@@ -555,6 +763,7 @@ class BatchedInferencePipeline:
             clip_timestamps=clip_timestamps,
             prompt_reset_on_temperature=0.5,
             multilingual=multilingual,
+            language_aware_vad_segments=language_aware_vad_segments,
             without_timestamps=without_timestamps,
             max_initial_timestamp=0.0,
         )
@@ -600,6 +809,16 @@ class BatchedInferencePipeline:
             for result in results:
                 for segment in result:
                     seg_idx += 1
+                    if options.multilingual:
+                        self.model.logger.debug(
+                            "Multilingual batched: yielded segment (id=%d) "
+                            "[%.3f – %.3f] lang=%s text=%r",
+                            seg_idx,
+                            round(segment["start"], 3),
+                            round(segment["end"], 3),
+                            segment["language"],
+                            segment["text"][:200],
+                        )
                     yield Segment(
                         seek=segment["seek"],
                         id=seg_idx,
@@ -787,6 +1006,7 @@ class WhisperModel:
         prepend_punctuations: str = "\"'“¿([{-",
         append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
         multilingual: bool = False,
+        language_aware_vad_segments: bool = False,
         vad_filter: bool = False,
         vad_parameters: Optional[Union[dict, VadOptions]] = None,
         max_new_tokens: Optional[int] = None,
@@ -844,6 +1064,11 @@ class WhisperModel:
           append_punctuations: If word_timestamps is True, merge these punctuation symbols
             with the previous word
           multilingual: Perform language detection on every segment.
+          language_aware_vad_segments: Split VAD speech chunks at detected language change points,
+            routing each language-aligned region as its own seek clip so the seek loop processes
+            them separately and re-detects language within each. Only effective when
+            ``multilingual=True`` and ``vad_filter=True``. Off by default (the seek loop already
+            handles boundaries reasonably); opt in for tighter language alignment.
           vad_filter: Enable the voice activity detection (VAD) to filter out parts of the audio
             without speech. This step is using the Silero VAD model
             https://github.com/snakers4/silero-vad.
@@ -896,8 +1121,39 @@ class WhisperModel:
             elif isinstance(vad_parameters, dict):
                 vad_parameters = VadOptions(**vad_parameters)
             speech_chunks = get_speech_timestamps(audio, vad_parameters)
-            audio_chunks, chunks_metadata = collect_chunks(audio, speech_chunks)
-            audio = np.concatenate(audio_chunks, axis=0)
+
+            if multilingual and language_aware_vad_segments:
+                # Split the VAD speech chunks at detected language change points and
+                # route each region as its own seek clip (a flat [start, end, ...]
+                # list in seconds). The seek loop in ``generate_segments`` then
+                # processes each language-aligned region separately and
+                # re-detects language within it; the audio is left intact (no
+                # concat) so the timestamps already reference the original audio.
+                sub_chunks = self._split_vad_chunks_by_language(
+                    audio, speech_chunks, sampling_rate
+                )
+                clip_timestamps = [
+                    ts
+                    for sc in sub_chunks
+                    for ts in (sc["start"] / sampling_rate, sc["end"] / sampling_rate)
+                ]
+                self.logger.debug(
+                    "Language-aware VAD: %d speech chunk(s) -> %d language-aligned "
+                    "region(s): %s",
+                    len(speech_chunks),
+                    len(sub_chunks),
+                    ", ".join(
+                        "[%s -> %s]"
+                        % (
+                            format_timestamp(sc["start"] / sampling_rate),
+                            format_timestamp(sc["end"] / sampling_rate),
+                        )
+                        for sc in sub_chunks
+                    ),
+                )
+            else:
+                audio_chunks, chunks_metadata = collect_chunks(audio, speech_chunks)
+                audio = np.concatenate(audio_chunks, axis=0)
             duration_after_vad = audio.shape[0] / sampling_rate
 
             self.logger.info(
@@ -1004,6 +1260,7 @@ class WhisperModel:
             prepend_punctuations=prepend_punctuations,
             append_punctuations=append_punctuations,
             multilingual=multilingual,
+            language_aware_vad_segments=language_aware_vad_segments,
             max_new_tokens=max_new_tokens,
             clip_timestamps=clip_timestamps,
             hallucination_silence_threshold=hallucination_silence_threshold,
@@ -1407,6 +1664,147 @@ class WhisperModel:
         features = get_ctranslate2_storage(features)
 
         return self.model.encode(features, to_cpu=to_cpu)
+
+    def _split_vad_chunks_by_language(
+        self,
+        audio: np.ndarray,
+        speech_chunks: List[dict],
+        sampling_rate: int,
+    ) -> List[dict]:
+        """Refine VAD speech chunks by splitting them at detected language changes.
+
+        Batched multilingual inference assigns one language token per window. A
+        single chunk that spans a language switch therefore gets one token and the
+        speech of the other language is mis-transcribed (and often truncated), which
+        shows up as "missing" audio. This slides a short detection window over each
+        sufficiently long chunk, batch-detects the language at every position, and
+        splits a chunk wherever the confidently detected language changes.
+
+        Returns a list of ``{"start", "end", "language"}`` dicts whose ``start``/
+        ``end`` are in samples and ``language`` is the detected language code (or
+        ``None`` when no confident detection was made for a chunk).
+        """
+        # Detection resolution. 3 s is the shortest window on which Whisper's
+        # language head reliably separates close languages (e.g. Dutch vs German
+        # on the tiny model), while still localising a mid-chunk switch to within
+        # ~half a second. Hop half the window to overlap detections.
+        window_samples = int(round(3.0 * sampling_rate))
+        hop_samples = int(round(1.5 * sampling_rate))
+        min_subchunk_samples = int(round(0.5 * sampling_rate))
+        min_confidence = 0.5
+        detect_batch = 64
+
+        def _detect(audios):
+            """Batch-encode + detect_language, returning one (lang, prob) per input."""
+            out = []
+            for offset in range(0, len(audios), detect_batch):
+                batch = audios[offset : offset + detect_batch]
+                features = np.stack(
+                    [pad_or_trim(self.feature_extractor(wa)[..., :-1]) for wa in batch]
+                )
+                encoder_output = self.encode(features)
+                for lang_probs in self.model.detect_language(encoder_output):
+                    token, prob = lang_probs[0]
+                    out.append((token[2:-2], float(prob)))
+            return out
+
+        # Detect only the first and last detection window of each chunk.
+        # If they're not the same, apply an overlapping slide to determine the switch.
+        screen_audios: List[np.ndarray] = []
+        screen_meta: List[Tuple[int, str]] = []  # (chunk_idx, "first" | "last")
+        for chunk_idx, chunk in enumerate(speech_chunks):
+            start, end = int(chunk["start"]), int(chunk["end"])
+            # Shorter chunks can't be split and folded into a neighbour during
+            # grouping, so don't spend a detection on their language here.
+            if end - start < window_samples:
+                continue
+            screen_audios.append(audio[start : start + window_samples])
+            screen_meta.append((chunk_idx, "first"))
+            if end - start > window_samples:
+                screen_audios.append(audio[end - window_samples : end])
+                screen_meta.append((chunk_idx, "last"))
+
+        per_chunk_lang: List[Optional[str]] = [None] * len(speech_chunks)
+        needs_refine: List[int] = []
+        if screen_audios:
+            screen_results = _detect(screen_audios)
+            first_lang: Dict[int, Optional[str]] = {}
+            last_lang: Dict[int, Optional[str]] = {}
+            for (chunk_idx, which), (lang, prob) in zip(screen_meta, screen_results):
+                lng = lang if prob >= min_confidence else None
+                if which == "first":
+                    first_lang[chunk_idx] = lng
+                else:
+                    last_lang[chunk_idx] = lng
+            for chunk_idx in range(len(speech_chunks)):
+                fl, ll = first_lang.get(chunk_idx), last_lang.get(chunk_idx)
+                if fl is not None and fl == ll:
+                    per_chunk_lang[chunk_idx] = fl
+                elif fl is None and ll is None:
+                    per_chunk_lang[chunk_idx] = None
+                else:
+                    # Ends disagree (or one is unconfident): refine.
+                    needs_refine.append(chunk_idx)
+
+        # Sliding refine over only the chunks flagged above.
+        refine_windows: List[np.ndarray] = []
+        refine_coords: List[Tuple[int, int]] = []
+        for chunk_idx in needs_refine:
+            start, end = int(speech_chunks[chunk_idx]["start"]), int(
+                speech_chunks[chunk_idx]["end"]
+            )
+            pos = start
+            while pos + window_samples <= end:
+                refine_windows.append(audio[pos : pos + window_samples])
+                refine_coords.append((chunk_idx, pos + window_samples // 2))
+                pos += hop_samples
+
+        refine_detections: Dict[int, List[Tuple[int, str, float]]] = {}
+        if refine_windows:
+            refine_results = _detect(refine_windows)
+            for (chunk_idx, center), (lang, prob) in zip(refine_coords, refine_results):
+                refine_detections.setdefault(chunk_idx, []).append((center, lang, prob))
+
+        refined: List[dict] = []
+        for chunk_idx, chunk in enumerate(speech_chunks):
+            start, end = int(chunk["start"]), int(chunk["end"])
+            if chunk_idx not in needs_refine:
+                refined.append(
+                    {"start": start, "end": end, "language": per_chunk_lang[chunk_idx]}
+                )
+                continue
+
+            detections = refine_detections.get(chunk_idx, [])
+            boundaries = [start]
+            segment_languages: List[Optional[str]] = []
+            last_language: Optional[str] = None
+            for center, language, prob in detections:
+                if prob < min_confidence:
+                    continue
+                if last_language is None:
+                    last_language = language
+                    continue
+                if (
+                    language != last_language
+                    and center - boundaries[-1] >= min_subchunk_samples
+                    and end - center >= min_subchunk_samples
+                ):
+                    boundaries.append(center)
+                    segment_languages.append(last_language)
+                    last_language = language
+            boundaries.append(end)
+            segment_languages.append(last_language)
+
+            for i in range(len(boundaries) - 1):
+                refined.append(
+                    {
+                        "start": boundaries[i],
+                        "end": boundaries[i + 1],
+                        "language": segment_languages[i],
+                    }
+                )
+
+        return refined
 
     def generate_with_fallback(
         self,

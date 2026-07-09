@@ -229,6 +229,19 @@ def test_multilingual_transcription(data_dir):
     )
     assert segments[1].language == "de"
 
+    segments, info = pipeline.transcribe(
+        audio,
+        multilingual=True,
+        language_aware_vad_segments=True,
+        without_timestamps=True,
+        condition_on_previous_text=False,
+    )
+    segments = list(segments)
+    assert info.transcription_options.language_aware_vad_segments is True
+    assert segments[0].language == "en"
+    assert segments[1].language == "de"
+    assert segments[1].text.startswith(" Jedem")
+
 
 def test_hotwords(data_dir):
     model = WhisperModel("tiny")
