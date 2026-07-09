@@ -51,6 +51,7 @@ class Segment:
     start: float
     end: float
     text: str
+    language: str
     tokens: List[int]
     avg_logprob: float
     compression_ratio: float
@@ -148,6 +149,9 @@ class BatchedInferencePipeline:
                         tokens=subsegment["tokens"],
                         start=subsegment["start"],
                         end=subsegment["end"],
+                        language=tokenizer.tokenizer.id_to_token(
+                            output["language_token"]
+                        )[2:-2],
                         compression_ratio=get_compression_ratio(
                             tokenizer.decode(subsegment["tokens"])
                         ),
@@ -218,6 +222,8 @@ class BatchedInferencePipeline:
 
             for i, language_token in enumerate(language_tokens):
                 prompts[i][language_token_index] = language_token
+        else:
+            language_tokens = [tokenizer.language] * batch_size
 
         results = self.model.model.generate(
             encoder_output,
@@ -236,7 +242,7 @@ class BatchedInferencePipeline:
         )
 
         output = []
-        for result in results:
+        for idx, result in enumerate(results):
             # return scores
             seq_len = len(result.sequences_ids[0])
             cum_logprob = result.scores[0] * (seq_len**options.length_penalty)
@@ -246,6 +252,7 @@ class BatchedInferencePipeline:
                     avg_logprob=cum_logprob / (seq_len + 1),
                     no_speech_prob=result.no_speech_prob,
                     tokens=result.sequences_ids[0],
+                    language_token=language_tokens[idx],
                 )
             )
 
@@ -609,6 +616,7 @@ class BatchedInferencePipeline:
                         no_speech_prob=segment["no_speech_prob"],
                         compression_ratio=segment["compression_ratio"],
                         temperature=options.temperatures[0],
+                        language=segment["language"],
                     )
 
                 pbar.update(1)
@@ -1357,6 +1365,7 @@ class WhisperModel:
                     start=segment["start"],
                     end=segment["end"],
                     text=text,
+                    language=tokenizer.language_code,
                     tokens=tokens,
                     temperature=temperature,
                     avg_logprob=avg_logprob,
