@@ -251,7 +251,9 @@ Here is a non exhaustive list of open-source projects using faster-whisper. Feel
 * [Faster-Whisper-Transcriber](https://github.com/BBC-Esq/ctranslate2-faster-whisper-transcriber) is a simple but reliable voice transcriber that provides a user-friendly interface.
 * [Open-dubbing](https://github.com/softcatala/open-dubbing) is open dubbing is an AI dubbing system which uses machine learning models to automatically translate and synchronize audio dialogue into different languages.
 * [Whisper-FastAPI](https://github.com/heimoshuiyu/whisper-fastapi) whisper-fastapi is a very simple script that provides an API backend compatible with OpenAI, HomeAssistant, and Konele (Android voice typing) formats.
-
+* [Whisper-Studio](https://github.com/mohammadKarimi/Whisper-Studio) Whisper Studio is an independent desktop interface for WhisperX and Faster-Whisper,
+complete with apps for macOS, Windows, Linux.
+* 
 ## Model conversion
 
 When loading a model from its size such as `WhisperModel("large-v3")`, the corresponding CTranslate2 model is automatically downloaded from the [Hugging Face Hub](https://huggingface.co/Systran).
