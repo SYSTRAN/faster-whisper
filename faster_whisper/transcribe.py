@@ -141,11 +141,6 @@ class BatchedInferencePipeline:
         cur_start: Optional[int] = None
         cur_end: Optional[int] = None
         cur_lang: Optional[str] = None
-        # A run of unconfident (None) sub-chunks is kept pending rather than
-        # emitted on its own: it gets folded into the following confident window
-        # (or the current one, if it still fits). This avoids tiny standalone
-        # windows whose language the model can't determine reliably.
-        pending_start: Optional[int] = None
 
         def flush():
             if cur_start is not None:
@@ -162,42 +157,56 @@ class BatchedInferencePipeline:
             lang = sc.get("language")
 
             if lang is None:
-                # Fold into the current window if it still fits, otherwise carry
-                # the span forward to attach to the next confident window.
-                if (
+                # Unconfident chunks: flush the current confident window and
+                # start/extend a None window. This prevents None chunks at
+                # language boundaries from being folded into the preceding
+                # language's window, which would bridge across a language
+                # switch and confuse the model's per-window detection.
+                if cur_lang is not None:
+                    flush()
+                    cur_start = s
+                    cur_end = e
+                    cur_lang = None
+                elif (
                     cur_start is not None
-                    and (e - cur_start) / sampling_rate <= chunk_length
                     and (s - cur_end) / sampling_rate <= max_gap_s
+                    and (e - cur_start) / sampling_rate <= chunk_length
                 ):
+                    # Extend the current None window.
                     cur_end = e
                 else:
-                    if pending_start is None:
-                        pending_start = s
+                    flush()
+                    cur_start = s
+                    cur_end = e
+                    cur_lang = None
                 continue
 
             same_language = cur_start is not None and lang == cur_lang
-            prospective_start = (
-                pending_start if pending_start is not None else cur_start
-            )
             within_length = (
-                e - (prospective_start or s)
+                e - (cur_start if cur_start is not None else s)
             ) / sampling_rate <= chunk_length
-            small_gap = (
+            small_gap = cur_start is not None and (
                 cur_end is not None and (s - cur_end) / sampling_rate <= max_gap_s
-            ) or pending_start is not None
+            )
 
-            if same_language and within_length and (cur_start is None or small_gap):
-                if pending_start is not None:
-                    cur_start = pending_start
+            if cur_lang is None and within_length and small_gap:
+                # Treat an unconfident boundary span as leading context for the
+                # next confident language. This avoids decoding a short German
+                # prefix (for example, "Jedem") as a standalone English window.
                 cur_end = e
-                pending_start = None
+                cur_lang = lang
                 continue
 
+            if same_language and within_length and small_gap:
+                cur_end = e
+                continue
+
+            # Different language, a gap, or a full window starts a new window.
             flush()
-            cur_start = pending_start if pending_start is not None else s
+            cur_start = s
             cur_end = e
             cur_lang = lang
-            pending_start = None
+
         flush()
         return windows
 
@@ -569,6 +578,19 @@ class BatchedInferencePipeline:
 
                 sub_chunks = self.model._split_vad_chunks_by_language(
                     audio, speech_chunks, sampling_rate
+                )
+                self.model.logger.debug(
+                    "Multilingual batched: %d sub-chunk(s) from language split: %s",
+                    len(sub_chunks),
+                    ", ".join(
+                        "[%s – %s](%s)"
+                        % (
+                            format_timestamp(sc["start"] / sampling_rate),
+                            format_timestamp(sc["end"] / sampling_rate),
+                            sc.get("language"),
+                        )
+                        for sc in sub_chunks
+                    ),
                 )
 
                 clip_timestamps = self._group_chunks_by_language(

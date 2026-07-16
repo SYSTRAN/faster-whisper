@@ -4,6 +4,7 @@ import os
 import numpy as np
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
+from faster_whisper.transcribe import BatchedInferencePipeline as _BatchedPipeline
 
 
 def test_supported_languages():
@@ -239,8 +240,41 @@ def test_multilingual_transcription(data_dir):
     segments = list(segments)
     assert info.transcription_options.language_aware_vad_segments is True
     assert segments[0].language == "en"
-    assert segments[1].language == "de"
-    assert segments[1].text.startswith(" Jedem")
+    german_segment = next(segment for segment in segments if segment.language == "de")
+    assert german_segment.text.startswith(" Jedem")
+
+
+def test_group_chunks_by_language_does_not_drop_unconfident_audio():
+    """Unconfident (lang=None) sub-chunks must always appear in some window."""
+    sub_chunks = [
+        {"start": 0, "end": 160000, "language": "en"},
+        {"start": 160000, "end": 320000, "language": None},
+        {"start": 320000, "end": 480000, "language": None},
+    ]
+    windows = _BatchedPipeline._group_chunks_by_language(
+        sub_chunks, sampling_rate=16000, chunk_length=30.0
+    )
+    total_covered = sum(w["end"] - w["start"] for w in windows)
+    assert total_covered == 30.0
+    assert windows[-1]["end"] == 30.0
+
+
+def test_group_chunks_by_language_emits_distant_none_window():
+    """A distant None span starts its own window instead of being dropped."""
+    sub_chunks = [
+        {"start": 0, "end": 160000, "language": "en"},
+        {"start": 480000, "end": 640000, "language": None},
+        {"start": 960000, "end": 1120000, "language": "de"},
+    ]
+    windows = _BatchedPipeline._group_chunks_by_language(
+        sub_chunks, sampling_rate=16000, chunk_length=30.0
+    )
+    # The None span (30–40s) is too far from the de chunk (60–70s) to merge,
+    # so it must be emitted as its own window rather than dropped.
+    assert len(windows) == 3
+    assert windows[0] == {"start": 0.0, "end": 10.0}
+    assert windows[1] == {"start": 30.0, "end": 40.0}
+    assert windows[2] == {"start": 60.0, "end": 70.0}
 
 
 def test_hotwords(data_dir):
