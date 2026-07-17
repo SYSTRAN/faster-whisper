@@ -4,6 +4,7 @@ import os
 import numpy as np
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
+from faster_whisper.transcribe import BatchedInferencePipeline as _BatchedPipeline
 
 
 def test_supported_languages():
@@ -36,6 +37,7 @@ def test_transcribe(jfk_path):
         " And so my fellow Americans, ask not what your country can do for you, "
         "ask what you can do for your country."
     )
+    assert segment.language == "en"
 
     assert segment.text == "".join(word.word for word in segment.words)
     assert segment.start == segment.words[0].start
@@ -49,7 +51,12 @@ def test_transcribe(jfk_path):
     segments = []
     for segment in result:
         segments.append(
-            {"start": segment.start, "end": segment.end, "text": segment.text}
+            {
+                "start": segment.start,
+                "end": segment.end,
+                "text": segment.text,
+                "language": segment.language,
+            }
         )
 
     assert len(segments) == 1
@@ -57,6 +64,7 @@ def test_transcribe(jfk_path):
         " And so my fellow Americans ask not what your country can do for you, "
         "ask what you can do for your country."
     )
+    assert segment.language == "en"
 
 
 def test_batched_transcribe(physcisworks_path):
@@ -68,7 +76,12 @@ def test_batched_transcribe(physcisworks_path):
     segments = []
     for segment in result:
         segments.append(
-            {"start": segment.start, "end": segment.end, "text": segment.text}
+            {
+                "start": segment.start,
+                "end": segment.end,
+                "text": segment.text,
+                "language": segment.language,
+            }
         )
     # number of near 30 sec segments
     assert len(segments) == 6
@@ -182,6 +195,7 @@ def test_multilingual_transcription(data_dir):
         " notice and this permission notice, shall be included in all copies or substantial "
         "portions of the software."
     )
+    assert segments[0].language == "en"
 
     assert (
         segments[1].text
@@ -192,6 +206,7 @@ def test_multilingual_transcription(data_dir):
         "unterzulizenzieren und oder kopieren der Software zu verkaufen und diese Rechte "
         "unterfolgen den Bedingungen anderen zu übertragen."
     )
+    assert segments[1].language == "de"
 
     segments, info = pipeline.transcribe(audio, multilingual=True)
     segments = list(segments)
@@ -206,12 +221,60 @@ def test_multilingual_transcription(data_dir):
         " notice and this permission notice, shall be included in all copies or substantial "
         "portions of the software."
     )
+    assert segments[0].language == "en"
     assert (
         "Dokumentationsdatein erhält, wird hiermit unengeltlich die Genehmigung erteilt,"
         " wird der Software und eingeschränkt zu verfahren. Dies umfasst insbesondere das Recht,"
         " die Software zu verwenden, zu vervielfältigen, zu modifizieren"
         in segments[1].text
     )
+    assert segments[1].language == "de"
+
+    segments, info = pipeline.transcribe(
+        audio,
+        multilingual=True,
+        language_aware_vad_segments=True,
+        without_timestamps=True,
+        condition_on_previous_text=False,
+    )
+    segments = list(segments)
+    assert info.transcription_options.language_aware_vad_segments is True
+    assert segments[0].language == "en"
+    german_segment = next(segment for segment in segments if segment.language == "de")
+    assert german_segment.text.startswith(" Jedem")
+
+
+def test_group_chunks_by_language_does_not_drop_unconfident_audio():
+    """Unconfident (lang=None) sub-chunks must always appear in some window."""
+    sub_chunks = [
+        {"start": 0, "end": 160000, "language": "en"},
+        {"start": 160000, "end": 320000, "language": None},
+        {"start": 320000, "end": 480000, "language": None},
+    ]
+    windows = _BatchedPipeline._group_chunks_by_language(
+        sub_chunks, sampling_rate=16000, chunk_length=30.0
+    )
+    total_covered = sum(w["end"] - w["start"] for w in windows)
+    assert total_covered == 30.0
+    assert windows[-1]["end"] == 30.0
+
+
+def test_group_chunks_by_language_emits_distant_none_window():
+    """A distant None span starts its own window instead of being dropped."""
+    sub_chunks = [
+        {"start": 0, "end": 160000, "language": "en"},
+        {"start": 480000, "end": 640000, "language": None},
+        {"start": 960000, "end": 1120000, "language": "de"},
+    ]
+    windows = _BatchedPipeline._group_chunks_by_language(
+        sub_chunks, sampling_rate=16000, chunk_length=30.0
+    )
+    # The None span (30–40s) is too far from the de chunk (60–70s) to merge,
+    # so it must be emitted as its own window rather than dropped.
+    assert len(windows) == 3
+    assert windows[0] == {"start": 0.0, "end": 10.0, "language": "en"}
+    assert windows[1] == {"start": 30.0, "end": 40.0, "language": None}
+    assert windows[2] == {"start": 60.0, "end": 70.0, "language": "de"}
 
 
 def test_hotwords(data_dir):
