@@ -148,6 +148,7 @@ class BatchedInferencePipeline:
                     {
                         "start": cur_start / sampling_rate,
                         "end": cur_end / sampling_rate,
+                        "language": cur_lang,
                     }
                 )
 
@@ -220,7 +221,7 @@ class BatchedInferencePipeline:
             )
 
         encoder_output, outputs = self.generate_segment_batched(
-            features, tokenizer, options
+            features, tokenizer, options, [m.get("language") for m in chunks_metadata]
         )
 
         segmented_outputs = []
@@ -301,6 +302,7 @@ class BatchedInferencePipeline:
         features: np.ndarray,
         tokenizer: Tokenizer,
         options: TranscriptionOptions,
+        window_languages: Optional[List[Optional[str]]] = None,
     ):
         batch_size = features.shape[0]
 
@@ -344,6 +346,18 @@ class BatchedInferencePipeline:
 
             for i, language_token in enumerate(language_tokens):
                 prompts[i][language_token_index] = language_token
+
+            # Override auto-detected language with the splitter's label when
+            # the window carries a confident language. This prevents the auto-
+            # detector from misclassifying a window that is predominantly one
+            # language but contains a minority of another.
+            if window_languages is not None:
+                for i, wl in enumerate(window_languages):
+                    if wl is not None:
+                        language_tokens[i] = tokenizer.tokenizer.token_to_id(
+                            f"<|{wl}|>"
+                        )
+                        prompts[i][language_token_index] = language_tokens[i]
 
             self.model.logger.debug(
                 "Multilingual batched: per-chunk languages: %s",
@@ -652,7 +666,11 @@ class BatchedInferencePipeline:
         else:
             clip_timestamps_provided = True
             clip_timestamps = [
-                {k: int(v * sampling_rate) for k, v in segment.items()}
+                {
+                    "start": int(segment["start"] * sampling_rate),
+                    "end": int(segment["end"] * sampling_rate),
+                    "language": segment.get("language"),
+                }
                 for segment in clip_timestamps
             ]
 
@@ -674,6 +692,7 @@ class BatchedInferencePipeline:
                         "offset": clip["start"] / sampling_rate,
                         "duration": clip_duration,
                         "segments": [clip],
+                        "language": clip.get("language"),
                     }
                 )
 
@@ -1452,6 +1471,11 @@ class WhisperModel:
                 if clip_idx < len(seek_clips):
                     seek = seek_clips[clip_idx][0]
                 continue
+
+            # If this window extends beyond the clip's content, clamp the end
+            # so we process the visible portion. Without this, the decoder skips
+            # the window entirely and audio near clip boundaries is silently lost.
+            effective_clip_end = min(seek_clip_end, content_frames)
             time_offset = seek * self.feature_extractor.time_per_frame
             window_end_time = float(
                 (seek + self.feature_extractor.nb_max_frames)
@@ -1460,7 +1484,7 @@ class WhisperModel:
             segment_size = min(
                 self.feature_extractor.nb_max_frames,
                 content_frames - seek,
-                seek_clip_end - seek,
+                effective_clip_end - seek,
             )
             segment = features[:, seek : seek + segment_size]
             segment_duration = segment_size * self.feature_extractor.time_per_frame

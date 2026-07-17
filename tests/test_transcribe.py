@@ -272,9 +272,9 @@ def test_group_chunks_by_language_emits_distant_none_window():
     # The None span (30–40s) is too far from the de chunk (60–70s) to merge,
     # so it must be emitted as its own window rather than dropped.
     assert len(windows) == 3
-    assert windows[0] == {"start": 0.0, "end": 10.0}
-    assert windows[1] == {"start": 30.0, "end": 40.0}
-    assert windows[2] == {"start": 60.0, "end": 70.0}
+    assert windows[0] == {"start": 0.0, "end": 10.0, "language": "en"}
+    assert windows[1] == {"start": 30.0, "end": 40.0, "language": None}
+    assert windows[2] == {"start": 60.0, "end": 70.0, "language": "de"}
 
 
 def test_hotwords(data_dir):
