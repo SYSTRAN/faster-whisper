@@ -93,7 +93,20 @@ def _group_frames(frames, num_samples=None):
 
     for frame in frames:
         frame.pts = None  # Ignore timestamp check.
-        fifo.write(frame)
+
+        try:
+            fifo.write(frame)
+        except ValueError:
+            # The FIFO locks onto the format/layout/rate of the first frame
+            # written to it and rejects any later frame that differs (e.g.
+            # a stream whose sample rate or sample format changes partway
+            # through). Flush what we have and start a new FIFO for the
+            # frame with the new parameters; the downstream AudioResampler
+            # will normalize both groups to a common format anyway.
+            if fifo.samples > 0:
+                yield fifo.read()
+            fifo = av.audio.fifo.AudioFifo()
+            fifo.write(frame)
 
         if num_samples is not None and fifo.samples >= num_samples:
             yield fifo.read()
@@ -105,7 +118,23 @@ def _group_frames(frames, num_samples=None):
 def _resample_frames(frames, resampler):
     # Add None to flush the resampler.
     for frame in itertools.chain(frames, [None]):
-        yield from resampler.resample(frame)
+        try:
+            yield from resampler.resample(frame)
+        except ValueError:
+            # Like AudioFifo, AudioResampler locks onto the format/layout/
+            # rate of the first frame it processes and rejects later frames
+            # with different source parameters (e.g. a stream whose sample
+            # rate changes partway through). Flush the current resampler
+            # and swap in a fresh one (same target params) for the frame
+            # with the new source parameters.
+            yield from resampler.resample(None)
+            resampler = av.audio.resampler.AudioResampler(
+                format=resampler.format,
+                layout=resampler.layout,
+                rate=resampler.rate,
+            )
+            if frame is not None:
+                yield from resampler.resample(frame)
 
 
 def pad_or_trim(array, length: int = 3000, *, axis: int = -1):
