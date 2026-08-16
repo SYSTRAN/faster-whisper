@@ -1139,6 +1139,7 @@ class WhisperModel:
         seek = seek_clips[clip_idx][0]
         all_tokens = []
         prompt_reset_since = 0
+        previous_language = None
 
         if options.initial_prompt is not None:
             if isinstance(options.initial_prompt, str):
@@ -1194,6 +1195,19 @@ class WhisperModel:
                 language_token, language_probability = results[0][0]
                 language = language_token[2:-2]
 
+                # `previous_tokens` holds text decoded in the previous window's language.
+                # Passed as `<|startofprev|>` context it competes with the language token
+                # set below, so the window can be decoded in the previous language.
+                if previous_language is not None and language != previous_language:
+                    self.logger.debug(
+                        "Reset prompt. Language changed from %s to %s",
+                        previous_language,
+                        language,
+                    )
+                    prompt_reset_since = len(all_tokens)
+                    previous_tokens = []
+
+                previous_language = language
                 tokenizer.language = tokenizer.tokenizer.token_to_id(language_token)
                 tokenizer.language_code = language
 
