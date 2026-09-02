@@ -686,6 +686,8 @@ class WhisperModel:
                 use_auth_token=use_auth_token,
             )
 
+        self._ensure_suppress_tokens_config(model_path)
+
         self.model = ctranslate2.models.Whisper(
             model_path,
             device=device,
@@ -720,6 +722,44 @@ class WhisperModel:
         )
         self.time_precision = 0.02
         self.max_length = 448
+
+    @staticmethod
+    def _ensure_suppress_tokens_config(model_path: str):
+        """Ensure the model config.json has the keys ctranslate2 expects.
+
+        Custom-converted models may lack ``suppress_ids`` or
+        ``suppress_ids_begin``, which causes ctranslate2 to crash with
+        ``json.exception.type_error.302`` when ``suppress_blank=True`` or
+        ``suppress_tokens=[-1]``.
+        See https://github.com/SYSTRAN/faster-whisper/issues/1251
+        """
+        config_path = os.path.join(model_path, "config.json")
+        if not os.path.isfile(config_path):
+            return
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+        needs_update = False
+        if "suppress_ids_begin" not in config:
+            config["suppress_ids_begin"] = [220, 50257]
+            needs_update = True
+        if "suppress_ids" not in config:
+            config["suppress_ids"] = []
+            needs_update = True
+
+        if needs_update:
+            try:
+                with open(config_path, "w", encoding="utf-8") as f:
+                    json.dump(config, f, indent=2)
+            except OSError:
+                logging.getLogger("faster_whisper").warning(
+                    "Model config at '%s' is missing 'suppress_ids_begin' or "
+                    "'suppress_ids'. Could not write defaults (read-only path). "
+                    "suppress_blank=True may crash; use suppress_blank=False as "
+                    "a workaround.",
+                    config_path,
+                )
 
     @property
     def supported_languages(self) -> List[str]:
