@@ -27,6 +27,15 @@ from faster_whisper.vad import (
     get_speech_timestamps,
 )
 
+# tqdm's background monitor thread (used to detect stalled progress bars) has
+# been observed to trigger a rare CPython interpreter race under Python 3.14
+# (an unrelated `__init__` call elsewhere in the process fails with
+# "TypeError: __init__() should return None, not 'NoneType'", see
+# https://github.com/SYSTRAN/faster-whisper/issues/1474). It serves no
+# purpose here, so disable it outright rather than leave a background thread
+# running for the lifetime of the process.
+tqdm.monitor_interval = 0
+
 
 @dataclass
 class Word:
