@@ -1,4 +1,4 @@
-[![CI](https://github.com/SYSTRAN/faster-whisper/workflows/CI/badge.svg)](https://github.com/SYSTRAN/faster-whisper/actions?query=workflow%3ACI) [![PyPI version](https://badge.fury.io/py/faster-whisper.svg)](https://badge.fury.io/py/faster-whisper)
+[![CI](https://github.com/SYSTRAN/faster-whisper/workflows/CI/badge.svg)](https://github.com/SYSTRAN/faster-whisper/actions?query=workflow%3ACI) [![PyPI version](https://badge.fury.io/py/faster-whisper.svg)](https://badge.fury.io/py/faster-whisper) [![Lintspace Score](https://lintspace.com/api/badge/e2e9f65c-ca87-4d32-9b07-a2ccc158b91c.svg)](https://lintspace.com/verdict/e2e9f65c-ca87-4d32-9b07-a2ccc158b91c)
 
 # Faster Whisper transcription with CTranslate2
 
