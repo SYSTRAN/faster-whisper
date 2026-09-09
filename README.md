@@ -251,6 +251,7 @@ Here is a non exhaustive list of open-source projects using faster-whisper. Feel
 * [Faster-Whisper-Transcriber](https://github.com/BBC-Esq/ctranslate2-faster-whisper-transcriber) is a simple but reliable voice transcriber that provides a user-friendly interface.
 * [Open-dubbing](https://github.com/softcatala/open-dubbing) is open dubbing is an AI dubbing system which uses machine learning models to automatically translate and synchronize audio dialogue into different languages.
 * [Whisper-FastAPI](https://github.com/heimoshuiyu/whisper-fastapi) whisper-fastapi is a very simple script that provides an API backend compatible with OpenAI, HomeAssistant, and Konele (Android voice typing) formats.
+* [clipcut](https://github.com/dancolta/clipcut) is a CLI tool that turns long-form video into captioned vertical shorts. Uses faster-whisper for transcription and word-level timestamps to drive silence removal, speed adjustment, and SRT caption generation — all offline, with a human-reviewable edit plan before anything renders.
 
 ## Model conversion
 
