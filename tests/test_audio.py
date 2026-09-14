@@ -27,10 +27,11 @@ def test_decode_audio_pathlib_mock():
     mock_frame = MagicMock()
     mock_frame.to_ndarray.return_value = np.zeros(1600, dtype=np.int16)
 
-    with patch("faster_whisper.audio.av.open") as mock_av_open, \
-         patch("faster_whisper.audio._ignore_invalid_frames") as mock_ignore, \
-         patch("faster_whisper.audio._group_frames") as mock_group, \
-         patch("faster_whisper.audio._resample_frames") as mock_resample:
+    with patch("faster_whisper.audio.av.open") as mock_av_open, patch(
+        "faster_whisper.audio._ignore_invalid_frames"
+    ) as mock_ignore, patch("faster_whisper.audio._group_frames") as mock_group, patch(
+        "faster_whisper.audio._resample_frames"
+    ) as mock_resample:
 
         mock_container = MagicMock()
         mock_av_open.return_value.__enter__.return_value = mock_container
@@ -60,10 +61,11 @@ def test_decode_audio_custom_pathlike_mock():
     mock_frame = MagicMock()
     mock_frame.to_ndarray.return_value = np.zeros(800, dtype=np.int16)
 
-    with patch("faster_whisper.audio.av.open") as mock_av_open, \
-         patch("faster_whisper.audio._ignore_invalid_frames") as mock_ignore, \
-         patch("faster_whisper.audio._group_frames") as mock_group, \
-         patch("faster_whisper.audio._resample_frames") as mock_resample:
+    with patch("faster_whisper.audio.av.open") as mock_av_open, patch(
+        "faster_whisper.audio._ignore_invalid_frames"
+    ) as mock_ignore, patch("faster_whisper.audio._group_frames") as mock_group, patch(
+        "faster_whisper.audio._resample_frames"
+    ) as mock_resample:
 
         mock_container = MagicMock()
         mock_av_open.return_value.__enter__.return_value = mock_container
@@ -95,9 +97,9 @@ def test_decode_audio_pathlib_real_file(jfk_path):
 
 def test_whisper_model_pathlib():
     """Verify that WhisperModel accepts pathlib.Path for model_size_or_path and download_root."""
-    with patch("faster_whisper.transcribe.download_model") as mock_dl, \
-         patch("faster_whisper.transcribe.ctranslate2.models.Whisper"), \
-         patch("faster_whisper.transcribe.tokenizers.Tokenizer"):
+    with patch("faster_whisper.transcribe.download_model") as mock_dl, patch(
+        "faster_whisper.transcribe.ctranslate2.models.Whisper"
+    ), patch("faster_whisper.transcribe.tokenizers.Tokenizer"):
 
         mock_dl.return_value = "mock_model_dir"
         WhisperModel(Path("tiny"), download_root=Path("cache_dir"))
@@ -109,8 +111,9 @@ def test_whisper_model_pathlib():
         assert mock_dl.call_args[1]["cache_dir"] == "cache_dir"
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("faster_whisper.transcribe.ctranslate2.models.Whisper") as mock_ct, \
-             patch("faster_whisper.transcribe.tokenizers.Tokenizer"):
+        with patch(
+            "faster_whisper.transcribe.ctranslate2.models.Whisper"
+        ) as mock_ct, patch("faster_whisper.transcribe.tokenizers.Tokenizer"):
 
             WhisperModel(Path(tmpdir))
 
