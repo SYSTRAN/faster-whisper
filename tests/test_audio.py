@@ -18,7 +18,16 @@ class CustomPathLike:
         return self._path
 
 
-def test_decode_audio_pathlib_mock():
+@patch("faster_whisper.audio._resample_frames")
+@patch("faster_whisper.audio._group_frames")
+@patch("faster_whisper.audio._ignore_invalid_frames")
+@patch("faster_whisper.audio.av.open")
+def test_decode_audio_pathlib_mock(
+    mock_av_open,
+    mock_ignore,
+    mock_group,
+    mock_resample,
+):
     """Verify that decode_audio accepts a pathlib.Path object, converts it to str,
     and decodes audio without crashing using mocks.
     """
@@ -27,60 +36,59 @@ def test_decode_audio_pathlib_mock():
     mock_frame = MagicMock()
     mock_frame.to_ndarray.return_value = np.zeros(1600, dtype=np.int16)
 
-    with patch("faster_whisper.audio.av.open") as mock_av_open, patch(
-        "faster_whisper.audio._ignore_invalid_frames"
-    ) as mock_ignore, patch("faster_whisper.audio._group_frames") as mock_group, patch(
-        "faster_whisper.audio._resample_frames"
-    ) as mock_resample:
+    mock_container = MagicMock()
+    mock_av_open.return_value.__enter__.return_value = mock_container
+    mock_container.decode.return_value = [mock_frame]
+    mock_ignore.return_value = [mock_frame]
+    mock_group.return_value = [mock_frame]
+    mock_resample.return_value = [mock_frame]
 
-        mock_container = MagicMock()
-        mock_av_open.return_value.__enter__.return_value = mock_container
-        mock_container.decode.return_value = [mock_frame]
-        mock_ignore.return_value = [mock_frame]
-        mock_group.return_value = [mock_frame]
-        mock_resample.return_value = [mock_frame]
+    result = decode_audio(fake_path)
 
-        result = decode_audio(fake_path)
+    # Verify av.open was called with a str, not a Path object
+    mock_av_open.assert_called_once()
+    opened_arg = mock_av_open.call_args[0][0]
+    assert isinstance(opened_arg, str)
+    assert opened_arg == str(os.fspath(fake_path))
 
-        # Verify av.open was called with a str, not a Path object
-        mock_av_open.assert_called_once()
-        opened_arg = mock_av_open.call_args[0][0]
-        assert isinstance(opened_arg, str)
-        assert opened_arg == str(os.fspath(fake_path))
-
-        # Verify output is a float32 numpy array
-        assert isinstance(result, np.ndarray)
-        assert result.dtype == np.float32
-        assert len(result) == 1600
+    # Verify output is a float32 numpy array
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float32
+    assert len(result) == 1600
 
 
-def test_decode_audio_custom_pathlike_mock():
-    """Verify that decode_audio accepts any object implementing the os.PathLike protocol."""
+@patch("faster_whisper.audio._resample_frames")
+@patch("faster_whisper.audio._group_frames")
+@patch("faster_whisper.audio._ignore_invalid_frames")
+@patch("faster_whisper.audio.av.open")
+def test_decode_audio_custom_pathlike_mock(
+    mock_av_open,
+    mock_ignore,
+    mock_group,
+    mock_resample,
+):
+    """Verify that decode_audio accepts any object implementing the
+    os.PathLike protocol.
+    """
     fake_path = CustomPathLike("custom_dir/custom_audio.wav")
 
     mock_frame = MagicMock()
     mock_frame.to_ndarray.return_value = np.zeros(800, dtype=np.int16)
 
-    with patch("faster_whisper.audio.av.open") as mock_av_open, patch(
-        "faster_whisper.audio._ignore_invalid_frames"
-    ) as mock_ignore, patch("faster_whisper.audio._group_frames") as mock_group, patch(
-        "faster_whisper.audio._resample_frames"
-    ) as mock_resample:
+    mock_container = MagicMock()
+    mock_av_open.return_value.__enter__.return_value = mock_container
+    mock_container.decode.return_value = [mock_frame]
+    mock_ignore.return_value = [mock_frame]
+    mock_group.return_value = [mock_frame]
+    mock_resample.return_value = [mock_frame]
 
-        mock_container = MagicMock()
-        mock_av_open.return_value.__enter__.return_value = mock_container
-        mock_container.decode.return_value = [mock_frame]
-        mock_ignore.return_value = [mock_frame]
-        mock_group.return_value = [mock_frame]
-        mock_resample.return_value = [mock_frame]
+    result = decode_audio(fake_path)
 
-        result = decode_audio(fake_path)
-
-        mock_av_open.assert_called_once()
-        opened_arg = mock_av_open.call_args[0][0]
-        assert isinstance(opened_arg, str)
-        assert opened_arg == "custom_dir/custom_audio.wav"
-        assert isinstance(result, np.ndarray)
+    mock_av_open.assert_called_once()
+    opened_arg = mock_av_open.call_args[0][0]
+    assert isinstance(opened_arg, str)
+    assert opened_arg == "custom_dir/custom_audio.wav"
+    assert isinstance(result, np.ndarray)
 
 
 def test_decode_audio_pathlib_real_file(jfk_path):
@@ -96,7 +104,9 @@ def test_decode_audio_pathlib_real_file(jfk_path):
 
 
 def test_whisper_model_pathlib():
-    """Verify that WhisperModel accepts pathlib.Path for model_size_or_path and download_root."""
+    """Verify that WhisperModel accepts pathlib.Path for model_size_or_path
+    and download_root.
+    """
     with patch("faster_whisper.transcribe.download_model") as mock_dl, patch(
         "faster_whisper.transcribe.ctranslate2.models.Whisper"
     ), patch("faster_whisper.transcribe.tokenizers.Tokenizer"):
