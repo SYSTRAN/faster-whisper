@@ -670,10 +670,10 @@ class WhisperModel:
         """
         self.logger = get_logger()
 
-        if isinstance(model_size_or_path, (str, os.PathLike)):
+        if model_size_or_path is not None:
             model_size_or_path = str(os.fspath(model_size_or_path))
 
-        if isinstance(download_root, (str, os.PathLike)):
+        if download_root is not None:
             download_root = str(os.fspath(download_root))
 
         tokenizer_bytes, preprocessor_bytes = None, None
