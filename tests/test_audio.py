@@ -45,13 +45,11 @@ def test_decode_audio_pathlib_mock(
 
     result = decode_audio(fake_path)
 
-    # Verify av.open was called with a str, not a Path object
     mock_av_open.assert_called_once()
     opened_arg = mock_av_open.call_args[0][0]
     assert isinstance(opened_arg, str)
     assert opened_arg == str(os.fspath(fake_path))
 
-    # Verify output is a float32 numpy array
     assert isinstance(result, np.ndarray)
     assert result.dtype == np.float32
     assert len(result) == 1600
@@ -103,31 +101,24 @@ def test_decode_audio_pathlib_real_file(jfk_path):
     assert len(audio) > 0
 
 
-def test_whisper_model_pathlib():
+@patch("faster_whisper.transcribe.tokenizers.Tokenizer")
+@patch("faster_whisper.transcribe.ctranslate2.models.Whisper")
+@patch("faster_whisper.transcribe.download_model")
+def test_whisper_model_pathlib(mock_dl, mock_ct, mock_tok):
     """Verify that WhisperModel accepts pathlib.Path for model_size_or_path
     and download_root.
     """
-    with patch("faster_whisper.transcribe.download_model") as mock_dl, patch(
-        "faster_whisper.transcribe.ctranslate2.models.Whisper"
-    ), patch("faster_whisper.transcribe.tokenizers.Tokenizer"):
+    mock_dl.return_value = "mock_model_dir"
+    WhisperModel(Path("tiny"), download_root=Path("cache_dir"))
 
-        mock_dl.return_value = "mock_model_dir"
-        WhisperModel(Path("tiny"), download_root=Path("cache_dir"))
-
-        mock_dl.assert_called_once()
-        assert isinstance(mock_dl.call_args[0][0], str)
-        assert mock_dl.call_args[0][0] == "tiny"
-        assert isinstance(mock_dl.call_args[1]["cache_dir"], str)
-        assert mock_dl.call_args[1]["cache_dir"] == "cache_dir"
+    mock_dl.assert_called_once()
+    assert isinstance(mock_dl.call_args[0][0], str)
+    assert mock_dl.call_args[0][0] == "tiny"
+    assert isinstance(mock_dl.call_args[1]["cache_dir"], str)
+    assert mock_dl.call_args[1]["cache_dir"] == "cache_dir"
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        with patch(
-            "faster_whisper.transcribe.ctranslate2.models.Whisper"
-        ) as mock_ct, patch("faster_whisper.transcribe.tokenizers.Tokenizer"):
-
-            WhisperModel(Path(tmpdir))
-
-            mock_ct.assert_called_once()
-            called_path = mock_ct.call_args[0][0]
-            assert isinstance(called_path, str)
-            assert called_path == tmpdir
+        WhisperModel(Path(tmpdir))
+        called_path = mock_ct.call_args[0][0]
+        assert isinstance(called_path, str)
+        assert called_path == tmpdir
