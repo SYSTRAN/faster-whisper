@@ -241,9 +241,11 @@ def collect_chunks(
     current_audio = np.array([], dtype=np.float32)
 
     for chunk in chunks:
+        chunk_samples = chunk["end"] - chunk["start"]
+        # Flush a finished group, then record the chunk that opens the next one.
         if (
-            current_duration + chunk["end"] - chunk["start"]
-            > max_duration * sampling_rate
+            current_duration > 0
+            and current_duration + chunk_samples > max_duration * sampling_rate
         ):
             audio_chunks.append(current_audio)
             chunk_metadata = {
@@ -255,16 +257,14 @@ def collect_chunks(
             chunks_metadata.append(chunk_metadata)
 
             current_segments = []
+            current_audio = np.array([], dtype=np.float32)
+            current_duration = 0
 
-            current_audio = audio[chunk["start"] : chunk["end"]]
-            current_duration = chunk["end"] - chunk["start"]
-        else:
-            current_segments.append(chunk)
-            current_audio = np.concatenate(
-                (current_audio, audio[chunk["start"] : chunk["end"]])
-            )
-
-            current_duration += chunk["end"] - chunk["start"]
+        current_segments.append(chunk)
+        current_audio = np.concatenate(
+            (current_audio, audio[chunk["start"] : chunk["end"]])
+        )
+        current_duration += chunk_samples
 
     audio_chunks.append(current_audio)
 
