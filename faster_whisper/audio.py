@@ -15,8 +15,8 @@ from typing import BinaryIO, Union
 import av
 import numpy as np
 
-# PyAV 19 removed `metadata_errors`; metadata is now always decoded with
-# surrogateescape, so non-UTF-8 tags no longer raise.
+# `metadata_errors` was removed in PyAV 19; pass it only for older versions
+# to preserve the previous behavior.
 _AV_OPEN_KWARGS = (
     {"metadata_errors": "ignore"} if int(av.__version__.split(".")[0]) < 19 else {}
 )
