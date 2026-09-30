@@ -62,6 +62,11 @@ setup(
             "pytest==7.*",
         ],
     },
+    entry_points={
+        "console_scripts": [
+            "faster-whisper-coreo=faster_whisper.coreo:main",
+        ],
+    },
     packages=find_packages(),
     include_package_data=True,
 )

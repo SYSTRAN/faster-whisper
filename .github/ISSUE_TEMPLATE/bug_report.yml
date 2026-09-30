@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a reproducible problem.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Do not include credentials, private recordings, transcripts, or
+        personal data. Use private reporting for security vulnerabilities.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem
+      description: What happened, and what did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest reproducible example.
+      placeholder: |
+        1. Set up ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include Python, faster-whisper, OS, device, and relevant dependency versions.
+      placeholder: Python version, OS, faster-whisper version, CPU/GPU, compute type
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Redact paths, tokens, and personal information before posting.
+      render: text
+    validations:
+      required: false

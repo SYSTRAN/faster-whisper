@@ -232,6 +232,46 @@ logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
 
 See more model and transcription options in the [`WhisperModel`](https://github.com/SYSTRAN/faster-whisper/blob/master/faster_whisper/transcribe.py) class implementation.
 
+## Coreo raw-stream transform
+
+The [DUNGU `Convert-AnythingToCoreoFloat.ps1` pipeline](https://github.com/Simply-Well-Executed/DUNGU/blob/ab9f641742eaafea807b9fb56c0a5c3f6dcbc97b/tools/Convert-AnythingToCoreoFloat.ps1)
+is bundled at that pinned revision and exposed as a binary stdin/stdout bridge.
+It accepts finite, interleaved stereo IEEE float32 little-endian frames and
+emits four interleaved float32 little-endian values for each input frame. It
+does not read or write a container or header.
+
+With PowerShell 7 (`pwsh`) available, pass raw stereo float32 bytes through it:
+
+```bash
+python -m faster_whisper.coreo < stereo-float32le.raw > coreo-4ch-float32le.raw
+```
+
+The bundled converter's in-memory checks can be run with:
+
+```bash
+python -m faster_whisper.coreo --self-test
+```
+
+The first output pair is the time-reversed input frame with polarity inverted;
+the second pair is the forward input frame with polarity inverted. The
+transform consumes the complete finite input before producing output, because
+the first pair is reversed over the whole stream. Diagnostics go to stderr;
+stdout contains only raw transformed bytes. Malformed or non-finite input
+fails without forwarding converted bytes.
+
+The equivalent Python API accepts binary streams:
+
+```python
+import sys
+from faster_whisper.coreo import transform_stereo_float32
+
+frames = transform_stereo_float32(sys.stdin.buffer, sys.stdout.buffer)
+```
+
+This raw-stream transform is separate from Whisper inference: the model's
+existing transcription API still expects its ordinary mono audio input. It
+does not change transcription defaults or interpret audio file containers.
+
 ## Community integrations
 
 Here is a non exhaustive list of open-source projects using faster-whisper. Feel free to add your project to the list!
