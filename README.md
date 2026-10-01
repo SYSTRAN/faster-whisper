@@ -154,6 +154,38 @@ segments, _ = model.transcribe("audio.mp3")
 segments = list(segments)  # The transcription will actually run here.
 ```
 
+### Transcribing audio arrays
+
+`transcribe` also accepts a one-dimensional NumPy array containing mono audio
+samples at 16 kHz. Use `float32` samples normalized to approximately `[-1, 1]`.
+Unlike file inputs, arrays are passed directly to the model without decoding,
+resampling, or mixing stereo channels to mono.
+
+For example, to transcribe 8 kHz signed 16-bit little-endian PCM from a telephone
+audio stream, install SciPy (`pip install scipy`) and convert a buffered chunk:
+
+```python
+import numpy as np
+from scipy.signal import resample_poly
+
+from faster_whisper import WhisperModel
+
+model = WhisperModel("small", device="cpu", compute_type="int8")
+
+# pcm_bytes contains a buffered chunk of mono 8 kHz PCM, without a WAV header.
+audio = np.frombuffer(pcm_bytes, dtype="<i2").astype(np.float32) / 32768.0
+audio = resample_poly(audio, up=2, down=1)  # 8 kHz -> 16 kHz
+
+segments, info = model.transcribe(audio, language="en")
+for segment in segments:
+    print(segment.text)
+```
+
+`resample_poly` takes a sampling-rate ratio. If using `scipy.signal.resample`
+instead, its second argument is the desired **number of output samples**, not
+the target sampling rate. For example, five seconds at 8 kHz must become 80,000
+samples at 16 kHz, rather than 16,000 samples.
+
 ### Batched Transcription
 The following code snippet illustrates how to run batched transcription on an example audio file. `BatchedInferencePipeline.transcribe` is a drop-in replacement for `WhisperModel.transcribe`
 
