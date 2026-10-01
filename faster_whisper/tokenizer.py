@@ -35,7 +35,9 @@ class Tokenizer:
             
             self.language = self.tokenizer.token_to_id("<|%s|>" % language)
             if self.language is None:
-                 raise ValueError("Language '%s' is not supported by this model" % language)
+                 raise ValueError(
+                     "Language '%s' is not supported by this model" % language
+                 )
             
             self.language_code = language
         else:
