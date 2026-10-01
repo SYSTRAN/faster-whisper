@@ -284,6 +284,36 @@ model = faster_whisper.WhisperModel("whisper-large-v3-ct2")
 model = faster_whisper.WhisperModel("username/whisper-large-v3-ct2")
 ```
 
+### Offline use
+
+Download the model while you have network access, then load it from a local directory:
+
+```python
+from faster_whisper import WhisperModel, download_model
+
+# Run once while online, then copy this directory to the offline machine if needed.
+download_model("large-v3", output_dir="whisper-large-v3-ct2")
+
+# On the offline machine:
+model = WhisperModel("whisper-large-v3-ct2")
+```
+
+Alternatively, if the model is already in the Hugging Face cache, use
+`local_files_only=True` to load it without checking the Hub for updates:
+
+```python
+model = WhisperModel("large-v3", local_files_only=True)
+```
+
+Use the same `download_root` if you originally downloaded the model to a custom
+cache directory. The model must already be cached; `local_files_only=True` does
+not download missing files.
+
+For either approach, include `tokenizer.json` in the model directory. If it is
+missing, faster-whisper tries to load the tokenizer separately from the Hub.
+For converted models, use the `--copy_files tokenizer.json preprocessor_config.json`
+option shown above to preserve these files.
+
 ## Comparing performance against other implementations
 
 If you are comparing the performance against other Whisper implementations, you should make sure to run the comparison with similar settings. In particular:
