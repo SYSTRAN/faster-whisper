@@ -32,7 +32,11 @@ class Tokenizer:
                 )
 
             self.task = self.tokenizer.token_to_id("<|%s|>" % task)
+            
             self.language = self.tokenizer.token_to_id("<|%s|>" % language)
+            if self.language is None:
+                 raise ValueError("Language '%s' is not supported by this model" % language)
+            
             self.language_code = language
         else:
             self.task = None
