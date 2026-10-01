@@ -235,16 +235,15 @@ def collect_chunks(
     audio_chunks = []
     chunks_metadata = []
 
-    current_segments = []
-    current_duration = 0
+    first = chunks[0]
+    current_segments = [first]
+    current_duration = first["end"] - first["start"]
     total_duration = 0
-    current_audio = np.array([], dtype=np.float32)
+    current_audio = audio[first["start"] : first["end"]]
 
-    for chunk in chunks:
-        if (
-            current_duration + chunk["end"] - chunk["start"]
-            > max_duration * sampling_rate
-        ):
+    for chunk in chunks[1:]:
+        chunk_samples = chunk["end"] - chunk["start"]
+        if current_duration + chunk_samples > max_duration * sampling_rate:
             audio_chunks.append(current_audio)
             chunk_metadata = {
                 "offset": total_duration / sampling_rate,
@@ -254,17 +253,15 @@ def collect_chunks(
             total_duration += current_duration
             chunks_metadata.append(chunk_metadata)
 
-            current_segments = []
-
+            current_segments = [chunk]
             current_audio = audio[chunk["start"] : chunk["end"]]
-            current_duration = chunk["end"] - chunk["start"]
+            current_duration = chunk_samples
         else:
             current_segments.append(chunk)
             current_audio = np.concatenate(
                 (current_audio, audio[chunk["start"] : chunk["end"]])
             )
-
-            current_duration += chunk["end"] - chunk["start"]
+            current_duration += chunk_samples
 
     audio_chunks.append(current_audio)
 
