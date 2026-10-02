@@ -253,7 +253,7 @@ class BatchedInferencePipeline:
 
     def transcribe(
         self,
-        audio: Union[str, BinaryIO, np.ndarray],
+        audio: Union[str, os.PathLike, BinaryIO, np.ndarray],
         language: Optional[str] = None,
         task: str = "transcribe",
         log_progress: bool = False,
@@ -623,13 +623,13 @@ class BatchedInferencePipeline:
 class WhisperModel:
     def __init__(
         self,
-        model_size_or_path: str,
+        model_size_or_path: Union[str, os.PathLike],
         device: str = "auto",
         device_index: Union[int, List[int]] = 0,
         compute_type: str = "default",
         cpu_threads: int = 0,
         num_workers: int = 1,
-        download_root: Optional[str] = None,
+        download_root: Optional[Union[str, os.PathLike]] = None,
         local_files_only: bool = False,
         files: dict = None,
         revision: Optional[str] = None,
@@ -672,6 +672,12 @@ class WhisperModel:
             token stored by the HuggingFace config folder.
         """
         self.logger = get_logger()
+
+        if model_size_or_path is not None:
+            model_size_or_path = str(os.fspath(model_size_or_path))
+
+        if download_root is not None:
+            download_root = str(os.fspath(download_root))
 
         tokenizer_bytes, preprocessor_bytes = None, None
         if files:
@@ -749,7 +755,7 @@ class WhisperModel:
 
     def transcribe(
         self,
-        audio: Union[str, BinaryIO, np.ndarray],
+        audio: Union[str, os.PathLike, BinaryIO, np.ndarray],
         language: Optional[str] = None,
         task: str = "transcribe",
         log_progress: bool = False,
