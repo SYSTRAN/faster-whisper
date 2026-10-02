@@ -52,6 +52,7 @@ def get_speech_timestamps(
     audio: np.ndarray,
     vad_options: Optional[VadOptions] = None,
     sampling_rate: int = 16000,
+    device_index: int = 0,
     **kwargs,
 ) -> List[dict]:
     """This method is used for splitting long audios into speech chunks using silero VAD.
@@ -59,7 +60,8 @@ def get_speech_timestamps(
     Args:
       audio: One dimensional float array.
       vad_options: Options for VAD processing.
-      sampling rate: Sampling rate of the audio.
+      sampling_rate: Sampling rate of the audio.
+      device_index: CUDA device index for GPU-accelerated VAD (if available).
       kwargs: VAD options passed as keyword arguments for backward compatibility.
 
     Returns:
@@ -90,12 +92,9 @@ def get_speech_timestamps(
 
     audio_length_samples = len(audio)
 
-    model = get_vad_model()
+    model = get_vad_model(device_index)
 
-    padded_audio = np.pad(
-        audio, (0, window_size_samples - audio.shape[0] % window_size_samples)
-    )
-    speech_probs = model(padded_audio)
+    speech_probs = model(audio)
 
     triggered = False
     speeches = []
@@ -238,14 +237,22 @@ def collect_chunks(
     current_segments = []
     current_duration = 0
     total_duration = 0
-    current_audio = np.array([], dtype=np.float32)
+    # Collect slices into a list; concatenate once per output chunk instead of
+    # once per input chunk.  The naive approach copies O(n²) samples in total
+    # because every np.concatenate allocates a fresh array and copies all prior
+    # data.  Deferring to a single np.concatenate reduces that to O(n).
+    current_slices: List[np.ndarray] = []
 
     for chunk in chunks:
         if (
             current_duration + chunk["end"] - chunk["start"]
             > max_duration * sampling_rate
         ):
-            audio_chunks.append(current_audio)
+            audio_chunks.append(
+                np.concatenate(current_slices)
+                if current_slices
+                else np.array([], dtype=np.float32)
+            )
             chunk_metadata = {
                 "offset": total_duration / sampling_rate,
                 "duration": current_duration / sampling_rate,
@@ -254,19 +261,19 @@ def collect_chunks(
             total_duration += current_duration
             chunks_metadata.append(chunk_metadata)
 
-            current_segments = []
-
-            current_audio = audio[chunk["start"] : chunk["end"]]
+            current_segments = [chunk]
+            current_slices = [audio[chunk["start"] : chunk["end"]]]
             current_duration = chunk["end"] - chunk["start"]
         else:
             current_segments.append(chunk)
-            current_audio = np.concatenate(
-                (current_audio, audio[chunk["start"] : chunk["end"]])
-            )
-
+            current_slices.append(audio[chunk["start"] : chunk["end"]])
             current_duration += chunk["end"] - chunk["start"]
 
-    audio_chunks.append(current_audio)
+    audio_chunks.append(
+        np.concatenate(current_slices)
+        if current_slices
+        else np.array([], dtype=np.float32)
+    )
 
     chunk_metadata = {
         "offset": total_duration / sampling_rate,
@@ -310,8 +317,15 @@ class SpeechTimestampsMap:
 
     def get_chunk_index(self, time: float, is_end: bool = False) -> int:
         sample = int(time * self.sampling_rate)
-        if sample in self.chunk_end_sample and is_end:
-            return self.chunk_end_sample.index(sample)
+
+        if is_end:
+            # bisect_left finds the leftmost position where sample could be
+            # inserted to keep the list sorted.  If chunk_end_sample[idx] ==
+            # sample the sample lands exactly on a chunk boundary, which is the
+            # condition the original code tested with a linear `.index()` call.
+            idx = bisect.bisect_left(self.chunk_end_sample, sample)
+            if idx < len(self.chunk_end_sample) and self.chunk_end_sample[idx] == sample:
+                return idx
 
         return min(
             bisect.bisect(self.chunk_end_sample, sample),
@@ -320,14 +334,14 @@ class SpeechTimestampsMap:
 
 
 @functools.lru_cache
-def get_vad_model():
-    """Returns the VAD model instance."""
+def get_vad_model(device_index: int = 0):
+    """Returns the VAD model instance, preferring CUDA when available."""
     path = os.path.join(get_assets_path(), "silero_vad_v6.onnx")
-    return SileroVADModel(path)
+    return SileroVADModel(path, device_index=device_index)
 
 
 class SileroVADModel:
-    def __init__(self, path):
+    def __init__(self, path, device_index: int = 0):
         try:
             import onnxruntime
         except ImportError as e:
@@ -340,10 +354,20 @@ class SileroVADModel:
         opts.intra_op_num_threads = 1
         opts.enable_cpu_mem_arena = False
         opts.log_severity_level = 4
+        opts.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
 
+        cuda_provider = (
+            "CUDAExecutionProvider",
+            {"device_id": device_index},
+        )
+        providers = (
+            [cuda_provider, "CPUExecutionProvider"]
+            if "CUDAExecutionProvider" in onnxruntime.get_available_providers()
+            else ["CPUExecutionProvider"]
+        )
         self.session = onnxruntime.InferenceSession(
             path,
-            providers=["CPUExecutionProvider"],
+            providers=providers,
             sess_options=opts,
         )
 
@@ -351,35 +375,43 @@ class SileroVADModel:
         self, audio: np.ndarray, num_samples: int = 512, context_size_samples: int = 64
     ):
         assert audio.ndim == 1, "Input should be a 1D array"
-        assert (
-            audio.shape[0] % num_samples == 0
-        ), "Input size should be a multiple of num_samples"
+
+        n = len(audio)
+        # Preserve original padding semantics: always add (num_samples - n % num_samples)
+        # zeros at the end, which appends a full extra window when audio is already aligned.
+        pad_n = num_samples - n % num_samples
+        num_segments = (n + pad_n) // num_samples
+        full_segs = n // num_samples  # segments fully covered by audio (no padding needed)
 
         h = np.zeros((1, 1, 128), dtype="float32")
         c = np.zeros((1, 1, 128), dtype="float32")
-        context = np.zeros(
-            (1, context_size_samples),
-            dtype="float32",
+
+        # Single allocation — eliminates the separate np.pad copy the caller previously
+        # performed.  We use np.empty and zero only the parts that must be zero (segment 0
+        # context + last-segment tail padding) to avoid a 90 MB memset for long audio.
+        buf = np.empty((num_segments, context_size_samples + num_samples), dtype=np.float32)
+        # Segment 0: zero context; audio filled below (or stays uninitialized then overwritten).
+        buf[0, :context_size_samples] = 0.0
+
+        remainder = n % num_samples
+        if full_segs > 0:
+            # View over the aligned portion of audio (no copy).
+            src = audio[:full_segs * num_samples].reshape(full_segs, num_samples)
+            # Copy audio into the audio portion of each full segment.
+            buf[:full_segs, context_size_samples:] = src
+            # Context for segments 1..num_segments-1: last context_size_samples of previous audio.
+            buf[1:num_segments, :context_size_samples] = src[:, -context_size_samples:]
+        if remainder:
+            buf[full_segs, context_size_samples:context_size_samples + remainder] = audio[full_segs * num_samples:]
+            # Zero-pad the tail of the last partial segment.
+            buf[full_segs, context_size_samples + remainder:] = 0.0
+        else:
+            # Audio is aligned; the extra window is all zeros.
+            buf[full_segs, context_size_samples:] = 0.0
+
+        output, h, c = self.session.run(
+            None,
+            {"input": buf, "h": h, "c": c},
         )
 
-        batched_audio = audio.reshape(-1, num_samples)
-        context = batched_audio[..., -context_size_samples:]
-        context[-1] = 0
-        context = np.roll(context, 1, 0)
-        batched_audio = np.concatenate([context, batched_audio], 1)
-
-        batched_audio = batched_audio.reshape(-1, num_samples + context_size_samples)
-
-        encoder_batch_size = 10000
-        num_segments = batched_audio.shape[0]
-        outputs = []
-        for i in range(0, num_segments, encoder_batch_size):
-            output, h, c = self.session.run(
-                None,
-                {"input": batched_audio[i : i + encoder_batch_size], "h": h, "c": c},
-            )
-            outputs.append(output)
-
-        out = np.concatenate(outputs, axis=0)
-
-        return out
+        return output
