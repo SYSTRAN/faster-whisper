@@ -106,8 +106,12 @@ def test_suppressed_tokens_minus_value():
     model = WhisperModel("tiny.en")
 
     tokenizer = Tokenizer(model.hf_tokenizer, False)
-    tokens = get_suppressed_tokens(tokenizer, [13])
+    suppress_tokens = [13]
+    tokens = get_suppressed_tokens(tokenizer, suppress_tokens)
     assert tokens == (13, 50257, 50357, 50358, 50359, 50360, 50361)
+    assert suppress_tokens == [13]
+    assert get_suppressed_tokens(tokenizer, suppress_tokens) == tokens
+    assert suppress_tokens == [13]
 
 
 def test_split_on_unicode():

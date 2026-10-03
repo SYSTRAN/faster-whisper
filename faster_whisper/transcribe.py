@@ -1898,6 +1898,7 @@ def get_suppressed_tokens(
         suppress_tokens = []  # interpret empty string as an empty list
     else:
         assert isinstance(suppress_tokens, list), "suppress_tokens must be a list"
+        suppress_tokens = suppress_tokens.copy()
 
     suppress_tokens.extend(
         [
