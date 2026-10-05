@@ -338,6 +338,9 @@ class BatchedInferencePipeline:
                 the maximum will be set by the default max_length.
             chunk_length: The length of audio segments. If it is not None, it will overwrite the
                 default chunk_length of the FeatureExtractor.
+                Note: It's primarily intended for models that specify a particular chunk length
+                      for inference, such as Distil models.
+                      Leave this unset unless a model author recommends a specific value.
             clip_timestamps: Optionally provide list of dictionaries each containing "start" and
                 "end" keys that specify the start and end of the voiced region within
                 `chunk_length` boundary. vad_filter will be ignored if clip_timestamps is used.
@@ -845,6 +848,9 @@ class WhisperModel:
             the maximum will be set by the default max_length.
           chunk_length: The length of audio segments. If it is not None, it will overwrite the
             default chunk_length of the FeatureExtractor.
+            Note: It's primarily intended for models that specify a particular chunk length
+                  for inference, such as Distil models.
+                  Leave this unset unless a model author recommends a specific value.
           clip_timestamps:
             Comma-separated list start,end,start,end,... timestamps (in seconds) of clips to
              process. The last end timestamp defaults to the end of the file.
