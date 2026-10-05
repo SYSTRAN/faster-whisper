@@ -246,7 +246,7 @@ def collect_chunks(
                 f"Chunk starting at {chunk['start'] / sampling_rate:.2f}s "
                 f"has duration {(chunk['end'] - chunk['start']) / sampling_rate:.2f}s, "
                 f"which is greater than max_duration {max_duration:.2f}s. "
-                "Problem is with clip_timestamps or VAD output."
+                "Problem is with clip_timestamps or get_speech_timestamps() output."
             )
 
         if (
