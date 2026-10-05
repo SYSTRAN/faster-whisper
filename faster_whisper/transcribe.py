@@ -1726,7 +1726,7 @@ class WhisperModel:
             if len(alignments) == 0:
                 # No alignment available, e.g. the window was shorter than the
                 # encoder stride so there were no frames to align against
-                # (ctranslate2 returns an empty alignment for such windows).
+                # (ctranslate2 >=4.8.1 returns an empty alignment for such windows).
                 return_list.append([])
                 continue
             text_indices = np.array([pair[0] for pair in alignments])
