@@ -248,7 +248,7 @@ def collect_chunks(
                 f"which is greater than max_duration {max_duration:.2f}s. "
                 "Problem is with clip_timestamps or VAD output."
             )
-            
+
         if (
             current_duration + chunk["end"] - chunk["start"]
             > max_duration * sampling_rate
