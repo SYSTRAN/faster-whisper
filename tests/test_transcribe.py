@@ -1,14 +1,59 @@
 import inspect
+import io
+import json
 import os
 
-import numpy as np
+from pathlib import Path
 
-from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
+import numpy as np
+import pytest
+
+from faster_whisper import (
+    BatchedInferencePipeline,
+    WhisperModel,
+    decode_audio,
+    download_model,
+)
 
 
 def test_supported_languages():
     model = WhisperModel("tiny.en")
     assert model.supported_languages == ["en"]
+
+
+@pytest.fixture(scope="module")
+def tiny_model_files():
+    model_path = Path(download_model("tiny.en"))
+    return {
+        path.name: path.read_bytes() for path in model_path.iterdir() if path.is_file()
+    }
+
+
+@pytest.mark.parametrize("preprocessor_type", [bytes, io.BytesIO])
+@pytest.mark.parametrize("valid_json", [True, False])
+def test_preprocessor_config_from_files(
+    tiny_model_files, preprocessor_type, valid_json, caplog
+):
+    # Minimal metadata matching tiny.en; unrelated keys should be ignored.
+    feature_kwargs = {
+        "feature_size": 80,
+        "sampling_rate": 16000,
+        "hop_length": 160,
+        "chunk_length": 30,
+        "n_fft": 400,
+    }
+    config = dict(feature_kwargs, feature_extractor_type="WhisperFeatureExtractor")
+    config_bytes = json.dumps(config).encode("utf-8") if valid_json else b"{"
+    files = dict(tiny_model_files)
+    files["preprocessor_config.json"] = preprocessor_type(config_bytes)
+
+    model = WhisperModel("tiny.en", files=files, device="cpu", compute_type="float32")
+
+    assert model.supported_languages == ["en"]
+    assert model.feat_kwargs == (feature_kwargs if valid_json else {})
+    assert model.feature_extractor.hop_length == 160
+    if not valid_json:
+        assert "Could not load preprocessor config" in caplog.text
 
 
 def test_transcribe(jfk_path):

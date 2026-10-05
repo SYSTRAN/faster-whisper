@@ -734,7 +734,10 @@ class WhisperModel:
         try:
             config_path = os.path.join(model_path, "preprocessor_config.json")
             if preprocessor_bytes:
-                config = json.loads(preprocessor_bytes)
+                if hasattr(preprocessor_bytes, "read"):
+                    config = json.load(preprocessor_bytes)
+                else:
+                    config = json.loads(preprocessor_bytes)
             elif os.path.isfile(config_path):
                 with open(config_path, "r", encoding="utf-8") as file:
                     config = json.load(file)
