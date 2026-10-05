@@ -241,6 +241,14 @@ def collect_chunks(
     current_audio = np.array([], dtype=np.float32)
 
     for chunk in chunks:
+        if chunk["end"] - chunk["start"] > max_duration * sampling_rate:
+            raise ValueError(
+                f"Chunk starting at {chunk['start'] / sampling_rate:.2f}s "
+                f"has duration {(chunk['end'] - chunk['start']) / sampling_rate:.2f}s, "
+                f"which is greater than max_duration {max_duration:.2f}s. "
+                "Problem is with clip_timestamps or VAD output."
+            )
+            
         if (
             current_duration + chunk["end"] - chunk["start"]
             > max_duration * sampling_rate
