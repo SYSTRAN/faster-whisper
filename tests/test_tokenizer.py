@@ -98,6 +98,7 @@ def test_suppressed_tokens_minus_1():
         50358,
         50359,
         50360,
+        50361,
     )
 
 
@@ -106,7 +107,7 @@ def test_suppressed_tokens_minus_value():
 
     tokenizer = Tokenizer(model.hf_tokenizer, False)
     tokens = get_suppressed_tokens(tokenizer, [13])
-    assert tokens == (13, 50257, 50357, 50358, 50359, 50360)
+    assert tokens == (13, 50257, 50357, 50358, 50359, 50360, 50361)
 
 
 def test_split_on_unicode():
