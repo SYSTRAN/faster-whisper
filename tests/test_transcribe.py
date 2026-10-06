@@ -313,3 +313,15 @@ def test_cliptimestamps_timings(physcisworks_path):
         assert clip["start"] == segment.start
         assert clip["end"] == segment.end
         assert segment.text == transcript
+
+
+def test_detect_language_vad_parameters_dict(jfk_path):
+    model = WhisperModel("tiny")
+    audio = decode_audio(jfk_path)
+
+    language, language_probability, _ = model.detect_language(
+        audio, vad_filter=True, vad_parameters=dict(min_silence_duration_ms=500)
+    )
+
+    assert language == "en"
+    assert language_probability > 0.9
