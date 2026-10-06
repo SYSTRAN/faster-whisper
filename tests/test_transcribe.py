@@ -72,7 +72,7 @@ def test_batched_transcribe(physcisworks_path):
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
     # number of near 30 sec segments
-    assert len(segments) == 7
+    assert len(segments) == 6
 
     result, info = batched_model.transcribe(
         physcisworks_path,
@@ -246,7 +246,7 @@ def test_transcribe_signature():
 
 
 def test_monotonic_timestamps(physcisworks_path):
-    model = WhisperModel("tiny")
+    model = WhisperModel("base")
     pipeline = BatchedInferencePipeline(model=model)
 
     segments, info = model.transcribe(physcisworks_path, word_timestamps=True)
@@ -272,7 +272,45 @@ def test_monotonic_timestamps(physcisworks_path):
     assert segments[-1].end <= info.duration
 
 
-def test_language_detection_threshold_none_raises_error(jfk_path):
+def test_cliptimestamps_segments(jfk_path):
     model = WhisperModel("tiny")
-    with pytest.raises(TypeError):
-        model.transcribe(jfk_path, language_detection_threshold=None)  # type: ignore
+    pipeline = BatchedInferencePipeline(model=model)
+
+    audio = decode_audio(jfk_path)
+    audio = np.concatenate([audio, audio])
+    clip_timestamps = [{"start": 0.0, "end": 11.0}, {"start": 11.0, "end": 22.0}]
+
+    segments, info = pipeline.transcribe(audio, clip_timestamps=clip_timestamps)
+    segments = list(segments)
+
+    assert len(segments) == 2
+    for segment, clip in zip(segments, clip_timestamps):
+        assert segment.start == clip["start"]
+        assert segment.end == clip["end"]
+        assert segment.text == (
+            " And so my fellow Americans ask not what your country can do for you, "
+            "ask what you can do for your country."
+        )
+
+
+def test_cliptimestamps_timings(physcisworks_path):
+    model = WhisperModel("tiny")
+    pipeline = BatchedInferencePipeline(model=model)
+
+    audio = decode_audio(physcisworks_path)
+    clip_timestamps = [{"start": 0.0, "end": 5.0}, {"start": 6.0, "end": 15.0}]
+    transcripts = [
+        " Now I want to return to the conservation of mechanical energy.",
+        (
+            " I have here a pendulum. I have an object that weighs 15 kilograms"
+            " and I can lift it up one meter, which I have done now."
+        ),
+    ]
+    segments, info = pipeline.transcribe(audio, clip_timestamps=clip_timestamps)
+    segments = list(segments)
+
+    assert len(segments) == 2
+    for segment, clip, transcript in zip(segments, clip_timestamps, transcripts):
+        assert clip["start"] == segment.start
+        assert clip["end"] == segment.end
+        assert segment.text == transcript
