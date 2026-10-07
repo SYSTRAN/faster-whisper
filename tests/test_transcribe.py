@@ -313,3 +313,11 @@ def test_cliptimestamps_timings(physcisworks_path):
         assert clip["start"] == segment.start
         assert clip["end"] == segment.end
         assert segment.text == transcript
+
+
+def test_transcribe_pathlib(jfk_path):
+    from pathlib import Path
+
+    model = WhisperModel("tiny", device="cpu", compute_type="int8")
+    segments, _ = model.transcribe(Path(jfk_path))
+    assert len(list(segments)) > 0
