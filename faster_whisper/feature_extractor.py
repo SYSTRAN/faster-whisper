@@ -171,7 +171,7 @@ class FeatureExtractor:
             input_array = input_array * window_
 
         # FFT and transpose
-        complex_fft = input_is_complex
+        complex_fft = np.iscomplexobj(input_array)
         onesided = onesided if onesided is not None else not complex_fft
 
         if normalized:
@@ -179,14 +179,14 @@ class FeatureExtractor:
         else:
             norm = None
 
-        if complex_fft:
-            if onesided:
+        if onesided:
+            if complex_fft:
                 raise ValueError(
                     "Cannot have onesided output if window or input is complex"
                 )
-            output = np.fft.fft(input_array, n=n_fft, axis=-1, norm=norm)
-        else:
             output = np.fft.rfft(input_array, n=n_fft, axis=-1, norm=norm)
+        else:
+            output = np.fft.fft(input_array, n=n_fft, axis=-1, norm=norm)
 
         output = output.transpose((0, 2, 1))
 
