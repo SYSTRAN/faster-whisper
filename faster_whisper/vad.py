@@ -283,6 +283,7 @@ class SpeechTimestampsMap:
         self.sampling_rate = sampling_rate
         self.time_precision = time_precision
         self.chunk_end_sample = []
+        self.chunk_end_time = []
         self.total_silence_before = []
 
         previous_end = 0
@@ -293,6 +294,7 @@ class SpeechTimestampsMap:
             previous_end = chunk["end"]
 
             self.chunk_end_sample.append(chunk["end"] - silent_samples)
+            self.chunk_end_time.append(self.chunk_end_sample[-1] / sampling_rate)
             self.total_silence_before.append(silent_samples / sampling_rate)
 
     def get_original_time(
@@ -308,12 +310,12 @@ class SpeechTimestampsMap:
         return round(total_silence_before + time, self.time_precision)
 
     def get_chunk_index(self, time: float, is_end: bool = False) -> int:
-        sample = int(time * self.sampling_rate)
-        if sample in self.chunk_end_sample and is_end:
-            return self.chunk_end_sample.index(sample)
+        # Compare timestamps directly to avoid truncating a boundary to the
+        # previous sample after floating-point multiplication.
+        bisect_fn = bisect.bisect_left if is_end else bisect.bisect_right
 
         return min(
-            bisect.bisect(self.chunk_end_sample, sample),
+            bisect_fn(self.chunk_end_time, time),
             len(self.chunk_end_sample) - 1,
         )
 
