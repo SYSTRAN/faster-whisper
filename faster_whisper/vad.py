@@ -254,8 +254,7 @@ def collect_chunks(
             total_duration += current_duration
             chunks_metadata.append(chunk_metadata)
 
-            current_segments = []
-
+            current_segments = [chunk]
             current_audio = audio[chunk["start"] : chunk["end"]]
             current_duration = chunk["end"] - chunk["start"]
         else:
