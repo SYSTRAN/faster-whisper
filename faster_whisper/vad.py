@@ -309,11 +309,9 @@ class SpeechTimestampsMap:
 
     def get_chunk_index(self, time: float, is_end: bool = False) -> int:
         sample = int(time * self.sampling_rate)
-        if sample in self.chunk_end_sample and is_end:
-            return self.chunk_end_sample.index(sample)
-
+        search = bisect.bisect_left if is_end else bisect.bisect_right
         return min(
-            bisect.bisect(self.chunk_end_sample, sample),
+            search(self.chunk_end_sample, sample),
             len(self.chunk_end_sample) - 1,
         )
 
