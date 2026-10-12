@@ -676,7 +676,11 @@ class WhisperModel:
         if files:
             model_path = model_size_or_path
             tokenizer_bytes = files.pop("tokenizer.json", None)
+            if hasattr(tokenizer_bytes, "read"):
+                tokenizer_bytes = tokenizer_bytes.read()
             preprocessor_bytes = files.pop("preprocessor_config.json", None)
+            if hasattr(preprocessor_bytes, "read"):
+                preprocessor_bytes = preprocessor_bytes.read()
         elif os.path.isdir(model_size_or_path):
             model_path = model_size_or_path
         else:
