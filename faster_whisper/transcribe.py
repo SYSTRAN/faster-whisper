@@ -665,7 +665,7 @@ class WhisperModel:
             to file contents as file-like or bytes objects. If this is set, model_path acts as an
             identifier for this model.
             Note_1: In Windows env model file has 2GB limit.
-            Note_2: file-like object needs ctranslate2>4.8.2 version
+            Note_2: file-like object needs ctranslate2 >= 4.8.3 version.
           revision:
             An optional Git revision id which can be a branch name, a tag, or a
             commit hash.
