@@ -688,6 +688,8 @@ class WhisperModel:
                 use_auth_token=use_auth_token,
             )
 
+        self._verify_model_config(model_path, files)
+
         self.model = ctranslate2.models.Whisper(
             model_path,
             device=device,
@@ -722,6 +724,36 @@ class WhisperModel:
         )
         self.time_precision = 0.02
         self.max_length = 448
+
+    @staticmethod
+    def _verify_model_config(model_path, files=None):
+        """Verify that config.json has the required keys."""
+        if files is not None:
+            config_data = files.get("config.json")
+            if config_data is None:
+                raise ValueError("Model is missing config.json.")
+
+            if hasattr(config_data, "read"):
+                config_bytes = config_data.read()
+                config_data.seek(0)
+            else:
+                config_bytes = config_data
+
+            config = json.loads(config_bytes)
+        else:
+            config_path = os.path.join(model_path, "config.json")
+            if not os.path.isfile(config_path):
+                raise ValueError("Model is missing config.json")
+
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+
+        required = ("lang_ids", "suppress_ids", "suppress_ids_begin")
+        missing = [key for key in required if key not in config]
+        if missing:
+            raise ValueError(
+                f"Invalid model: config.json is missing required key(s): {', '.join(missing)}."
+            )
 
     @property
     def supported_languages(self) -> List[str]:
