@@ -313,3 +313,42 @@ def test_cliptimestamps_timings(physcisworks_path):
         assert clip["start"] == segment.start
         assert clip["end"] == segment.end
         assert segment.text == transcript
+
+
+def test_restore_speech_timestamps_clamps_segment_to_chunk_bounds():
+    """Whisper timestamps on silence-stripped audio can extend past the real end
+    of speech (up to the next chunk); restored segments must be clamped to the
+    VAD chunk's speech interval (#1119)."""
+    from faster_whisper.transcribe import Segment, Word, restore_speech_timestamps
+
+    # Original audio: [0,5s speech] [5,12s silence] [12,17s speech]
+    chunks = [{"start": 0, "end": 5 * 16000}, {"start": 12 * 16000, "end": 17 * 16000}]
+
+    # Segment whose only word extends beyond chunk0's end (6s in stripped audio).
+    seg = Segment(
+        id=0, seek=0, start=1.0, end=6.0, text="hello", tokens=[],
+        avg_logprob=0.0, compression_ratio=0.0, no_speech_prob=0.0, temperature=0.0,
+        words=[Word(start=1.0, end=6.0, word=" hello", probability=1.0)],
+    )
+    out = list(restore_speech_timestamps([seg], chunks, 16000))
+    assert out[0].end == 5.0, "segment end must clamp to the chunk's real speech end"
+    assert out[0].start == 1.0
+
+    # Control: a segment fully inside the chunk is unchanged.
+    seg2 = Segment(
+        id=1, seek=0, start=2.0, end=4.0, text="ok", tokens=[],
+        avg_logprob=0.0, compression_ratio=0.0, no_speech_prob=0.0, temperature=0.0,
+        words=[Word(start=2.0, end=4.0, word=" ok", probability=1.0)],
+    )
+    out2 = list(restore_speech_timestamps([seg2], chunks, 16000))
+    assert out2[0].start == 2.0 and out2[0].end == 4.0
+
+    # Wordless segments keep their existing mapping semantics (a stripped-audio
+    # time always resolves inside some chunk) and stay within its bounds.
+    seg3 = Segment(
+        id=2, seek=0, start=5.5, end=6.0, text="hello", tokens=[],
+        avg_logprob=0.0, compression_ratio=0.0, no_speech_prob=0.0, temperature=0.0,
+        words=None,
+    )
+    out3 = list(restore_speech_timestamps([seg3], chunks, 16000))
+    assert out3[0].start == 12.5 and out3[0].end == 13.0  # maps into chunk1
