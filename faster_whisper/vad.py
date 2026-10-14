@@ -317,6 +317,17 @@ class SpeechTimestampsMap:
             len(self.chunk_end_sample) - 1,
         )
 
+    def get_chunk_speech_bounds(self, chunk_index: int) -> Tuple[float, float]:
+        """Original-time [start, end] of the speech interval of a chunk."""
+        end = self.chunk_end_sample[chunk_index] / self.sampling_rate
+        if chunk_index == 0:
+            start = 0.0
+        else:
+            start = self.chunk_end_sample[chunk_index - 1] / self.sampling_rate
+        start = round(start + self.total_silence_before[chunk_index], self.time_precision)
+        end = round(end + self.total_silence_before[chunk_index], self.time_precision)
+        return start, end
+
 
 @functools.lru_cache
 def get_vad_model():
