@@ -1874,9 +1874,25 @@ def restore_speech_timestamps(
             segment.end = words[-1].end
             segment.words = words
 
+            # Clamp the restored segment to the speech interval of the chunk
+            # its words resolve to. Whisper timestamps on the silence-stripped
+            # audio can extend past the real end of speech (up to the next
+            # chunk's start), which misreports the segment end (#1119).
+            last_chunk_index = ts_map.get_chunk_index(
+                (words[-1].start + words[-1].end) / 2
+            )
+            chunk_start, chunk_end = ts_map.get_chunk_speech_bounds(last_chunk_index)
+            segment.end = min(segment.end, chunk_end)
+            segment.start = max(segment.start, chunk_start)
+
         else:
             segment.start = ts_map.get_original_time(segment.start)
             segment.end = ts_map.get_original_time(segment.end, is_end=True)
+
+            chunk_index = ts_map.get_chunk_index(segment.end, is_end=True)
+            chunk_start, chunk_end = ts_map.get_chunk_speech_bounds(chunk_index)
+            segment.end = min(segment.end, chunk_end)
+            segment.start = max(segment.start, chunk_start)
 
         yield segment
 
