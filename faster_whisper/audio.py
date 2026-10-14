@@ -15,6 +15,12 @@ from typing import BinaryIO, Union
 import av
 import numpy as np
 
+# `metadata_errors` was removed in PyAV 19; pass it only for older versions
+# to preserve the previous behavior.
+_AV_OPEN_KWARGS = (
+    {"metadata_errors": "ignore"} if int(av.__version__.split(".")[0]) < 19 else {}
+)
+
 
 def decode_audio(
     input_file: Union[str, BinaryIO],
@@ -43,7 +49,7 @@ def decode_audio(
     raw_buffer = io.BytesIO()
     dtype = None
 
-    with av.open(input_file, mode="r", metadata_errors="ignore") as container:
+    with av.open(input_file, mode="r", **_AV_OPEN_KWARGS) as container:
         frames = container.decode(audio=0)
         frames = _ignore_invalid_frames(frames)
         frames = _group_frames(frames, 500000)
