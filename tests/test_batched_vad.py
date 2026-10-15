@@ -94,3 +94,30 @@ def test_batched_vad_preserves_caller_options(
             for segment in chunk["segments"]
         )
     assert sum(chunk["duration"] for chunk in metadata) == pytest.approx(65)
+
+
+@pytest.mark.parametrize("speech_pad_ms", [0, 1, 10, 16, 400])
+@pytest.mark.parametrize("chunk_length", [10, 30])
+def test_batched_vad_preserves_samples_at_hard_splits(
+    continuous_speech_pipeline, speech_pad_ms, chunk_length
+):
+    pipeline, metadata = continuous_speech_pipeline
+    audio = np.sin(np.arange(1168304, dtype=np.float32) * 0.013) * 0.2
+
+    pipeline.transcribe(
+        audio,
+        language="en",
+        chunk_length=chunk_length,
+        vad_parameters=VadOptions(speech_pad_ms=speech_pad_ms),
+        suppress_tokens=[],
+    )
+
+    restored = np.concatenate(
+        [
+            audio[segment["start"] : segment["end"]]
+            for chunk in metadata
+            for segment in chunk["segments"]
+        ]
+    )
+    np.testing.assert_array_equal(restored, audio)
+    assert all(0 < chunk["duration"] <= chunk_length for chunk in metadata)
