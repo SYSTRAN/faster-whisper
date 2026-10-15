@@ -154,7 +154,7 @@ def get_speech_timestamps(
                 else:
                     current_speech["end"] = cur_sample
                     speeches.append(current_speech)
-                    triggered = speech_prob >= threshold
+                    triggered = speech_prob >= neg_threshold
                     current_speech = {"start": cur_sample} if triggered else {}
                     prev_end = next_start = temp_end = 0
                     possible_ends = []

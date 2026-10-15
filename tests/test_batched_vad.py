@@ -142,3 +142,20 @@ def test_hard_split_does_not_restart_speech_in_silence(monkeypatch):
     assert len(timestamps) == 1
     assert timestamps[0]["start"] == 0
     assert timestamps[0]["end"] <= 16000
+
+
+def test_hard_split_preserves_hysteresis_speech_window(monkeypatch):
+    def probabilities(audio):
+        values = np.ones(len(audio) // 512)
+        values[31] = 0.4
+        return values
+
+    monkeypatch.setattr("faster_whisper.vad.get_vad_model", lambda: probabilities)
+    audio = np.linspace(-0.5, 0.5, 4 * 16000, dtype=np.float32)
+    timestamps = get_speech_timestamps(
+        audio,
+        VadOptions(max_speech_duration_s=1, speech_pad_ms=0),
+    )
+
+    restored = np.concatenate([audio[s["start"] : s["end"]] for s in timestamps])
+    np.testing.assert_array_equal(restored, audio)
