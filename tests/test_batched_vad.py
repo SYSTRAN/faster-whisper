@@ -8,7 +8,7 @@ import pytest
 
 from faster_whisper import BatchedInferencePipeline
 from faster_whisper.feature_extractor import FeatureExtractor
-from faster_whisper.vad import VadOptions
+from faster_whisper.vad import VadOptions, get_speech_timestamps
 
 
 @pytest.fixture
@@ -121,3 +121,24 @@ def test_batched_vad_preserves_samples_at_hard_splits(
     )
     np.testing.assert_array_equal(restored, audio)
     assert all(0 < chunk["duration"] <= chunk_length for chunk in metadata)
+
+
+def test_hard_split_does_not_restart_speech_in_silence(monkeypatch):
+    def probabilities(audio):
+        values = np.zeros(len(audio) // 512)
+        values[:16] = 1
+        return values
+
+    monkeypatch.setattr("faster_whisper.vad.get_vad_model", lambda: probabilities)
+    timestamps = get_speech_timestamps(
+        np.ones(4 * 16000, dtype=np.float32),
+        VadOptions(
+            max_speech_duration_s=1,
+            min_silence_duration_ms=10000,
+            speech_pad_ms=0,
+        ),
+    )
+
+    assert len(timestamps) == 1
+    assert timestamps[0]["start"] == 0
+    assert timestamps[0]["end"] <= 16000
