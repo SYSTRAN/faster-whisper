@@ -1,4 +1,5 @@
 import inspect
+import logging
 import os
 
 import numpy as np
@@ -155,6 +156,34 @@ def test_stereo_diarization(data_dir):
     segments, _ = model.transcribe(right)
     transcription = "".join(segment.text for segment in segments).strip()
     assert transcription == "The horizon seems extremely distant."
+
+
+def test_multilingual_prompt_reset_on_language_change(data_dir, caplog):
+    """Text carried as prompt context must not survive a language switch.
+
+    https://github.com/SYSTRAN/faster-whisper/issues/1476
+    """
+    model = WhisperModel("tiny")
+
+    audio = decode_audio(os.path.join(data_dir, "multilingual.mp3"))
+    sampling_rate = 16000
+    english = audio[: 30 * sampling_rate]
+    german = audio[30 * sampling_rate : 60 * sampling_rate]
+
+    # Three German windows before the switch, so a prompt has accumulated by the
+    # time English is detected.
+    audio = np.concatenate([german, german, german, english])
+
+    with caplog.at_level(logging.DEBUG, logger="faster_whisper"):
+        segments, _ = model.transcribe(
+            audio,
+            multilingual=True,
+            without_timestamps=True,
+            condition_on_previous_text=True,
+        )
+        list(segments)
+
+    assert "Language changed from de to en" in caplog.text
 
 
 def test_multilingual_transcription(data_dir):
