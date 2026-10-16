@@ -664,6 +664,8 @@ class WhisperModel:
           files: Load model files from the memory. This argument is a dictionary mapping file names
             to file contents as file-like or bytes objects. If this is set, model_path acts as an
             identifier for this model.
+            Note_1: In Windows env model file has 2GB limit.
+            Note_2: file-like object needs ctranslate2 >= 4.8.3 version.
           revision:
             An optional Git revision id which can be a branch name, a tag, or a
             commit hash.
@@ -676,7 +678,11 @@ class WhisperModel:
         if files:
             model_path = model_size_or_path
             tokenizer_bytes = files.pop("tokenizer.json", None)
+            if hasattr(tokenizer_bytes, "read"):
+                tokenizer_bytes = tokenizer_bytes.read()
             preprocessor_bytes = files.pop("preprocessor_config.json", None)
+            if hasattr(preprocessor_bytes, "read"):
+                preprocessor_bytes = preprocessor_bytes.read()
         elif os.path.isdir(model_size_or_path):
             model_path = model_size_or_path
         else:
