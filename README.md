@@ -88,7 +88,7 @@ On Linux these libraries can be installed with `pip`. Note that `LD_LIBRARY_PATH
 ```bash
 pip install nvidia-cublas-cu12 nvidia-cudnn-cu12==9.*
 
-export LD_LIBRARY_PATH=`python3 -c 'import os; import nvidia.cublas.lib; import nvidia.cudnn.lib; print(os.path.dirname(nvidia.cublas.lib.__file__) + ":" + os.path.dirname(nvidia.cudnn.lib.__file__))'`
+export LD_LIBRARY_PATH=$(python3 -c 'import os, nvidia.cublas, nvidia.cudnn; print(os.path.dirname(nvidia.cublas.__path__[0]) + "/cublas/lib:" + os.path.dirname(nvidia.cudnn.__path__[0]) + "/cudnn/lib")')
 ```
 
 #### Download the libraries from Purfview's repository (Windows & Linux)
