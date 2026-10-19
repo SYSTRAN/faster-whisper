@@ -2,6 +2,7 @@ import inspect
 import os
 
 import numpy as np
+import pytest
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 
@@ -95,6 +96,25 @@ def test_empty_audio():
     assert list(model.transcribe(audio)[0]) == []
     assert list(pipeline.transcribe(audio)[0]) == []
     model.detect_language(audio)
+
+
+@pytest.mark.parametrize("clip_timestamps", ["", []])
+@pytest.mark.parametrize("language", [None, "en"])
+def test_empty_clip_timestamps(jfk_path, clip_timestamps, language):
+    model = WhisperModel("tiny")
+    segments, info = model.transcribe(
+        jfk_path, clip_timestamps=clip_timestamps, language=language
+    )
+
+    assert info.language == "en"
+    assert info.language_probability > 0.9
+    assert info.duration == 11
+    segments = list(segments)
+    assert len(segments) == 1
+    assert segments[0].text == (
+        " And so my fellow Americans, ask not what your country can do for you, "
+        "ask what you can do for your country."
+    )
 
 
 def test_prefix_with_timestamps(jfk_path):

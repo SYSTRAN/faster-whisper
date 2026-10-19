@@ -961,11 +961,13 @@ class WhisperModel:
                 language = "en"
                 language_probability = 1
             else:
-                start_timestamp = (
-                    float(clip_timestamps.split(",")[0])
-                    if isinstance(clip_timestamps, str)
-                    else clip_timestamps[0]
-                )
+                start_timestamp = 0.0
+                if clip_timestamps:
+                    start_timestamp = (
+                        float(clip_timestamps.split(",")[0])
+                        if isinstance(clip_timestamps, str)
+                        else clip_timestamps[0]
+                    )
                 content_frames = features.shape[-1] - 1
                 seek = (
                     int(start_timestamp * self.frames_per_second)
