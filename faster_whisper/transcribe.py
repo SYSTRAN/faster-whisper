@@ -397,16 +397,16 @@ class BatchedInferencePipeline:
         # if no segment split is provided, use vad_model and generate segments
         if not clip_timestamps:
             if vad_filter:
-                batched_defaults = VadOptions(
-                    max_speech_duration_s=chunk_length,
-                    min_silence_duration_ms=160,
-                )
                 if vad_parameters is None:
-                    vad_parameters = batched_defaults
+                    vad_parameters = VadOptions(
+                        max_speech_duration_s=chunk_length,
+                        min_silence_duration_ms=160,
+                    )
                 elif isinstance(vad_parameters, dict):
-                    merged_vad_params = {**asdict(batched_defaults), **vad_parameters}
-                    merged_vad_params["max_speech_duration_s"] = chunk_length
-                    vad_parameters = VadOptions(**merged_vad_params)
+                    vad_parameters = vad_parameters.copy()
+                    vad_parameters.setdefault("min_silence_duration_ms", 160)
+                    vad_parameters["max_speech_duration_s"] = chunk_length
+                    vad_parameters = VadOptions(**vad_parameters)
 
                 clip_timestamps = get_speech_timestamps(audio, vad_parameters)
             # run the audio if it is less than 30 sec even without clip_timestamps
