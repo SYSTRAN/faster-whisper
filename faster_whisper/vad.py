@@ -41,8 +41,8 @@ class VadOptions:
     threshold: float = 0.5
     neg_threshold: float = None
     min_speech_duration_ms: int = 0
-    max_speech_duration_s: float = float("inf")  # hardset to chunk_length  in batched pipeline
-    min_silence_duration_ms: int = 2000  # defaults to 160  in batched pipeline
+    max_speech_duration_s: float = float("inf")  # hardset to chunk_length in batched pipeline
+    min_silence_duration_ms: int = 2000  # defaults to 160 in batched pipeline
     speech_pad_ms: int = 400
     min_silence_at_max_speech: int = 98
     use_max_poss_sil_at_max_speech: bool = True
