@@ -316,7 +316,7 @@ class SpeechTimestampsMap:
         return round(total_silence_before + time, self.time_precision)
 
     def get_chunk_index(self, time: float, is_end: bool = False) -> int:
-        sample = int(time * self.sampling_rate)
+        sample = round(time * self.sampling_rate)
         if sample in self.chunk_end_sample and is_end:
             return self.chunk_end_sample.index(sample)
 
