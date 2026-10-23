@@ -245,7 +245,7 @@ def test_transcribe_signature():
 
 
 def test_monotonic_timestamps(physcisworks_path):
-    model = WhisperModel("base")
+    model = WhisperModel("tiny")
     pipeline = BatchedInferencePipeline(model=model)
 
     segments, info = model.transcribe(physcisworks_path, word_timestamps=True)
