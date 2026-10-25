@@ -25,7 +25,6 @@ from faster_whisper.vad import (
     VadOptions,
     collect_chunks,
     get_speech_timestamps,
-    merge_segments,
 )
 
 
@@ -126,7 +125,7 @@ class BatchedInferencePipeline:
         segmented_outputs = []
         segment_sizes = []
         for chunk_metadata, output in zip(chunks_metadata, outputs):
-            duration = chunk_metadata["end_time"] - chunk_metadata["start_time"]
+            duration = chunk_metadata["duration"]
             segment_size = int(ceil(duration) * self.model.frames_per_second)
             segment_sizes.append(segment_size)
             (
@@ -136,7 +135,7 @@ class BatchedInferencePipeline:
             ) = self.model._split_segments_by_timestamps(
                 tokenizer=tokenizer,
                 tokens=output["tokens"],
-                time_offset=chunk_metadata["start_time"],
+                time_offset=chunk_metadata["offset"],
                 segment_size=segment_size,
                 segment_duration=duration,
                 seek=0,
@@ -154,7 +153,7 @@ class BatchedInferencePipeline:
                             tokenizer.decode(subsegment["tokens"])
                         ),
                         seek=int(
-                            chunk_metadata["start_time"] * self.model.frames_per_second
+                            chunk_metadata["offset"] * self.model.frames_per_second
                         ),
                         language=tokenizer.tokenizer.id_to_token(
                             output["language_token"]
@@ -284,7 +283,7 @@ class BatchedInferencePipeline:
         no_speech_threshold: Optional[float] = 0.6,
         condition_on_previous_text: bool = True,
         prompt_reset_on_temperature: float = 0.5,
-        initial_prompt: Optional[Union[str, Iterable[int]]] = None,
+        initial_prompt: Optional[str] = None,
         prefix: Optional[str] = None,
         suppress_blank: bool = True,
         suppress_tokens: Optional[List[int]] = [-1],
@@ -302,7 +301,7 @@ class BatchedInferencePipeline:
         hallucination_silence_threshold: Optional[float] = None,
         batch_size: int = 8,
         hotwords: Optional[str] = None,
-        language_detection_threshold: Optional[float] = 0.5,
+        language_detection_threshold: float = 0.5,
         language_detection_segments: int = 1,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """transcribe audio in chunks in batched fashion and return with language info.
@@ -323,8 +322,7 @@ class BatchedInferencePipeline:
             no_repeat_ngram_size: Prevent repetitions of ngrams with this size (set 0 to disable).
             temperature: Temperature for sampling. If a list or tuple is passed,
                 only the first value is used.
-            initial_prompt: Optional text string or iterable of token ids to provide as a
-                prompt for the each window.
+            initial_prompt: Optional text string to provide as a prompt for each window.
             suppress_blank: Suppress blank outputs at the beginning of the sampling.
             suppress_tokens: List of token IDs to suppress. -1 will suppress a default set
                 of symbols as defined in `tokenizer.non_speech_tokens()`.
@@ -346,6 +344,9 @@ class BatchedInferencePipeline:
                 the maximum will be set by the default max_length.
             chunk_length: The length of audio segments. If it is not None, it will overwrite the
                 default chunk_length of the FeatureExtractor.
+                Note: It's primarily intended for models that specify a particular chunk length
+                      for inference, such as Distil models.
+                      Leave this unset unless a model author recommends a specific value.
             clip_timestamps: Optionally provide list of dictionaries each containing "start" and
                 "end" keys that specify the start and end of the voiced region within
                 `chunk_length` boundary. vad_filter will be ignored if clip_timestamps is used.
@@ -416,8 +417,7 @@ class BatchedInferencePipeline:
                         **vad_parameters, max_speech_duration_s=chunk_length
                     )
 
-                active_segments = get_speech_timestamps(audio, vad_parameters)
-                clip_timestamps = merge_segments(active_segments, vad_parameters)
+                clip_timestamps = get_speech_timestamps(audio, vad_parameters)
             # run the audio if it is less than 30 sec even without clip_timestamps
             elif duration < chunk_length:
                 clip_timestamps = [{"start": 0, "end": audio.shape[0]}]
@@ -425,6 +425,38 @@ class BatchedInferencePipeline:
                 raise RuntimeError(
                     "No clip timestamps found. "
                     "Set 'vad_filter' to True or provide 'clip_timestamps'."
+                )
+
+            clip_timestamps_provided = False
+            audio_chunks, chunks_metadata = collect_chunks(
+                audio, clip_timestamps, max_duration=chunk_length
+            )
+
+        else:
+            clip_timestamps_provided = True
+            clip_timestamps = [
+                {k: int(v * sampling_rate) for k, v in segment.items()}
+                for segment in clip_timestamps
+            ]
+
+            audio_chunks, chunks_metadata = [], []
+            for i, clip in enumerate(clip_timestamps):
+                audio_chunks.append(audio[clip["start"] : clip["end"]])
+
+                clip_duration = (clip["end"] - clip["start"]) / sampling_rate
+                if clip_duration > 30:
+                    self.model.logger.warning(
+                        "Segment %d is longer than 30 seconds, "
+                        "only the first 30 seconds will be transcribed",
+                        i,
+                    )
+
+                chunks_metadata.append(
+                    {
+                        "offset": clip["start"] / sampling_rate,
+                        "duration": clip_duration,
+                        "segments": [clip],
+                    }
                 )
 
         duration_after_vad = (
@@ -437,7 +469,6 @@ class BatchedInferencePipeline:
             format_timestamp(duration - duration_after_vad),
         )
 
-        audio_chunks, chunks_metadata = collect_chunks(audio, clip_timestamps)
         features = (
             [self.model.feature_extractor(chunk)[..., :-1] for chunk in audio_chunks]
             if duration_after_vad
@@ -548,6 +579,10 @@ class BatchedInferencePipeline:
             options,
             log_progress,
         )
+        if not clip_timestamps_provided:
+            segments = restore_speech_timestamps(
+                segments, clip_timestamps, sampling_rate
+            )
 
         return segments, info
 
@@ -604,6 +639,8 @@ class WhisperModel:
         download_root: Optional[str] = None,
         local_files_only: bool = False,
         files: dict = None,
+        revision: Optional[str] = None,
+        use_auth_token: Optional[Union[str, bool]] = None,
         **model_kwargs,
     ):
         """Initializes the Whisper model.
@@ -635,6 +672,11 @@ class WhisperModel:
           files: Load model files from the memory. This argument is a dictionary mapping file names
             to file contents as file-like or bytes objects. If this is set, model_path acts as an
             identifier for this model.
+          revision:
+            An optional Git revision id which can be a branch name, a tag, or a
+            commit hash.
+          use_auth_token: HuggingFace authentication token or True to use the
+            token stored by the HuggingFace config folder.
         """
         self.logger = get_logger()
 
@@ -650,7 +692,11 @@ class WhisperModel:
                 model_size_or_path,
                 local_files_only=local_files_only,
                 cache_dir=download_root,
+                revision=revision,
+                use_auth_token=use_auth_token,
             )
+
+        self._verify_model_config(model_path, files)
 
         self.model = ctranslate2.models.Whisper(
             model_path,
@@ -686,6 +732,36 @@ class WhisperModel:
         )
         self.time_precision = 0.02
         self.max_length = 448
+
+    @staticmethod
+    def _verify_model_config(model_path, files=None):
+        """Verify that config.json has the required keys."""
+        if files is not None:
+            config_data = files.get("config.json")
+            if config_data is None:
+                raise ValueError("Model is missing config.json.")
+
+            if hasattr(config_data, "read"):
+                config_bytes = config_data.read()
+                config_data.seek(0)
+            else:
+                config_bytes = config_data
+
+            config = json.loads(config_bytes)
+        else:
+            config_path = os.path.join(model_path, "config.json")
+            if not os.path.isfile(config_path):
+                raise ValueError("Model is missing config.json")
+
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+
+        required = ("lang_ids", "suppress_ids", "suppress_ids_begin")
+        missing = [key for key in required if key not in config]
+        if missing:
+            raise ValueError(
+                f"Invalid model: config.json is missing required key(s): {', '.join(missing)}."
+            )
 
     @property
     def supported_languages(self) -> List[str]:
@@ -752,7 +828,7 @@ class WhisperModel:
         clip_timestamps: Union[str, List[float]] = "0",
         hallucination_silence_threshold: Optional[float] = None,
         hotwords: Optional[str] = None,
-        language_detection_threshold: Optional[float] = 0.5,
+        language_detection_threshold: float = 0.5,
         language_detection_segments: int = 1,
     ) -> Tuple[Iterable[Segment], TranscriptionInfo]:
         """Transcribes an input file.
@@ -811,6 +887,9 @@ class WhisperModel:
             the maximum will be set by the default max_length.
           chunk_length: The length of audio segments. If it is not None, it will overwrite the
             default chunk_length of the FeatureExtractor.
+            Note: It's primarily intended for models that specify a particular chunk length
+                  for inference, such as Distil models.
+                  Leave this unset unless a model author recommends a specific value.
           clip_timestamps:
             Comma-separated list start,end,start,end,... timestamps (in seconds) of clips to
              process. The last end timestamp defaults to the end of the file.
@@ -1684,6 +1763,12 @@ class WhisperModel:
         for result, text_token in zip(results, text_tokens):
             text_token_probs = result.text_token_probs
             alignments = result.alignments
+            if len(alignments) == 0:
+                # No alignment available, e.g. the window was shorter than the
+                # encoder stride so there were no frames to align against
+                # (ctranslate2 >=4.8.1 returns an empty alignment for such windows).
+                return_list.append([])
+                continue
             text_indices = np.array([pair[0] for pair in alignments])
             time_indices = np.array([pair[1] for pair in alignments])
 
@@ -1759,7 +1844,7 @@ class WhisperModel:
 
         Returns:
             language: Detected language.
-            languege_probability: Probability of the detected language.
+            language_probability: Probability of the detected language.
             all_language_probs: List of tuples with all language names and probabilities.
         """
         assert (
@@ -1768,6 +1853,8 @@ class WhisperModel:
 
         if audio is not None:
             if vad_filter:
+                if isinstance(vad_parameters, dict):
+                    vad_parameters = VadOptions(**vad_parameters)
                 speech_chunks = get_speech_timestamps(audio, vad_parameters)
                 audio_chunks, chunks_metadata = collect_chunks(audio, speech_chunks)
                 audio = np.concatenate(audio_chunks, axis=0)
@@ -1832,7 +1919,7 @@ def restore_speech_timestamps(
 
         else:
             segment.start = ts_map.get_original_time(segment.start)
-            segment.end = ts_map.get_original_time(segment.end)
+            segment.end = ts_map.get_original_time(segment.end, is_end=True)
 
         yield segment
 
@@ -1867,6 +1954,7 @@ def get_suppressed_tokens(
             tokenizer.sot,
             tokenizer.sot_prev,
             tokenizer.sot_lm,
+            tokenizer.no_speech,
         ]
     )
 
