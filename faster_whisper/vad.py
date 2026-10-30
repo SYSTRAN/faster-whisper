@@ -42,7 +42,7 @@ class VadOptions:
     neg_threshold: float = None
     min_speech_duration_ms: int = 0
     max_speech_duration_s: float = float("inf")
-    min_silence_duration_ms: int = 2000
+    min_silence_duration_ms: int = None  # defaults to 2000, or to 160 in batched
     speech_pad_ms: int = 400
     min_silence_at_max_speech: int = 98
     use_max_poss_sil_at_max_speech: bool = True
@@ -72,7 +72,11 @@ def get_speech_timestamps(
     neg_threshold = vad_options.neg_threshold
     min_speech_duration_ms = vad_options.min_speech_duration_ms
     max_speech_duration_s = vad_options.max_speech_duration_s
-    min_silence_duration_ms = vad_options.min_silence_duration_ms
+    min_silence_duration_ms = (
+        vad_options.min_silence_duration_ms
+        if vad_options.min_silence_duration_ms is not None
+        else 2000
+    )
     window_size_samples = 512
     speech_pad_ms = vad_options.speech_pad_ms
     min_silence_at_max_speech = vad_options.min_silence_at_max_speech
