@@ -48,9 +48,9 @@ def get_logger():
 
 def download_model(
     size_or_id: str,
-    output_dir: Optional[str] = None,
+    output_dir: Optional[Union[str, os.PathLike]] = None,
     local_files_only: bool = False,
-    cache_dir: Optional[str] = None,
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
     revision: Optional[str] = None,
     use_auth_token: Optional[Union[str, bool]] = None,
 ):
@@ -78,6 +78,12 @@ def download_model(
     Raises:
       ValueError: if the model size is invalid.
     """
+    if output_dir is not None:
+        output_dir = str(os.fspath(output_dir))
+
+    if cache_dir is not None:
+        cache_dir = str(os.fspath(cache_dir))
+
     if re.match(r".*/.*", size_or_id):
         repo_id = size_or_id
     else:
