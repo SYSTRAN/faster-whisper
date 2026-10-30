@@ -313,3 +313,14 @@ def test_cliptimestamps_timings(physcisworks_path):
         assert clip["start"] == segment.start
         assert clip["end"] == segment.end
         assert segment.text == transcript
+
+
+def test_chunk_length_applies_to_one_transcribe_call_only(jfk_path):
+    model = WhisperModel("tiny")
+
+    first, _ = model.transcribe(jfk_path, language="en", chunk_length=5)
+    second, _ = model.transcribe(jfk_path, language="en")
+
+    # The segments are generated lazily, so each call has to keep its own window.
+    assert len(list(second)) == 1
+    assert len(list(first)) > 1

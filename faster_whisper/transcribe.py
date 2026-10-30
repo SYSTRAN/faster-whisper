@@ -877,8 +877,8 @@ class WhisperModel:
             parameters and default values in the class `VadOptions`).
           max_new_tokens: Maximum number of new tokens to generate per-chunk. If not set,
             the maximum will be set by the default max_length.
-          chunk_length: The length of audio segments. If it is not None, it will overwrite the
-            default chunk_length of the FeatureExtractor.
+          chunk_length: The length of audio segments for this call. If it is not None, it is used
+            instead of the default chunk_length of the FeatureExtractor.
             Note: It's primarily intended for models that specify a particular chunk length
                   for inference, such as Distil models.
                   Leave this unset unless a model author recommends a specific value.
@@ -950,7 +950,7 @@ class WhisperModel:
         else:
             speech_chunks = None
 
-        features = self.feature_extractor(audio, chunk_length=chunk_length)
+        features = self.feature_extractor(audio)
 
         encoder_output = None
         all_language_probs = None
@@ -1040,7 +1040,7 @@ class WhisperModel:
         )
 
         segments = self.generate_segments(
-            features, tokenizer, options, log_progress, encoder_output
+            features, tokenizer, options, log_progress, encoder_output, chunk_length
         )
 
         if speech_chunks:
@@ -1144,9 +1144,13 @@ class WhisperModel:
         options: TranscriptionOptions,
         log_progress,
         encoder_output: Optional[ctranslate2.StorageView] = None,
+        chunk_length: Optional[int] = None,
     ) -> Iterable[Segment]:
         content_frames = features.shape[-1] - 1
         content_duration = float(content_frames * self.feature_extractor.time_per_frame)
+        nb_max_frames = (
+            chunk_length or self.feature_extractor.chunk_length
+        ) * self.frames_per_second
 
         if isinstance(options.clip_timestamps, str):
             options.clip_timestamps = [
@@ -1204,11 +1208,10 @@ class WhisperModel:
                 continue
             time_offset = seek * self.feature_extractor.time_per_frame
             window_end_time = float(
-                (seek + self.feature_extractor.nb_max_frames)
-                * self.feature_extractor.time_per_frame
+                (seek + nb_max_frames) * self.feature_extractor.time_per_frame
             )
             segment_size = min(
-                self.feature_extractor.nb_max_frames,
+                nb_max_frames,
                 content_frames - seek,
                 seek_clip_end - seek,
             )
