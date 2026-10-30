@@ -4,6 +4,7 @@ import os
 import numpy as np
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
+from faster_whisper.vad import VadOptions
 
 
 def test_supported_languages():
@@ -313,3 +314,35 @@ def test_cliptimestamps_timings(physcisworks_path):
         assert clip["start"] == segment.start
         assert clip["end"] == segment.end
         assert segment.text == transcript
+
+
+def test_batched_vad_options_object_is_capped_at_chunk_length(physcisworks_path):
+    model = WhisperModel("tiny")
+    pipeline = BatchedInferencePipeline(model=model)
+
+    vad_parameters = VadOptions(min_silence_duration_ms=2000)
+    segments, info = pipeline.transcribe(
+        physcisworks_path, vad_parameters=vad_parameters
+    )
+
+    assert list(segments)[-1].end > 150
+    assert info.vad_options.max_speech_duration_s == 30
+    assert vad_parameters.max_speech_duration_s == float("inf")
+
+    segments, info = pipeline.transcribe(
+        physcisworks_path, vad_parameters=vad_parameters, chunk_length=10
+    )
+
+    assert list(segments)[-1].end > 150
+    assert info.vad_options.max_speech_duration_s == 10
+
+
+def test_batched_vad_options_object_keeps_a_shorter_max_speech(physcisworks_path):
+    model = WhisperModel("tiny")
+    pipeline = BatchedInferencePipeline(model=model)
+
+    segments, info = pipeline.transcribe(
+        physcisworks_path, vad_parameters=VadOptions(max_speech_duration_s=10)
+    )
+
+    assert info.vad_options.max_speech_duration_s == 10

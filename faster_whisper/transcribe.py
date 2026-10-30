@@ -4,7 +4,7 @@ import logging
 import os
 import zlib
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from inspect import signature
 from math import ceil
 from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
@@ -408,6 +408,10 @@ class BatchedInferencePipeline:
 
                     vad_parameters = VadOptions(
                         **vad_parameters, max_speech_duration_s=chunk_length
+                    )
+                elif vad_parameters.max_speech_duration_s > chunk_length:
+                    vad_parameters = replace(
+                        vad_parameters, max_speech_duration_s=chunk_length
                     )
 
                 clip_timestamps = get_speech_timestamps(audio, vad_parameters)
