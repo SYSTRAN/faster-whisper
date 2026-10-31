@@ -63,7 +63,7 @@ jobs:
 
 
   build-and-push-package:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [check-code-format, run-tests]
 
     steps:
