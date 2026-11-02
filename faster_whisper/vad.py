@@ -364,15 +364,12 @@ class SileroVADModel:
 
         h = np.zeros((1, 1, 128), dtype="float32")
         c = np.zeros((1, 1, 128), dtype="float32")
-        context = np.zeros(
-            (1, context_size_samples),
-            dtype="float32",
-        )
 
         batched_audio = audio.reshape(-1, num_samples)
-        context = batched_audio[..., -context_size_samples:]
-        context[-1] = 0
-        context = np.roll(context, 1, 0)
+        # each window's context is the tail of the previous window; np.roll
+        # returns a copy, so neither the input audio nor the windows change
+        context = np.roll(batched_audio[..., -context_size_samples:], 1, 0)
+        context[0] = 0
         batched_audio = np.concatenate([context, batched_audio], 1)
 
         batched_audio = batched_audio.reshape(-1, num_samples + context_size_samples)
