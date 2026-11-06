@@ -1447,8 +1447,8 @@ class WhisperModel:
         all_results = []
         below_cr_threshold_results = []
 
-        max_initial_timestamp_index = int(
-            round(options.max_initial_timestamp / self.time_precision)
+        max_initial_timestamp_index = round(
+            options.max_initial_timestamp / self.time_precision
         )
         if options.max_new_tokens is not None:
             max_length = len(prompt) + options.max_new_tokens
