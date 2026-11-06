@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - v*
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  check-code-format:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.9
+
+      - name: Install module
+        run: |
+          pip install wheel
+          pip install -e .[dev]
+
+      - name: Check code format with Black
+        run: |
+          black --check .
+
+      - name: Check imports order with isort
+        run: |
+          isort --check-only .
+
+      - name: Check code style with Flake8
+        if: ${{ always() }}
+        run: |
+          flake8 .
+
+
+  run-tests:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.9
+
+      - name: Install module
+        run: |
+          pip install wheel
+          pip install -e .[dev]
+
+      - name: Run pytest
+        run: |
+          pytest -v tests/
+
+
+  build-and-push-package:
+    runs-on: ubuntu-24.04
+    needs: [check-code-format, run-tests]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.9
+
+      - name: Install dependencies
+        run: |
+          pip install wheel
+
+      - name: Build package
+        run: |
+          python3 setup.py sdist bdist_wheel
+
+      - name: Push package on PyPI
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}

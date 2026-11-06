@@ -1,0 +1,6 @@
+ctranslate2>=4.0,<5
+huggingface_hub>=0.23
+tokenizers>=0.13,<1
+onnxruntime>=1.14,<2 
+av>=11
+tqdm

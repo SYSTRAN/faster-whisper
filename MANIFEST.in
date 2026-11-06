@@ -1,0 +1,3 @@
+include faster_whisper/assets/silero_vad_v6.onnx
+include requirements.txt
+include requirements.conversion.txt
