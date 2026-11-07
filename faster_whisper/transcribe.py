@@ -219,20 +219,32 @@ class BatchedInferencePipeline:
             for i, language_token in enumerate(language_tokens):
                 prompts[i][language_token_index] = language_token
 
+        temperature = options.temperatures[0]
+        if temperature > 0:
+            decoding_kwargs = {
+                "beam_size": 1,
+                "num_hypotheses": options.best_of,
+                "sampling_topk": 0,
+                "sampling_temperature": temperature,
+            }
+        else:
+            decoding_kwargs = {
+                "beam_size": options.beam_size,
+                "patience": options.patience,
+            }
+
         results = self.model.model.generate(
             encoder_output,
             prompts,
-            beam_size=options.beam_size,
-            patience=options.patience,
             length_penalty=options.length_penalty,
             max_length=max_length,
             suppress_blank=options.suppress_blank,
             suppress_tokens=options.suppress_tokens,
             return_scores=True,
             return_no_speech_prob=True,
-            sampling_temperature=options.temperatures[0],
             repetition_penalty=options.repetition_penalty,
             no_repeat_ngram_size=options.no_repeat_ngram_size,
+            **decoding_kwargs,
         )
 
         output = []

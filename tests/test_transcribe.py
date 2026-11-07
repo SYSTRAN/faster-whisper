@@ -88,6 +88,39 @@ def test_batched_transcribe(physcisworks_path):
     assert len(segments) > 7
 
 
+def test_batched_transcribe_sampling_options(jfk_path):
+    model = WhisperModel("tiny")
+    batched_model = BatchedInferencePipeline(model=model)
+
+    class GenerateRecorder:
+        def __init__(self, whisper):
+            self.whisper = whisper
+            self.calls = []
+
+        def __getattr__(self, name):
+            return getattr(self.whisper, name)
+
+        def generate(self, *args, **kwargs):
+            self.calls.append(kwargs)
+            return self.whisper.generate(*args, **kwargs)
+
+    recorder = GenerateRecorder(model.model)
+    model.model = recorder
+
+    list(batched_model.transcribe(jfk_path, temperature=0.8, best_of=3)[0])
+    sampling_kwargs = recorder.calls[-1]
+    assert sampling_kwargs["beam_size"] == 1
+    assert sampling_kwargs["num_hypotheses"] == 3
+    assert sampling_kwargs["sampling_topk"] == 0
+    assert sampling_kwargs["sampling_temperature"] == 0.8
+
+    list(batched_model.transcribe(jfk_path, temperature=0.0, beam_size=2)[0])
+    beam_kwargs = recorder.calls[-1]
+    assert beam_kwargs["beam_size"] == 2
+    assert "sampling_topk" not in beam_kwargs
+    assert "sampling_temperature" not in beam_kwargs
+
+
 def test_empty_audio():
     audio = np.asarray([], dtype="float32")
     model = WhisperModel("tiny")
