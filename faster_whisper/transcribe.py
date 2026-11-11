@@ -4,7 +4,7 @@ import logging
 import os
 import zlib
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from inspect import signature
 from math import ceil
 from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
@@ -398,17 +398,12 @@ class BatchedInferencePipeline:
         if not clip_timestamps:
             if vad_filter:
                 if vad_parameters is None:
-                    vad_parameters = VadOptions(
-                        max_speech_duration_s=chunk_length,
-                        min_silence_duration_ms=160,
-                    )
+                    vad_parameters = VadOptions(min_silence_duration_ms=160)
                 elif isinstance(vad_parameters, dict):
-                    if "max_speech_duration_s" in vad_parameters.keys():
-                        vad_parameters.pop("max_speech_duration_s")
-
-                    vad_parameters = VadOptions(
-                        **vad_parameters, max_speech_duration_s=chunk_length
-                    )
+                    vad_parameters = VadOptions(**vad_parameters)
+                vad_parameters = replace(
+                    vad_parameters, max_speech_duration_s=chunk_length
+                )
 
                 clip_timestamps = get_speech_timestamps(audio, vad_parameters)
             # run the audio if it is less than 30 sec even without clip_timestamps
@@ -877,8 +872,8 @@ class WhisperModel:
             parameters and default values in the class `VadOptions`).
           max_new_tokens: Maximum number of new tokens to generate per-chunk. If not set,
             the maximum will be set by the default max_length.
-          chunk_length: The length of audio segments. If it is not None, it will overwrite the
-            default chunk_length of the FeatureExtractor.
+          chunk_length: The length of audio segments. If it is not None, it overrides the
+            default chunk_length of the FeatureExtractor for this call only.
             Note: It's primarily intended for models that specify a particular chunk length
                   for inference, such as Distil models.
                   Leave this unset unless a model author recommends a specific value.
@@ -950,7 +945,7 @@ class WhisperModel:
         else:
             speech_chunks = None
 
-        features = self.feature_extractor(audio, chunk_length=chunk_length)
+        features = self.feature_extractor(audio)
 
         encoder_output = None
         all_language_probs = None
@@ -980,6 +975,7 @@ class WhisperModel:
                     features=features[..., seek:],
                     language_detection_segments=language_detection_segments,
                     language_detection_threshold=language_detection_threshold,
+                    chunk_length=chunk_length,
                 )
 
                 self.logger.info(
@@ -1040,7 +1036,7 @@ class WhisperModel:
         )
 
         segments = self.generate_segments(
-            features, tokenizer, options, log_progress, encoder_output
+            features, tokenizer, options, log_progress, encoder_output, chunk_length
         )
 
         if speech_chunks:
@@ -1144,7 +1140,15 @@ class WhisperModel:
         options: TranscriptionOptions,
         log_progress,
         encoder_output: Optional[ctranslate2.StorageView] = None,
+        chunk_length: Optional[int] = None,
     ) -> Iterable[Segment]:
+        nb_max_frames = (
+            self.feature_extractor.nb_max_frames
+            if chunk_length is None
+            else chunk_length
+            * self.feature_extractor.sampling_rate
+            // self.feature_extractor.hop_length
+        )
         content_frames = features.shape[-1] - 1
         content_duration = float(content_frames * self.feature_extractor.time_per_frame)
 
@@ -1204,11 +1208,10 @@ class WhisperModel:
                 continue
             time_offset = seek * self.feature_extractor.time_per_frame
             window_end_time = float(
-                (seek + self.feature_extractor.nb_max_frames)
-                * self.feature_extractor.time_per_frame
+                (seek + nb_max_frames) * self.feature_extractor.time_per_frame
             )
             segment_size = min(
-                self.feature_extractor.nb_max_frames,
+                nb_max_frames,
                 content_frames - seek,
                 seek_clip_end - seek,
             )
@@ -1575,16 +1578,17 @@ class WhisperModel:
         hotwords: Optional[str] = None,
     ) -> List[int]:
         prompt = []
+        context_budget = self.max_length // 2 - 1
 
         if previous_tokens or (hotwords and not prefix):
             prompt.append(tokenizer.sot_prev)
             if hotwords and not prefix:
                 hotwords_tokens = tokenizer.encode(" " + hotwords.strip())
-                if len(hotwords_tokens) >= self.max_length // 2:
-                    hotwords_tokens = hotwords_tokens[: self.max_length // 2 - 1]
+                hotwords_tokens = hotwords_tokens[:context_budget]
                 prompt.extend(hotwords_tokens)
-            if previous_tokens:
-                prompt.extend(previous_tokens[-(self.max_length // 2 - 1) :])
+                context_budget -= len(hotwords_tokens)
+            if previous_tokens and context_budget > 0:
+                prompt.extend(previous_tokens[-context_budget:])
 
         prompt.extend(tokenizer.sot_sequence)
 
@@ -1593,11 +1597,12 @@ class WhisperModel:
 
         if prefix:
             prefix_tokens = tokenizer.encode(" " + prefix.strip())
-            if len(prefix_tokens) >= self.max_length // 2:
-                prefix_tokens = prefix_tokens[: self.max_length // 2 - 1]
             if not without_timestamps:
                 prompt.append(tokenizer.timestamp_begin)
-            prompt.extend(prefix_tokens)
+            prefix_budget = min(
+                self.max_length // 2 - 1, self.max_length - len(prompt) - 1
+            )
+            prompt.extend(prefix_tokens[:prefix_budget])
 
         return prompt
 
@@ -1816,6 +1821,7 @@ class WhisperModel:
         vad_parameters: Union[dict, VadOptions] = None,
         language_detection_segments: int = 1,
         language_detection_threshold: float = 0.5,
+        chunk_length: Optional[int] = None,
     ) -> Tuple[str, float, List[Tuple[str, float]]]:
         """
         Use Whisper to detect the language of the input audio or features.
@@ -1832,6 +1838,7 @@ class WhisperModel:
             language_detection_threshold: If the maximum probability of the language tokens is
                 higher than this value, the language is detected.
             language_detection_segments: Number of segments to consider for the language detection.
+            chunk_length: Optional segment length in seconds for this call only.
 
         Returns:
             language: Detected language.
@@ -1842,6 +1849,13 @@ class WhisperModel:
             audio is not None or features is not None
         ), "Either `audio` or `features` must be provided."
 
+        n_samples = (
+            self.feature_extractor.n_samples
+            if chunk_length is None
+            else chunk_length * self.feature_extractor.sampling_rate
+        )
+        nb_max_frames = n_samples // self.feature_extractor.hop_length
+
         if audio is not None:
             if vad_filter:
                 if isinstance(vad_parameters, dict):
@@ -1850,19 +1864,15 @@ class WhisperModel:
                 audio_chunks, chunks_metadata = collect_chunks(audio, speech_chunks)
                 audio = np.concatenate(audio_chunks, axis=0)
 
-            audio = audio[
-                : language_detection_segments * self.feature_extractor.n_samples
-            ]
+            audio = audio[: language_detection_segments * n_samples]
             features = self.feature_extractor(audio)
 
-        features = features[
-            ..., : language_detection_segments * self.feature_extractor.nb_max_frames
-        ]
+        features = features[..., : language_detection_segments * nb_max_frames]
 
         detected_language_info = {}
-        for i in range(0, features.shape[-1], self.feature_extractor.nb_max_frames):
+        for i in range(0, features.shape[-1], nb_max_frames):
             encoder_output = self.encode(
-                pad_or_trim(features[..., i : i + self.feature_extractor.nb_max_frames])
+                pad_or_trim(features[..., i : i + nb_max_frames])
             )
             # results is a list of tuple[str, float] with language names and probabilities.
             results = self.model.detect_language(encoder_output)[0]

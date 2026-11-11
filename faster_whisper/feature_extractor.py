@@ -195,14 +195,10 @@ class FeatureExtractor:
 
         return output if return_complex else np.real(output)
 
-    def __call__(self, waveform: np.ndarray, padding=160, chunk_length=None):
+    def __call__(self, waveform: np.ndarray, padding=160):
         """
         Compute the log-Mel spectrogram of the provided audio.
         """
-
-        if chunk_length is not None:
-            self.n_samples = chunk_length * self.sampling_rate
-            self.nb_max_frames = self.n_samples // self.hop_length
 
         if waveform.dtype is not np.float32:
             waveform = waveform.astype(np.float32)

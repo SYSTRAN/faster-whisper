@@ -1,9 +1,246 @@
 import inspect
+import logging
 import os
 
+from copy import deepcopy
+from dataclasses import asdict
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 import numpy as np
+import pytest
+import tokenizers
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
+from faster_whisper.feature_extractor import FeatureExtractor
+from faster_whisper.vad import VadOptions
+
+
+@pytest.fixture
+def offline_model():
+    # Replace only CT2 inference; tokenization, features and segmentation stay real.
+    model = WhisperModel.__new__(WhisperModel)
+    vocabulary = [
+        "speech",
+        "[UNK]",
+        "<|endoftext|>",
+        "<|startoftranscript|>",
+        "<|startofprev|>",
+        "<|startoflm|>",
+        "<|transcribe|>",
+        "<|translate|>",
+        "<|en|>",
+        "<|nospeech|>",
+        "<|notimestamps|>",
+    ]
+    model.hf_tokenizer = tokenizers.Tokenizer(
+        tokenizers.models.WordLevel(
+            {token: i for i, token in enumerate(vocabulary)}, unk_token="[UNK]"
+        )
+    )
+    model.hf_tokenizer.pre_tokenizer = tokenizers.pre_tokenizers.WhitespaceSplit()
+    model.feature_extractor = FeatureExtractor()
+    initial_state = deepcopy(vars(model.feature_extractor))
+    model.logger = logging.getLogger(__name__)
+    model.input_stride = 2
+    model.num_samples_per_token = 320
+    model.frames_per_second = 100
+    model.tokens_per_second = 50
+    model.time_precision = 0.02
+    model.max_length = 448
+    model.model = Mock(is_multilingual=True, device="cpu", n_mels=80)
+
+    def encode(features, to_cpu=False):
+        # Also catch temporary shared-state changes during a lazy iteration.
+        np.testing.assert_equal(vars(model.feature_extractor), initial_state)
+        return np.asarray(features).copy()
+
+    model.model.encode.side_effect = encode
+    model.model.generate.side_effect = lambda encoder_output, prompts, **kwargs: [
+        SimpleNamespace(sequences_ids=[[0]], scores=[-0.1], no_speech_prob=0.0)
+        for _ in prompts
+    ]
+    model.model.detect_language.return_value = [[("<|en|>", 0.9), ("<|de|>", 0.1)]]
+    return model
+
+
+def _offline_encoded_frames(model):
+    # Silence extracts to -1.5, while pad_or_trim fills the unused frames with 0.
+    return [
+        np.count_nonzero(np.any(np.asarray(call.args[0]) != 0, axis=(0, 1)))
+        for call in model.model.encode.call_args_list
+    ]
+
+
+@pytest.mark.parametrize("chunk_length", [10, 30])
+@pytest.mark.parametrize("parameter_kind", ["none", "dict", "instance"])
+def test_offline_batched_vad_options_and_long_chunks(
+    offline_model, monkeypatch, chunk_length, parameter_kind
+):
+    custom_options = dict(
+        threshold=0.37,
+        min_silence_duration_ms=310,
+        speech_pad_ms=120,
+        max_speech_duration_s=120,
+    )
+    parameters = {
+        "none": None,
+        "dict": custom_options,
+        "instance": VadOptions(**custom_options),
+    }[parameter_kind]
+    original = deepcopy(parameters)
+    observed = []
+
+    def speech_timestamps(audio, options):
+        observed.append(options)
+        # Simulate uninterrupted speech, splitting only at the supplied VAD limit.
+        limit = int(options.max_speech_duration_s * 16000)
+        return [
+            {"start": start, "end": min(start + limit, len(audio))}
+            for start in range(0, len(audio), limit)
+        ]
+
+    monkeypatch.setattr(
+        "faster_whisper.transcribe.get_speech_timestamps", speech_timestamps
+    )
+    pipeline = BatchedInferencePipeline(offline_model)
+    segments, info = pipeline.transcribe(
+        np.zeros(65 * 16000, dtype=np.float32),
+        language="en",
+        vad_parameters=parameters,
+        chunk_length=chunk_length,
+        suppress_tokens=[],
+    )
+    expected = asdict(
+        VadOptions(min_silence_duration_ms=160)
+        if parameters is None
+        else VadOptions(**custom_options)
+    )
+    expected["max_speech_duration_s"] = chunk_length
+    assert parameters == original
+    assert len(observed) == 1
+    assert isinstance(info.vad_options, VadOptions)
+    assert info.vad_options is observed[0]
+    assert info.vad_options is not parameters
+    assert asdict(info.vad_options) == expected
+
+    segments = list(segments)
+    assert [(s.start, s.end) for s in segments] == [
+        (start, min(start + chunk_length, 65)) for start in range(0, 65, chunk_length)
+    ]
+    assert all(s.end - s.start <= chunk_length for s in segments)
+    assert info.duration_after_vad == info.duration == 65
+
+
+@pytest.mark.parametrize("schedule", ["sequential", "delayed", "interleaved"])
+def test_offline_transcribe_windows_are_call_local(offline_model, schedule):
+    model = offline_model
+    audio = np.zeros(35 * 16000, dtype=np.float32)
+    initial_state = deepcopy(vars(model.feature_extractor))
+
+    def transcribe(chunk_length=None):
+        kwargs = {} if chunk_length is None else {"chunk_length": chunk_length}
+        segments, info = model.transcribe(
+            audio, without_timestamps=True, suppress_tokens=[], **kwargs
+        )
+        np.testing.assert_equal(vars(model.feature_extractor), initial_state)
+        assert info.language == "en"
+        # Automatic language detection must receive the same per-call override.
+        assert _offline_encoded_frames(model)[-1] == (chunk_length or 30) * 100
+        return segments
+
+    if schedule == "sequential":
+        short = list(transcribe(10))
+        default = list(transcribe())
+    elif schedule == "delayed":
+        short_generator = transcribe(10)
+        default_generator = transcribe()
+        default = list(default_generator)
+        short = list(short_generator)
+    else:
+        default_generator = transcribe()
+        default = [next(default_generator)]
+        short_generator = transcribe(10)
+        short = [next(short_generator)]
+        default.extend(default_generator)
+        short.extend(short_generator)
+
+    assert [(s.start, s.end) for s in short] == [(0, 10), (10, 20), (20, 30), (30, 35)]
+    assert [(s.start, s.end) for s in default] == [(0, 30), (30, 35)]
+    np.testing.assert_equal(vars(model.feature_extractor), initial_state)
+
+
+@pytest.mark.parametrize("source", ["audio", "features"])
+def test_offline_detect_language_window_override(offline_model, monkeypatch, source):
+    model = offline_model
+    audio = np.zeros(65 * 16000, dtype=np.float32)
+    initial_state = deepcopy(vars(model.feature_extractor))
+    inputs = {source: audio if source == "audio" else model.feature_extractor(audio)}
+    extracted_samples = []
+    extract = FeatureExtractor.__call__
+
+    def record_extraction(self, waveform, *args, **kwargs):
+        extracted_samples.append(len(waveform))
+        return extract(self, waveform, *args, **kwargs)
+
+    monkeypatch.setattr(FeatureExtractor, "__call__", record_extraction)
+    for kwargs, expected_frames in [({"chunk_length": 10}, 1000), ({}, 3000)]:
+        model.model.encode.reset_mock()
+        language, probability, languages = model.detect_language(
+            **inputs,
+            language_detection_segments=2,
+            language_detection_threshold=1.0,
+            **kwargs,
+        )
+        assert (language, probability) == ("en", 0.9)
+        assert languages == [("en", 0.9), ("de", 0.1)]
+        assert _offline_encoded_frames(model) == [expected_frames] * 2
+        np.testing.assert_equal(vars(model.feature_extractor), initial_state)
+    assert extracted_samples == ([20 * 16000, 60 * 16000] if source == "audio" else [])
+
+
+@pytest.mark.parametrize("failure", ["detect_language", "generate"])
+def test_offline_transcribe_exception_preserves_window(offline_model, failure):
+    model = offline_model
+    audio = np.zeros(35 * 16000, dtype=np.float32)
+    initial_state = deepcopy(vars(model.feature_extractor))
+    operation = getattr(model.model, failure)
+    original_side_effect = operation.side_effect
+    operation.side_effect = RuntimeError("inference failed")
+    with pytest.raises(RuntimeError, match="inference failed"):
+        segments, _ = model.transcribe(audio, chunk_length=10, suppress_tokens=[])
+        list(segments)
+    np.testing.assert_equal(vars(model.feature_extractor), initial_state)
+
+    operation.side_effect = original_side_effect
+    segments, _ = model.transcribe(audio, suppress_tokens=[])
+    assert [(s.start, s.end) for s in segments] == [(0, 30), (30, 35)]
+    np.testing.assert_equal(vars(model.feature_extractor), initial_state)
+
+
+def test_offline_detect_language_exception_preserves_window(offline_model):
+    model = offline_model
+    audio = np.zeros(35 * 16000, dtype=np.float32)
+    initial_state = deepcopy(vars(model.feature_extractor))
+    model.model.detect_language.side_effect = RuntimeError("detection failed")
+    with pytest.raises(RuntimeError, match="detection failed"):
+        model.detect_language(audio, chunk_length=10)
+    np.testing.assert_equal(vars(model.feature_extractor), initial_state)
+
+    model.model.detect_language.side_effect = None
+    model.model.encode.reset_mock()
+    assert model.detect_language(audio)[:2] == ("en", 0.9)
+    assert _offline_encoded_frames(model) == [3000]
+
+
+def test_offline_feature_extractor_has_no_per_call_window():
+    assert "chunk_length" not in inspect.signature(FeatureExtractor.__call__).parameters
+    extractor = FeatureExtractor()
+    initial_state = deepcopy(vars(extractor))
+    for seconds in (10, 30):
+        features = extractor(np.zeros(seconds * 16000, dtype=np.float32))
+        assert features.shape == (80, seconds * 100 + 1)
+        np.testing.assert_equal(vars(extractor), initial_state)
 
 
 def test_supported_languages():
