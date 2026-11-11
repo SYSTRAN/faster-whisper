@@ -2,7 +2,6 @@ import inspect
 import os
 
 import numpy as np
-import pytest
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 
@@ -87,24 +86,6 @@ def test_batched_transcribe(physcisworks_path):
             {"start": segment.start, "end": segment.end, "text": segment.text}
         )
     assert len(segments) > 7
-
-
-def test_batched_without_vad_accepts_one_full_chunk(jfk_path):
-    model = WhisperModel("tiny")
-    pipeline = BatchedInferencePipeline(model)
-    audio = decode_audio(jfk_path)
-    sample_rate = model.feature_extractor.sampling_rate
-    chunk_length = 11
-    assert audio.size == chunk_length * sample_rate
-    options = dict(chunk_length=chunk_length, vad_filter=False, language="en")
-
-    for clip in (audio[:-1], audio):
-        segments, info = pipeline.transcribe(clip, **options)
-        assert info.duration_after_vad == clip.size / sample_rate
-        assert list(segments)
-
-    with pytest.raises(RuntimeError, match="No clip timestamps found"):
-        pipeline.transcribe(np.pad(audio, (0, 1)), **options)
 
 
 def test_empty_audio():

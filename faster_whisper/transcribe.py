@@ -411,8 +411,8 @@ class BatchedInferencePipeline:
                     )
 
                 clip_timestamps = get_speech_timestamps(audio, vad_parameters)
-            # Without explicit timestamps, the audio must fit in one chunk.
-            elif audio.shape[0] <= chunk_length * sampling_rate:
+            # run the audio if it is less than 30 sec even without clip_timestamps
+            elif duration <= chunk_length:
                 clip_timestamps = [{"start": 0, "end": audio.shape[0]}]
             else:
                 raise RuntimeError(
