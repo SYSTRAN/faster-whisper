@@ -204,7 +204,7 @@ class FeatureExtractor:
             self.n_samples = chunk_length * self.sampling_rate
             self.nb_max_frames = self.n_samples // self.hop_length
 
-        if waveform.dtype is not np.float32:
+        if waveform.dtype != np.float32:
             waveform = waveform.astype(np.float32)
 
         if padding:
