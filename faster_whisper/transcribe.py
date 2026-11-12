@@ -411,7 +411,6 @@ class BatchedInferencePipeline:
                     )
 
                 clip_timestamps = get_speech_timestamps(audio, vad_parameters)
-           
             elif duration <= chunk_length:
                 clip_timestamps = [{"start": 0, "end": audio.shape[0]}]
             else:
