@@ -582,40 +582,41 @@ class BatchedInferencePipeline:
         self, features, tokenizer, chunks_metadata, batch_size, options, log_progress
     ):
         pbar = tqdm(total=len(features), disable=not log_progress, position=0)
-        seg_idx = 0
-        for i in range(0, len(features), batch_size):
-            results = self.forward(
-                features[i : i + batch_size],
-                tokenizer,
-                chunks_metadata[i : i + batch_size],
-                options,
-            )
+        try:
+            seg_idx = 0
+            for i in range(0, len(features), batch_size):
+                results = self.forward(
+                    features[i : i + batch_size],
+                    tokenizer,
+                    chunks_metadata[i : i + batch_size],
+                    options,
+                )
 
-            for result in results:
-                for segment in result:
-                    seg_idx += 1
-                    yield Segment(
-                        seek=segment["seek"],
-                        id=seg_idx,
-                        text=segment["text"],
-                        start=round(segment["start"], 3),
-                        end=round(segment["end"], 3),
-                        words=(
-                            None
-                            if not options.word_timestamps
-                            else [Word(**word) for word in segment["words"]]
-                        ),
-                        tokens=segment["tokens"],
-                        avg_logprob=segment["avg_logprob"],
-                        no_speech_prob=segment["no_speech_prob"],
-                        compression_ratio=segment["compression_ratio"],
-                        temperature=options.temperatures[0],
-                    )
+                for result in results:
+                    for segment in result:
+                        seg_idx += 1
+                        yield Segment(
+                            seek=segment["seek"],
+                            id=seg_idx,
+                            text=segment["text"],
+                            start=round(segment["start"], 3),
+                            end=round(segment["end"], 3),
+                            words=(
+                                None
+                                if not options.word_timestamps
+                                else [Word(**word) for word in segment["words"]]
+                            ),
+                            tokens=segment["tokens"],
+                            avg_logprob=segment["avg_logprob"],
+                            no_speech_prob=segment["no_speech_prob"],
+                            compression_ratio=segment["compression_ratio"],
+                            temperature=options.temperatures[0],
+                        )
 
-                pbar.update(1)
-
-        pbar.close()
-        self.last_speech_timestamp = 0.0
+                    pbar.update(1)
+        finally:
+            pbar.close()
+            self.last_speech_timestamp = 0.0
 
 
 class WhisperModel:
