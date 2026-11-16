@@ -65,6 +65,9 @@ def get_speech_timestamps(
     Returns:
       List of dicts containing begin and end samples of each speech chunk.
     """
+    if audio.size == 0:
+        return []
+
     if vad_options is None:
         vad_options = VadOptions(**kwargs)
 
@@ -359,6 +362,9 @@ class SileroVADModel:
         assert (
             audio.shape[0] % num_samples == 0
         ), "Input size should be a multiple of num_samples"
+
+        if audio.size == 0:
+            return np.empty(0, dtype=np.float32)
 
         h = np.zeros((1, 1, 128), dtype="float32")
         c = np.zeros((1, 1, 128), dtype="float32")
