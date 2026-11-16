@@ -7,6 +7,7 @@ import zlib
 from dataclasses import asdict, dataclass
 from inspect import signature
 from math import ceil
+from numbers import Integral
 from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
 from warnings import warn
 
@@ -375,6 +376,13 @@ class BatchedInferencePipeline:
             - a generator over transcribed segments
             - an instance of TranscriptionInfo
         """
+
+        if (
+            isinstance(batch_size, bool)
+            or not isinstance(batch_size, Integral)
+            or batch_size <= 0
+        ):
+            raise ValueError("batch_size must be a positive integer")
 
         sampling_rate = self.model.feature_extractor.sampling_rate
 
@@ -1837,6 +1845,13 @@ class WhisperModel:
             language_probability: Probability of the detected language.
             all_language_probs: List of tuples with all language names and probabilities.
         """
+        if (
+            isinstance(language_detection_segments, bool)
+            or not isinstance(language_detection_segments, Integral)
+            or language_detection_segments <= 0
+        ):
+            raise ValueError("language_detection_segments must be a positive integer")
+
         assert (
             audio is not None or features is not None
         ), "Either `audio` or `features` must be provided."

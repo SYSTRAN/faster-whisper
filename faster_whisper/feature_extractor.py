@@ -81,12 +81,13 @@ class FeatureExtractor:
         hop_length = hop_length if hop_length is not None else n_fft // 4
         win_length = win_length if win_length is not None else n_fft
         input_is_complex = np.iscomplexobj(input_array)
+        window_is_complex = window is not None and np.iscomplexobj(window)
 
         # Determine if the output should be complex
         return_complex = (
             return_complex
             if return_complex is not None
-            else (input_is_complex or (window is not None and np.iscomplexobj(window)))
+            else (input_is_complex or window_is_complex)
         )
 
         if not return_complex and return_complex is None:
@@ -147,6 +148,8 @@ class FeatureExtractor:
 
         # Handle padding of the window if necessary
         if win_length < n_fft:
+            if window is None:
+                window = np.ones(win_length, dtype=input_array.dtype)
             left = (n_fft - win_length) // 2
             window_ = np.zeros(n_fft, dtype=window.dtype)
             window_[left : left + win_length] = window
@@ -171,7 +174,7 @@ class FeatureExtractor:
             input_array = input_array * window_
 
         # FFT and transpose
-        complex_fft = input_is_complex
+        complex_fft = input_is_complex or window_is_complex
         onesided = onesided if onesided is not None else not complex_fft
 
         if normalized:
@@ -179,11 +182,12 @@ class FeatureExtractor:
         else:
             norm = None
 
-        if complex_fft:
-            if onesided:
-                raise ValueError(
-                    "Cannot have onesided output if window or input is complex"
-                )
+        if complex_fft and onesided:
+            raise ValueError(
+                "Cannot have onesided output if window or input is complex"
+            )
+
+        if not onesided:
             output = np.fft.fft(input_array, n=n_fft, axis=-1, norm=norm)
         else:
             output = np.fft.rfft(input_array, n=n_fft, axis=-1, norm=norm)

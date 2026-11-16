@@ -118,8 +118,14 @@ def pad_or_trim(array, length: int = 3000, *, axis: int = -1):
     """
     Pad or trim the Mel features array to 3000, as expected by the encoder.
     """
+    if length < 0:
+        raise ValueError("length must be non-negative")
+
     if array.shape[axis] > length:
-        array = array.take(indices=range(length), axis=axis)
+        slices = [slice(None)] * array.ndim
+        slices[axis] = slice(0, length)
+        # Keep the existing independent-output behavior without a gather operation.
+        array = array[tuple(slices)].copy()
 
     if array.shape[axis] < length:
         pad_widths = [(0, 0)] * array.ndim
