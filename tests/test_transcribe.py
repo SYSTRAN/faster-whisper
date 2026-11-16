@@ -4,6 +4,7 @@ import os
 import numpy as np
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
+from faster_whisper.transcribe import merge_punctuations
 
 
 def test_supported_languages():
@@ -313,3 +314,39 @@ def test_cliptimestamps_timings(physcisworks_path):
         assert clip["start"] == segment.start
         assert clip["end"] == segment.end
         assert segment.text == transcript
+
+
+def test_merge_punctuations_french_apostrophe():
+    """Test that words ending with apostrophe (e.g. French j', l') are merged."""
+    prepended = "\"'\u2018\u2019\u00bf([{-"
+    appended = "\"'.\u3002,\uff0c!\uff01?\uff1f:\uff1a\u201c\u201d)]\u007d\u3001"
+
+    alignment = [
+        {"word": " Bonjour", "tokens": [1]},
+        {"word": " j'", "tokens": [2]},
+        {"word": "ai", "tokens": [3]},
+        {"word": " l'", "tokens": [4]},
+        {"word": "avion", "tokens": [5]},
+    ]
+
+    merge_punctuations(alignment, prepended, appended)
+
+    words = [w["word"] for w in alignment if w["word"]]
+    assert words == [" Bonjour", " j'ai", " l'avion"]
+
+
+def test_merge_punctuations_single_char():
+    """Test that single-character punctuation still merges correctly."""
+    prepended = "\"'\u2018\u2019\u00bf([{-"
+    appended = "\"'.,!?:)]\u007d\u3001"
+
+    alignment = [
+        {"word": ' "', "tokens": [1]},
+        {"word": "hello", "tokens": [2]},
+        {"word": ".", "tokens": [3]},
+    ]
+
+    merge_punctuations(alignment, prepended, appended)
+
+    words = [w["word"] for w in alignment if w["word"]]
+    assert words == [' "hello.']
