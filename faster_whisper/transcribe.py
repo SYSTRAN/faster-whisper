@@ -673,6 +673,7 @@ class WhisperModel:
 
         tokenizer_bytes, preprocessor_bytes = None, None
         if files:
+            files = files.copy()
             model_path = model_size_or_path
             tokenizer_bytes = files.pop("tokenizer.json", None)
             preprocessor_bytes = files.pop("preprocessor_config.json", None)
