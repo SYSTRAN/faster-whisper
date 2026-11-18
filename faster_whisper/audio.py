@@ -9,6 +9,7 @@ However, the API is quite low-level so we need to manipulate audio frames direct
 import gc
 import io
 import itertools
+import os
 
 from typing import BinaryIO, Union
 
@@ -23,7 +24,7 @@ _AV_OPEN_KWARGS = (
 
 
 def decode_audio(
-    input_file: Union[str, BinaryIO],
+    input_file: Union[str, os.PathLike, BinaryIO],
     sampling_rate: int = 16000,
     split_stereo: bool = False,
 ):
@@ -40,6 +41,9 @@ def decode_audio(
       If `split_stereo` is enabled, the function returns a 2-tuple with the
       separated left and right channels.
     """
+    if isinstance(input_file, (str, os.PathLike)):
+        input_file = str(os.fspath(input_file))
+
     resampler = av.audio.resampler.AudioResampler(
         format="s16",
         layout="mono" if not split_stereo else "stereo",
