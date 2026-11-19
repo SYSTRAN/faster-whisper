@@ -376,6 +376,9 @@ class BatchedInferencePipeline:
             - an instance of TranscriptionInfo
         """
 
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+
         sampling_rate = self.model.feature_extractor.sampling_rate
 
         if multilingual and not self.model.model.is_multilingual:
