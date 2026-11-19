@@ -50,8 +50,8 @@ def decode_audio(
     dtype = None
 
     with av.open(input_file, mode="r", **_AV_OPEN_KWARGS) as container:
-        frames = container.decode(audio=0)
-        frames = _ignore_invalid_frames(frames)
+        packets = container.demux(audio=0)
+        frames = _ignore_invalid_frames(packets)
         frames = _group_frames(frames, 500000)
         frames = _resample_frames(frames, resampler)
 
@@ -82,14 +82,12 @@ def decode_audio(
     return audio
 
 
-def _ignore_invalid_frames(frames):
-    iterator = iter(frames)
-
-    while True:
+def _ignore_invalid_frames(packets):
+    # Decode packet by packet: an error raised inside container.decode() ends
+    # that generator, so the frames after the invalid one would be lost.
+    for packet in packets:
         try:
-            yield next(iterator)
-        except StopIteration:
-            break
+            yield from packet.decode()
         except av.error.InvalidDataError:
             continue
 
