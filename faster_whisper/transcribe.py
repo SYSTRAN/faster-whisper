@@ -426,6 +426,12 @@ class BatchedInferencePipeline:
 
         else:
             clip_timestamps_provided = True
+            for clip in clip_timestamps:
+                if not 0 <= clip["start"] < clip["end"] <= duration:
+                    raise ValueError(
+                        "clip_timestamps must specify increasing start and end "
+                        "times within the audio duration"
+                    )
             clip_timestamps = [
                 {k: int(v * sampling_rate) for k, v in segment.items()}
                 for segment in clip_timestamps
@@ -433,6 +439,8 @@ class BatchedInferencePipeline:
 
             audio_chunks, chunks_metadata = [], []
             for i, clip in enumerate(clip_timestamps):
+                if clip["start"] >= clip["end"]:
+                    raise ValueError("clip_timestamps must span at least one sample")
                 audio_chunks.append(audio[clip["start"] : clip["end"]])
 
                 clip_duration = (clip["end"] - clip["start"]) / sampling_rate
