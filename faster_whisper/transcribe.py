@@ -1872,7 +1872,7 @@ class WhisperModel:
             language, language_probability = all_language_probs[0]
             if language_probability > language_detection_threshold:
                 break
-            detected_language_info.setdefault(language, []).append(language_probability)
+            detected_language_info.setdefault(language, []).append(all_language_probs)
         else:
             # If no language detected for all segments, the majority vote of the highest
             # projected languages for all segments is used to determine the language.
@@ -1880,7 +1880,11 @@ class WhisperModel:
                 detected_language_info,
                 key=lambda lang: len(detected_language_info[lang]),
             )
-            language_probability = max(detected_language_info[language])
+            all_language_probs = max(
+                detected_language_info[language],
+                key=lambda probabilities: probabilities[0][1],
+            )
+            language_probability = all_language_probs[0][1]
 
         return language, language_probability, all_language_probs
 
