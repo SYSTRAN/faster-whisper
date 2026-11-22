@@ -78,7 +78,7 @@ def get_speech_timestamps(
     min_silence_at_max_speech = vad_options.min_silence_at_max_speech
     use_max_poss_sil_at_max_speech = vad_options.use_max_poss_sil_at_max_speech
 
-    min_speech_samples = sampling_rate * min_speech_duration_ms / 1000
+    min_speech_samples = max(1, sampling_rate * min_speech_duration_ms / 1000)
     speech_pad_samples = sampling_rate * speech_pad_ms / 1000
     max_speech_samples = (
         sampling_rate * max_speech_duration_s
@@ -177,7 +177,7 @@ def get_speech_timestamps(
                 current_speech["end"] = temp_end
                 if (
                     current_speech["end"] - current_speech["start"]
-                ) > min_speech_samples:
+                ) >= min_speech_samples:
                     speeches.append(current_speech)
                 current_speech = {}
                 prev_end = next_start = temp_end = 0
@@ -187,7 +187,7 @@ def get_speech_timestamps(
 
     if (
         current_speech
-        and (audio_length_samples - current_speech["start"]) > min_speech_samples
+        and (audio_length_samples - current_speech["start"]) >= min_speech_samples
     ):
         current_speech["end"] = audio_length_samples
         speeches.append(current_speech)
