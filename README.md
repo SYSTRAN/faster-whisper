@@ -168,6 +168,18 @@ for segment in segments:
     print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
 ```
 
+Batched transcription defaults to `without_timestamps=True`, which suppresses timestamp tokens during decoding and can yield one segment per audio chunk.
+If the segments are too coarse for your use case, allow the decoder to emit timestamp tokens for finer segment boundaries:
+
+```python
+segments, info = batched_model.transcribe(
+    "audio.mp3", batch_size=16, without_timestamps=False
+)
+```
+
+Use `word_timestamps=True` when you also need per-word alignment.
+That option does not enable timestamp-token decoding.
+
 ### Faster Distil-Whisper
 
 The Distil-Whisper checkpoints are compatible with the Faster-Whisper package. In particular, the latest [distil-large-v3](https://huggingface.co/distil-whisper/distil-large-v3)
