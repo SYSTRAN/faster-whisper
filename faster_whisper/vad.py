@@ -333,8 +333,10 @@ def get_vad_model():
 
 class SileroVADModel:
     def __init__(self, path):
-        try:
-            import onnxruntime
+         try:
+             os.environ["ORT_DISABLE_TELEMETRY"] = "1"
+             import onnxruntime
+             onnxruntime.disable_telemetry_events()
         except ImportError as e:
             raise RuntimeError(
                 "Applying the VAD filter requires the onnxruntime package"
