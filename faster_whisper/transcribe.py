@@ -349,8 +349,6 @@ class BatchedInferencePipeline:
             language_detection_threshold: If the maximum probability of the language tokens is
                 higher than this value, the language is detected.
             language_detection_segments: Number of segments to consider for the language detection.
-
-        Unused Arguments
             compression_ratio_threshold: If the gzip compression ratio is above this value,
                 treat as failed.
             log_prob_threshold: If the average log probability over sampled tokens is
@@ -358,13 +356,15 @@ class BatchedInferencePipeline:
             no_speech_threshold: If the no_speech probability is higher than this value AND
                 the average log probability over sampled tokens is below `log_prob_threshold`,
                 consider the segment as silent.
+            prefix: Optional text to provide as a prefix at the beginning of each window.
+
+        Unused Arguments
             condition_on_previous_text: If True, the previous output of the model is provided
                 as a prompt for the next window; disabling may make the text inconsistent across
                 windows, but the model becomes less prone to getting stuck in a failure loop,
                 such as repetition looping or timestamps going out of sync. Set as False
             prompt_reset_on_temperature: Resets prompt if temperature is above this value.
                 Arg has effect only if condition_on_previous_text is True. Set at 0.5
-            prefix: Optional text to provide as a prefix at the beginning of each window.
             max_initial_timestamp: The initial timestamp cannot be later than this, set at 0.0.
             hallucination_silence_threshold: Optional[float]
                 When word_timestamps is True, skip silent periods longer than this threshold
