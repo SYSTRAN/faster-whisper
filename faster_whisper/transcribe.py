@@ -581,7 +581,7 @@ class BatchedInferencePipeline:
     def _batched_segments_generator(
         self, features, tokenizer, chunks_metadata, batch_size, options, log_progress
     ):
-        pbar = tqdm(total=len(features), disable=not log_progress, position=0)
+        pbar = tqdm(total=len(features), position=0) if log_progress else None
         seg_idx = 0
         for i in range(0, len(features), batch_size):
             results = self.forward(
@@ -612,9 +612,11 @@ class BatchedInferencePipeline:
                         temperature=options.temperatures[0],
                     )
 
-                pbar.update(1)
+                if pbar is not None:
+                    pbar.update(1)
 
-        pbar.close()
+        if pbar is not None:
+            pbar.close()
         self.last_speech_timestamp = 0.0
 
 
@@ -1184,7 +1186,7 @@ class WhisperModel:
             else:
                 all_tokens.extend(options.initial_prompt)
 
-        pbar = tqdm(total=content_duration, unit="seconds", disable=not log_progress)
+        pbar = tqdm(total=content_duration, unit="seconds") if log_progress else None
         last_speech_timestamp = 0.0
         # NOTE: This loop is obscurely flattened to make the diff readable.
         # A later commit should turn this into a simpler nested loop.
@@ -1418,11 +1420,13 @@ class WhisperModel:
 
                 prompt_reset_since = len(all_tokens)
 
-            pbar.update(
-                (min(content_frames, seek) - previous_seek)
-                * self.feature_extractor.time_per_frame,
-            )
-        pbar.close()
+            if pbar is not None:
+                pbar.update(
+                    (min(content_frames, seek) - previous_seek)
+                    * self.feature_extractor.time_per_frame,
+                )
+        if pbar is not None:
+            pbar.close()
 
     def encode(self, features: np.ndarray) -> ctranslate2.StorageView:
         # When the model is running on multiple GPUs, the encoder output should be moved
