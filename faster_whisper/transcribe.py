@@ -893,6 +893,7 @@ class WhisperModel:
           language_detection_threshold: If the maximum probability of the language tokens is higher
            than this value, the language is detected.
           language_detection_segments: Number of segments to consider for the language detection.
+            When clip timestamps include an end, detection is limited to the first nonempty clip.
         Returns:
           A tuple with:
 
@@ -960,23 +961,43 @@ class WhisperModel:
                 language = "en"
                 language_probability = 1
             else:
-                start_timestamp = (
-                    float(clip_timestamps.split(",")[0])
+                timestamps = (
+                    clip_timestamps.split(",")
                     if isinstance(clip_timestamps, str)
-                    else clip_timestamps[0]
+                    else clip_timestamps
                 )
+                start_timestamp = float(timestamps[0])
                 content_frames = features.shape[-1] - 1
                 seek = (
                     int(start_timestamp * self.frames_per_second)
                     if start_timestamp * self.frames_per_second < content_frames
                     else 0
                 )
+                language_features = features[..., seek:]
+                if len(timestamps) > 1:
+                    for i in range(0, len(timestamps), 2):
+                        clip_start = round(
+                            float(timestamps[i]) * self.frames_per_second
+                        )
+                        clip_end = (
+                            round(float(timestamps[i + 1]) * self.frames_per_second)
+                            if i + 1 < len(timestamps)
+                            else content_frames
+                        )
+                        clip_end = min(clip_end, content_frames)
+                        if clip_start < clip_end:
+                            # Keep the final padding frame for clips reaching EOF.
+                            language_features = features[
+                                ...,
+                                clip_start : clip_end + (clip_end == content_frames),
+                            ]
+                            break
                 (
                     language,
                     language_probability,
                     all_language_probs,
                 ) = self.detect_language(
-                    features=features[..., seek:],
+                    features=language_features,
                     language_detection_segments=language_detection_segments,
                     language_detection_threshold=language_detection_threshold,
                 )
