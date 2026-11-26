@@ -175,7 +175,7 @@ class Tokenizer:
         current_tokens = []
         unicode_offset = 0
 
-        for token in tokens:
+        for i, token in enumerate(tokens):
             current_tokens.append(token)
             decoded = self.decode_with_timestamps(current_tokens)
 
@@ -189,6 +189,21 @@ class Tokenizer:
                 replacement_char_index < len(decoded_full)
                 and decoded_full[replacement_char_index] == replacement_char
             ):
+                if replacement_char_index is not None and i + 1 < len(tokens):
+                    # A replacement can still absorb continuation bytes from the
+                    # next token. Split only if decoding across the boundary is
+                    # equivalent to decoding both sides independently.
+                    following_tokens = []
+                    following = ""
+                    j = i + 1
+                    while not following and j < len(tokens):
+                        following_tokens.append(tokens[j])
+                        following = self.decode_with_timestamps(following_tokens)
+                        j += 1
+                    if self.decode_with_timestamps(
+                        current_tokens + following_tokens
+                    ) != (decoded + following):
+                        continue
                 words.append(decoded)
                 word_tokens.append(current_tokens)
                 current_tokens = []
