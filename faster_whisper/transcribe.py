@@ -757,7 +757,13 @@ class WhisperModel:
     @property
     def supported_languages(self) -> List[str]:
         """The languages supported by the model."""
-        return list(_LANGUAGE_CODES) if self.model.is_multilingual else ["en"]
+        if not self.model.is_multilingual:
+            return ["en"]
+        return [
+            language
+            for language in _LANGUAGE_CODES
+            if self.hf_tokenizer.token_to_id("<|%s|>" % language) is not None
+        ]
 
     def _get_feature_kwargs(self, model_path, preprocessor_bytes=None) -> dict:
         config = {}
