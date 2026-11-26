@@ -1186,6 +1186,7 @@ class WhisperModel:
 
         pbar = tqdm(total=content_duration, unit="seconds", disable=not log_progress)
         last_speech_timestamp = 0.0
+        first_window = True
         # NOTE: This loop is obscurely flattened to make the diff readable.
         # A later commit should turn this into a simpler nested loop.
         # for seek_clip_start, seek_clip_end in seek_clips:
@@ -1237,9 +1238,10 @@ class WhisperModel:
                 tokenizer,
                 previous_tokens,
                 without_timestamps=options.without_timestamps,
-                prefix=options.prefix if seek == 0 else None,
+                prefix=options.prefix if first_window else None,
                 hotwords=options.hotwords,
             )
+            first_window = False
 
             (
                 result,
