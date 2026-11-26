@@ -212,19 +212,36 @@ class FeatureExtractor:
 
         window = np.hanning(self.n_fft + 1)[:-1].astype("float32")
 
-        stft = self.stft(
-            waveform,
-            self.n_fft,
-            self.hop_length,
-            window=window,
-            return_complex=True,
-        ).astype("complex64")
-        magnitudes = np.abs(stft[..., :-1]) ** 2
+        # Center the frames once so block boundaries use real neighboring samples.
+        half_window = self.n_fft // 2
+        pad_width = [(0, 0)] * (waveform.ndim - 1) + [(half_window, half_window)]
+        waveform = np.pad(waveform, pad_width, mode="reflect")
+        # Whisper drops the final STFT frame.
+        num_frames = (waveform.shape[-1] - self.n_fft) // self.hop_length
+        mel_spec = np.empty(
+            (*waveform.shape[:-1], self.mel_filters.shape[0], num_frames),
+            dtype=np.float32,
+        )
+        frames_per_block = 4096
+        for start in range(0, num_frames, frames_per_block):
+            end = min(start + frames_per_block, num_frames)
+            samples = waveform[
+                ..., start * self.hop_length : (end - 1) * self.hop_length + self.n_fft
+            ]
+            stft = self.stft(
+                samples,
+                self.n_fft,
+                self.hop_length,
+                window=window,
+                center=False,
+                return_complex=True,
+            ).astype("complex64", copy=False)
+            magnitudes = np.abs(stft) ** 2
+            np.matmul(self.mel_filters, magnitudes, out=mel_spec[..., start:end])
 
-        mel_spec = self.mel_filters @ magnitudes
-
-        log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
-        log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
-
-        return log_spec
+        np.maximum(mel_spec, 1e-10, out=mel_spec)
+        np.log10(mel_spec, out=mel_spec)
+        np.maximum(mel_spec, mel_spec.max() - 8.0, out=mel_spec)
+        mel_spec += 4.0
+        mel_spec /= 4.0
+        return mel_spec
