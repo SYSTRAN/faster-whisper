@@ -474,13 +474,24 @@ class BatchedInferencePipeline:
                 language = "en"
                 language_probability = 1
             else:
+                language_features = []
+                remaining_frames = (
+                    language_detection_segments
+                    * self.model.feature_extractor.nb_max_frames
+                )
+                for feature in features:
+                    if remaining_frames <= 0:
+                        break
+                    language_features.append(feature[..., :remaining_frames])
+                    remaining_frames -= feature.shape[-1]
+
                 (
                     language,
                     language_probability,
                     all_language_probs,
                 ) = self.model.detect_language(
                     features=np.concatenate(
-                        features
+                        language_features
                         + [
                             np.full((self.model.model.n_mels, 1), -1.5, dtype="float32")
                         ],
