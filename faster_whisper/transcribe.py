@@ -975,11 +975,16 @@ class WhisperModel:
                     language,
                     language_probability,
                     all_language_probs,
-                ) = self.detect_language(
-                    features=features[..., seek:],
+                    first_encoder_output,
+                ) = self._detect_language(
+                    # Same frames as the first transcription window, so that its
+                    # encoder output can be reused.
+                    features=features[..., seek : max(content_frames, seek + 1)],
                     language_detection_segments=language_detection_segments,
                     language_detection_threshold=language_detection_threshold,
                 )
+                if clip_timestamps == "0":
+                    encoder_output = first_encoder_output
 
                 self.logger.info(
                     "Detected language '%s' with probability %.2f",
@@ -1837,6 +1842,25 @@ class WhisperModel:
             language_probability: Probability of the detected language.
             all_language_probs: List of tuples with all language names and probabilities.
         """
+        return self._detect_language(
+            audio,
+            features,
+            vad_filter,
+            vad_parameters,
+            language_detection_segments,
+            language_detection_threshold,
+        )[:3]
+
+    def _detect_language(
+        self,
+        audio: Optional[np.ndarray] = None,
+        features: Optional[np.ndarray] = None,
+        vad_filter: bool = False,
+        vad_parameters: Union[dict, VadOptions] = None,
+        language_detection_segments: int = 1,
+        language_detection_threshold: float = 0.5,
+    ) -> Tuple[str, float, List[Tuple[str, float]], ctranslate2.StorageView]:
+        """Same as detect_language(), and also returns the encoder output of the first window."""
         assert (
             audio is not None or features is not None
         ), "Either `audio` or `features` must be provided."
@@ -1859,10 +1883,13 @@ class WhisperModel:
         ]
 
         detected_language_info = {}
+        first_encoder_output = None
         for i in range(0, features.shape[-1], self.feature_extractor.nb_max_frames):
             encoder_output = self.encode(
                 pad_or_trim(features[..., i : i + self.feature_extractor.nb_max_frames])
             )
+            if i == 0:
+                first_encoder_output = encoder_output
             # results is a list of tuple[str, float] with language names and probabilities.
             results = self.model.detect_language(encoder_output)[0]
 
@@ -1882,7 +1909,7 @@ class WhisperModel:
             )
             language_probability = max(detected_language_info[language])
 
-        return language, language_probability, all_language_probs
+        return language, language_probability, all_language_probs, first_encoder_output
 
 
 def restore_speech_timestamps(
