@@ -1,5 +1,8 @@
 import numpy as np
 
+# Number of frames per STFT call, 2.56 seconds of audio with the default hop length.
+STFT_BLOCK_FRAMES = 256
+
 
 class FeatureExtractor:
     def __init__(
@@ -212,16 +215,30 @@ class FeatureExtractor:
 
         window = np.hanning(self.n_fft + 1)[:-1].astype("float32")
 
-        stft = self.stft(
-            waveform,
-            self.n_fft,
-            self.hop_length,
-            window=window,
-            return_complex=True,
-        ).astype("complex64")
-        magnitudes = np.abs(stft[..., :-1]) ** 2
+        half_window = self.n_fft // 2
+        waveform = np.pad(waveform, (half_window, half_window), mode="reflect")
+        # The last frame is dropped.
+        n_frames = (waveform.shape[0] - self.n_fft) // self.hop_length
+        magnitudes = np.empty((n_frames, self.n_fft // 2 + 1), dtype="float32")
 
-        mel_spec = self.mel_filters @ magnitudes
+        # Small blocks bound the size of the STFT intermediate arrays.
+        for start in range(0, n_frames, STFT_BLOCK_FRAMES):
+            stop = min(start + STFT_BLOCK_FRAMES, n_frames)
+            stft = self.stft(
+                waveform[
+                    start * self.hop_length : (stop - 1) * self.hop_length + self.n_fft
+                ],
+                self.n_fft,
+                self.hop_length,
+                window=window,
+                center=False,
+                return_complex=True,
+            ).astype("complex64", copy=False)
+            magnitudes[start:stop] = (np.abs(stft) ** 2).T
+
+        # The rounding of this product depends on the matrix shape, so it is done once
+        # over all frames to keep the output independent of the block size.
+        mel_spec = self.mel_filters @ magnitudes.T
 
         log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
         log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
