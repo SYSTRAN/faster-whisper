@@ -313,3 +313,31 @@ def test_cliptimestamps_timings(physcisworks_path):
         assert clip["start"] == segment.start
         assert clip["end"] == segment.end
         assert segment.text == transcript
+
+
+def test_language_detection_reuses_encoder_output(jfk_path):
+    model = WhisperModel("tiny")
+    audio = decode_audio(jfk_path)
+
+    expected_segments, _ = model.transcribe(audio, language="en")
+    expected_text = [segment.text for segment in expected_segments]
+
+    encode = model.encode
+    encode_calls = []
+
+    def counting_encode(features):
+        encode_calls.append(features.shape)
+        return encode(features)
+
+    model.encode = counting_encode
+
+    segments, info = model.transcribe(audio)
+    assert info.language == "en"
+    assert [segment.text for segment in segments] == expected_text
+    assert len(encode_calls) == 1
+
+    # The detection window differs from the clip, so it is encoded separately.
+    encode_calls.clear()
+    segments, info = model.transcribe(audio, clip_timestamps=[0.0, 5.0])
+    list(segments)
+    assert len(encode_calls) == 2
