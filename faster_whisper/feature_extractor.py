@@ -240,8 +240,10 @@ class FeatureExtractor:
         # over all frames to keep the output independent of the block size.
         mel_spec = self.mel_filters @ magnitudes.T
 
-        log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
-        log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
+        np.maximum(mel_spec, 1e-10, out=mel_spec)
+        np.log10(mel_spec, out=mel_spec)
+        np.maximum(mel_spec, mel_spec.max() - 8.0, out=mel_spec)
+        mel_spec += 4.0
+        mel_spec /= 4.0
 
-        return log_spec
+        return mel_spec
